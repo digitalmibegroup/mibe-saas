@@ -397,7 +397,7 @@ const CLIENTE_ID = 'lacava';
 async function verificarLicencia() {
   try {
     const res = await fetch(
-      `${SUPABASE_URL}/rest/v1/licencias?cliente=eq.${CLIENTE_ID}&select=*`,
+      `${SUPABASE_URL}/rest/v1/licencias?id_cliente=eq.${CLIENTE_ID}&select=*`,
       {
         headers: {
           'apikey': SUPABASE_KEY,
