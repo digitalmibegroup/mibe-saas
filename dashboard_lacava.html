@@ -1,0 +1,620 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>La Cava Oficial · Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;1,400&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet"/>
+<style>
+  :root {
+    --gold:#C9A84C; --gold-light:#E8C96D; --gold-dark:#9A7B2E;
+    --gold-faint:rgba(201,168,76,0.08); --gold-faint2:rgba(201,168,76,0.15);
+    --bg:#0A0A0A; --bg2:#111111; --bg3:#181818; --bg4:#202020;
+    --border:rgba(201,168,76,0.18); --border2:rgba(201,168,76,0.3);
+    --text:#F5F0E8; --text2:#9A9488; --text3:#6A6458;
+    --green:#4CAF82; --red:#E05C5C; --blue:#5C8AE0;
+    --radius:12px; --sidebar:220px;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;font-size:14px;min-height:100vh;overflow-x:hidden;}
+  body::before{content:'';position:fixed;inset:0;background-image:repeating-linear-gradient(90deg,transparent,transparent 5px,rgba(201,168,76,0.012) 5px,rgba(201,168,76,0.012) 6px);pointer-events:none;z-index:0;}
+
+  /* PANTALLA DE BLOQUEO */
+  #lockScreen{position:fixed;inset:0;background:var(--bg);z-index:9999;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:24px;}
+  .lock-logo{font-family:'Cormorant Garamond',serif;font-size:42px;font-weight:600;color:var(--gold);letter-spacing:3px;}
+  .lock-sub{font-size:11px;letter-spacing:3px;color:var(--text3);text-transform:uppercase;}
+  .lock-bar{width:48px;height:2px;background:var(--gold);margin:0 auto;}
+  .lock-card{background:var(--bg2);border:1px solid var(--border);border-radius:16px;padding:40px;text-align:center;max-width:400px;width:90%;}
+  .lock-icon{font-size:48px;margin-bottom:16px;}
+  .lock-title{font-family:'Cormorant Garamond',serif;font-size:24px;color:var(--gold);margin-bottom:8px;}
+  .lock-msg{font-size:13px;color:var(--text3);line-height:1.6;margin-bottom:24px;}
+  .lock-btn{display:inline-block;padding:12px 28px;background:var(--gold);color:var(--bg);border-radius:8px;font-weight:600;font-size:13px;text-decoration:none;transition:background 0.2s;}
+  .lock-btn:hover{background:var(--gold-light);}
+  .lock-loading{display:flex;align-items:center;gap:10px;color:var(--text3);font-size:13px;}
+  .spinner{width:18px;height:18px;border:2px solid var(--border);border-top-color:var(--gold);border-radius:50%;animation:spin 0.8s linear infinite;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+
+  /* PANTALLA DE CARGA */
+  #loadingScreen{position:fixed;inset:0;background:var(--bg);z-index:9998;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:16px;transition:opacity 0.5s;}
+  #loadingScreen.hidden{opacity:0;pointer-events:none;}
+
+  /* APP */
+  .app{display:flex;min-height:100vh;position:relative;z-index:1;}
+
+  /* SIDEBAR */
+  .sidebar{width:var(--sidebar);background:var(--bg2);border-right:1px solid var(--border);display:flex;flex-direction:column;position:fixed;top:0;left:0;bottom:0;z-index:100;transition:transform 0.3s ease;}
+  .sidebar-logo{padding:24px 20px 20px;border-bottom:1px solid var(--border);}
+  .sidebar-logo .brand-name{font-family:'Cormorant Garamond',serif;font-size:22px;font-weight:600;color:var(--gold);letter-spacing:1px;line-height:1.1;}
+  .sidebar-logo .brand-sub{font-size:9px;letter-spacing:3px;color:var(--text3);text-transform:uppercase;margin-top:2px;}
+  .sidebar-logo .gold-bar{width:32px;height:2px;background:var(--gold);margin-top:10px;}
+  .nav{flex:1;padding:16px 0;overflow-y:auto;}
+  .nav-section{padding:0 12px;margin-bottom:8px;}
+  .nav-label{font-size:9px;letter-spacing:2px;color:var(--text3);text-transform:uppercase;padding:8px 8px 4px;}
+  .nav-item{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:8px;cursor:pointer;color:var(--text2);font-size:13px;font-weight:400;transition:all 0.2s;border:1px solid transparent;text-decoration:none;}
+  .nav-item:hover{background:var(--gold-faint);color:var(--text);border-color:var(--border);}
+  .nav-item.active{background:var(--gold-faint2);color:var(--gold);border-color:var(--border2);font-weight:500;}
+  .nav-icon{width:18px;height:18px;flex-shrink:0;opacity:0.7;}
+  .nav-item.active .nav-icon{opacity:1;}
+  .nav-badge{margin-left:auto;background:var(--gold);color:var(--bg);font-size:10px;font-weight:500;padding:1px 6px;border-radius:10px;}
+  .sidebar-footer{padding:16px 12px;border-top:1px solid var(--border);}
+  .user-card{display:flex;align-items:center;gap:10px;padding:8px;border-radius:8px;cursor:pointer;transition:background 0.2s;}
+  .user-card:hover{background:var(--gold-faint);}
+  .user-avatar{width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,var(--gold-dark),var(--gold));display:flex;align-items:center;justify-content:center;font-family:'Cormorant Garamond',serif;font-size:14px;font-weight:600;color:var(--bg);flex-shrink:0;}
+  .user-info{flex:1;min-width:0;}
+  .user-name{font-size:12px;font-weight:500;color:var(--text);overflow:hidden;white-space:nowrap;text-overflow:ellipsis;}
+  .user-role{font-size:10px;color:var(--text3);}
+
+  /* MAIN */
+  .main{margin-left:var(--sidebar);flex:1;display:flex;flex-direction:column;min-height:100vh;}
+  .topbar{height:56px;background:var(--bg2);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 24px;gap:16px;position:sticky;top:0;z-index:50;}
+  .topbar-title{font-family:'Cormorant Garamond',serif;font-size:20px;font-weight:600;color:var(--gold);flex:1;}
+  .topbar-date{font-size:12px;color:var(--text3);}
+  .topbar-btn{background:var(--gold-faint2);border:1px solid var(--border2);color:var(--gold);padding:6px 14px;border-radius:8px;font-size:12px;font-family:'DM Sans',sans-serif;cursor:pointer;font-weight:500;transition:all 0.2s;white-space:nowrap;}
+  .topbar-btn:hover{background:var(--gold);color:var(--bg);}
+  .menu-toggle{display:none;background:none;border:1px solid var(--border);color:var(--text2);width:34px;height:34px;border-radius:8px;cursor:pointer;align-items:center;justify-content:center;}
+
+  /* CONTENT */
+  .content{padding:24px;flex:1;}
+  .kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:24px;}
+  .kpi-card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:18px 20px;position:relative;overflow:hidden;transition:border-color 0.2s,transform 0.2s;cursor:default;}
+  .kpi-card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:var(--gold);opacity:0.5;transition:opacity 0.2s;}
+  .kpi-card:hover{border-color:var(--border2);transform:translateY(-1px);}
+  .kpi-card:hover::before{opacity:1;}
+  .kpi-label{font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:var(--text3);margin-bottom:10px;}
+  .kpi-value{font-family:'Cormorant Garamond',serif;font-size:30px;font-weight:600;color:var(--gold);line-height:1;margin-bottom:8px;}
+  .kpi-value.white{color:var(--text);}
+  .kpi-sub{font-size:11px;color:var(--text3);display:flex;align-items:center;gap:4px;}
+  .kpi-trend{font-size:11px;font-weight:500;padding:2px 6px;border-radius:4px;}
+  .kpi-trend.up{background:rgba(76,175,130,0.15);color:var(--green);}
+  .kpi-trend.down{background:rgba(224,92,92,0.15);color:var(--red);}
+  .kpi-icon{position:absolute;top:16px;right:16px;width:36px;height:36px;background:var(--gold-faint);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:16px;}
+  .mid-grid{display:grid;grid-template-columns:1fr 340px;gap:16px;margin-bottom:24px;}
+  .card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;}
+  .card-header{padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;}
+  .card-title{font-family:'Cormorant Garamond',serif;font-size:16px;font-weight:600;color:var(--gold);}
+  .card-action{font-size:11px;color:var(--gold);cursor:pointer;border:1px solid var(--border);padding:4px 10px;border-radius:6px;transition:all 0.2s;}
+  .card-action:hover{background:var(--gold-faint2);}
+  .card-body{padding:20px;}
+  .chart-wrap{height:160px;display:flex;align-items:flex-end;gap:8px;padding:0 4px;}
+  .bar-group{flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;}
+  .bar-track{width:100%;background:var(--bg3);border-radius:4px;position:relative;overflow:hidden;cursor:pointer;}
+  .bar-fill{border-radius:4px;background:linear-gradient(180deg,var(--gold-light) 0%,var(--gold-dark) 100%);width:100%;transition:height 1s cubic-bezier(0.34,1.56,0.64,1);position:absolute;bottom:0;left:0;right:0;}
+  .bar-fill::after{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:var(--gold-light);border-radius:4px 4px 0 0;opacity:0.8;}
+  .bar-label{font-size:10px;color:var(--text3);}
+  .order-list{display:flex;flex-direction:column;gap:2px;}
+  .order-item{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:8px;transition:background 0.15s;cursor:pointer;}
+  .order-item:hover{background:var(--gold-faint);}
+  .order-avatar{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:'Cormorant Garamond',serif;font-size:14px;font-weight:600;flex-shrink:0;color:var(--bg);}
+  .order-info{flex:1;min-width:0;}
+  .order-name{font-size:13px;font-weight:500;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .order-detail{font-size:11px;color:var(--text3);margin-top:1px;}
+  .order-right{text-align:right;flex-shrink:0;}
+  .order-amount{font-family:'Cormorant Garamond',serif;font-size:15px;font-weight:600;color:var(--gold);}
+  .order-time{font-size:10px;color:var(--text3);margin-top:2px;}
+  .badge{font-size:10px;font-weight:500;padding:2px 8px;border-radius:10px;white-space:nowrap;}
+  .badge.entregado{background:rgba(76,175,130,0.15);color:var(--green);}
+  .badge.pendiente{background:rgba(201,168,76,0.15);color:var(--gold);}
+  .badge.proceso{background:rgba(92,138,224,0.15);color:var(--blue);}
+  .bottom-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:24px;}
+  .inv-item{display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--border);}
+  .inv-item:last-child{border-bottom:none;}
+  .inv-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
+  .inv-name{flex:1;font-size:13px;color:var(--text);}
+  .inv-stock{font-size:12px;font-weight:500;}
+  .inv-stock.ok{color:var(--green);}
+  .inv-stock.low{color:var(--gold);}
+  .inv-stock.critical{color:var(--red);}
+  .inv-bar-track{width:60px;height:4px;background:var(--bg4);border-radius:4px;overflow:hidden;flex-shrink:0;}
+  .inv-bar-fill{height:100%;border-radius:4px;transition:width 1s ease;}
+  .prod-item{display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--border);}
+  .prod-item:last-child{border-bottom:none;}
+  .prod-rank{font-family:'Cormorant Garamond',serif;font-size:18px;font-weight:600;color:var(--text3);width:24px;text-align:center;flex-shrink:0;}
+  .prod-rank.gold{color:var(--gold);}
+  .prod-info{flex:1;}
+  .prod-name{font-size:13px;font-weight:500;color:var(--text);}
+  .prod-units{font-size:11px;color:var(--text3);margin-top:1px;}
+  .prod-revenue{font-family:'Cormorant Garamond',serif;font-size:15px;font-weight:600;color:var(--gold);text-align:right;flex-shrink:0;}
+  .pts-item{display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--border);}
+  .pts-item:last-child{border-bottom:none;}
+  .pts-avatar{width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:'Cormorant Garamond',serif;font-size:14px;font-weight:600;color:var(--bg);flex-shrink:0;}
+  .pts-info{flex:1;}
+  .pts-name{font-size:13px;font-weight:500;color:var(--text);}
+  .pts-bar-wrap{display:flex;align-items:center;gap:6px;margin-top:3px;}
+  .pts-bar-track{flex:1;height:3px;background:var(--bg4);border-radius:4px;overflow:hidden;}
+  .pts-bar-fill{height:100%;background:var(--gold);border-radius:4px;transition:width 1s ease;}
+  .pts-label{font-size:10px;color:var(--text3);}
+  .pts-score{font-family:'Cormorant Garamond',serif;font-size:16px;font-weight:600;color:var(--gold);flex-shrink:0;text-align:right;}
+  .pts-score small{font-size:10px;color:var(--text3);font-family:'DM Sans',sans-serif;display:block;}
+  .wa-card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:18px 20px;margin-bottom:16px;display:flex;align-items:center;gap:16px;}
+  .wa-icon{width:44px;height:44px;background:rgba(76,175,130,0.1);border:1px solid rgba(76,175,130,0.3);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;}
+  .wa-info{flex:1;}
+  .wa-title{font-size:14px;font-weight:500;color:var(--text);}
+  .wa-sub{font-size:11px;color:var(--text3);margin-top:2px;}
+  .wa-actions{display:flex;gap:8px;flex-shrink:0;}
+  .btn-small{padding:6px 12px;border-radius:8px;font-size:11px;font-family:'DM Sans',sans-serif;font-weight:500;cursor:pointer;transition:all 0.2s;border:1px solid var(--border2);background:var(--gold-faint2);color:var(--gold);white-space:nowrap;}
+  .btn-small:hover{background:var(--gold);color:var(--bg);}
+  .btn-small.primary{background:var(--gold);color:var(--bg);border-color:var(--gold);}
+  .btn-small.primary:hover{background:var(--gold-light);}
+  .section-divider{display:flex;align-items:center;gap:12px;margin-bottom:16px;}
+  .section-divider-label{font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);white-space:nowrap;}
+  .section-divider-line{flex:1;height:1px;background:var(--border);}
+  .sidebar-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:99;}
+
+  /* PLAN BADGE */
+  .plan-badge{display:inline-flex;align-items:center;gap:4px;background:var(--gold-faint2);border:1px solid var(--border2);border-radius:6px;padding:3px 8px;font-size:10px;color:var(--gold);font-weight:500;margin-left:8px;}
+
+  @keyframes fadeUp{from{opacity:0;transform:translateY(12px);}to{opacity:1;transform:translateY(0);}}
+  .kpi-card{animation:fadeUp 0.4s ease both;}
+  .kpi-card:nth-child(1){animation-delay:0.05s;}
+  .kpi-card:nth-child(2){animation-delay:0.10s;}
+  .kpi-card:nth-child(3){animation-delay:0.15s;}
+  .kpi-card:nth-child(4){animation-delay:0.20s;}
+  .card{animation:fadeUp 0.4s ease both;animation-delay:0.25s;}
+
+  @media(max-width:1100px){.kpi-grid{grid-template-columns:repeat(2,1fr);}.mid-grid{grid-template-columns:1fr;}.bottom-grid{grid-template-columns:1fr 1fr;}}
+  @media(max-width:768px){
+    :root{--sidebar:240px;}
+    .sidebar{transform:translateX(-100%);}
+    .sidebar.open{transform:translateX(0);box-shadow:8px 0 32px rgba(0,0,0,0.5);}
+    .sidebar-overlay.open{display:block;}
+    .main{margin-left:0;}
+    .menu-toggle{display:flex;}
+    .topbar{padding:0 16px;gap:10px;}
+    .topbar-date{display:none;}
+    .content{padding:16px;}
+    .kpi-grid{grid-template-columns:repeat(2,1fr);gap:10px;}
+    .mid-grid{grid-template-columns:1fr;}
+    .bottom-grid{grid-template-columns:1fr;}
+    .wa-card{flex-wrap:wrap;}
+    .wa-actions{width:100%;}
+    .btn-small{flex:1;text-align:center;}
+  }
+  @media(max-width:480px){
+    .kpi-grid{gap:8px;}
+    .kpi-card{padding:14px;}
+    .kpi-value{font-size:22px;}
+    .kpi-icon{display:none;}
+  }
+  ::-webkit-scrollbar{width:5px;}
+  ::-webkit-scrollbar-track{background:var(--bg2);}
+  ::-webkit-scrollbar-thumb{background:var(--border2);border-radius:4px;}
+  ::-webkit-scrollbar-thumb:hover{background:var(--gold);}
+</style>
+</head>
+<body>
+
+<!-- PANTALLA DE CARGA -->
+<div id="loadingScreen">
+  <div style="font-family:'Cormorant Garamond',serif;font-size:36px;font-weight:600;color:#C9A84C;letter-spacing:3px;">LA CAVA</div>
+  <div style="font-size:9px;letter-spacing:3px;color:#6A6458;text-transform:uppercase;">Oficial · Sistema</div>
+  <div style="width:40px;height:2px;background:#C9A84C;margin:4px auto;"></div>
+  <div class="spinner" style="margin-top:16px;width:24px;height:24px;border-width:2px;"></div>
+  <div style="font-size:12px;color:#6A6458;margin-top:8px;">Verificando acceso...</div>
+</div>
+
+<!-- PANTALLA DE BLOQUEO -->
+<div id="lockScreen" style="display:none;">
+  <div class="lock-logo">LA CAVA</div>
+  <div class="lock-sub">Oficial · Sistema</div>
+  <div class="lock-bar"></div>
+  <div class="lock-card">
+    <div class="lock-icon">🔒</div>
+    <div class="lock-title">Acceso suspendido</div>
+    <div class="lock-msg">
+      Tu suscripción al sistema ha vencido o ha sido suspendida.<br><br>
+      Contacta a <strong style="color:#C9A84C;">Digital Mibe Group</strong> para renovar tu plan y recuperar el acceso.
+    </div>
+    <a href="https://wa.me/57XXXXXXXXXX?text=Hola,%20quiero%20renovar%20mi%20plan%20de%20La%20Cava%20Oficial" class="lock-btn" target="_blank">
+      💬 Contactar para renovar
+    </a>
+  </div>
+</div>
+
+<!-- OVERLAY MÓVIL -->
+<div class="sidebar-overlay" id="overlay" onclick="closeSidebar()"></div>
+
+<!-- APP PRINCIPAL -->
+<div class="app" id="appMain" style="display:none;">
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-logo">
+      <div class="brand-name">La Cava</div>
+      <div class="brand-sub">Oficial · Sistema</div>
+      <div class="gold-bar"></div>
+    </div>
+    <nav class="nav">
+      <div class="nav-section">
+        <div class="nav-label">Principal</div>
+        <a class="nav-item active" href="#">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
+          Dashboard
+        </a>
+        <a class="nav-item" href="#" onclick="alert('Módulo POS · Próximamente');return false;">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+          Punto de Venta
+          <span class="nav-badge">POS</span>
+        </a>
+        <a class="nav-item" href="#" onclick="alert('Módulo Ventas · Próximamente');return false;">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-1.5 6h13M10 19a1 1 0 1 0 2 0M17 19a1 1 0 1 0 2 0"/></svg>
+          Ventas
+        </a>
+      </div>
+      <div class="nav-section">
+        <div class="nav-label">Clientes</div>
+        <a class="nav-item" href="#" onclick="alert('Programa de Puntos · Próximamente');return false;">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+          Programa Puntos
+          <span class="nav-badge">NEW</span>
+        </a>
+        <a class="nav-item" href="#" onclick="alert('WhatsApp · Próximamente');return false;">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+          WhatsApp
+        </a>
+      </div>
+      <div class="nav-section">
+        <div class="nav-label">Operaciones</div>
+        <a class="nav-item" href="#" onclick="alert('Inventario · Próximamente');return false;">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
+          Inventario
+        </a>
+        <a class="nav-item" href="#" onclick="alert('Contabilidad · Próximamente');return false;">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+          Contabilidad
+        </a>
+        <a class="nav-item" href="#" onclick="alert('Reportes · Próximamente');return false;">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+          Reportes
+        </a>
+      </div>
+    </nav>
+    <div class="sidebar-footer">
+      <div class="user-card">
+        <div class="user-avatar">LC</div>
+        <div class="user-info">
+          <div class="user-name" id="clienteNombre">La Cava Oficial</div>
+          <div class="user-role" id="clientePlan">Plan Base</div>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <main class="main">
+    <div class="topbar">
+      <button class="menu-toggle" id="menuToggle" onclick="toggleSidebar()">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+      </button>
+      <div class="topbar-title">Dashboard</div>
+      <div class="topbar-date" id="topbarDate"></div>
+      <button class="topbar-btn" onclick="alert('Registrar nueva venta · POS próximamente')">+ Nueva Venta</button>
+    </div>
+
+    <div class="content">
+      <!-- WhatsApp -->
+      <div class="wa-card">
+        <div class="wa-icon">💬</div>
+        <div class="wa-info">
+          <div class="wa-title">WhatsApp Business conectado</div>
+          <div class="wa-sub">3 mensajes pendientes · Último pedido hace 14 min</div>
+        </div>
+        <div class="wa-actions">
+          <button class="btn-small" onclick="alert('Bandeja WhatsApp · Próximamente')">Ver mensajes</button>
+          <button class="btn-small primary" onclick="alert('Enviar campaña · Próximamente')">Enviar campaña</button>
+        </div>
+      </div>
+
+      <!-- KPIs -->
+      <div class="section-divider">
+        <span class="section-divider-label">Resumen del día</span>
+        <div class="section-divider-line"></div>
+      </div>
+      <div class="kpi-grid">
+        <div class="kpi-card"><div class="kpi-icon">💰</div><div class="kpi-label">Ventas hoy</div><div class="kpi-value">$847K</div><div class="kpi-sub"><span class="kpi-trend up">↑ 12%</span> vs ayer</div></div>
+        <div class="kpi-card"><div class="kpi-icon">📦</div><div class="kpi-label">Pedidos hoy</div><div class="kpi-value white">7</div><div class="kpi-sub"><span class="kpi-trend up">↑ 3</span> vs ayer</div></div>
+        <div class="kpi-card"><div class="kpi-icon">👥</div><div class="kpi-label">Clientes activos</div><div class="kpi-value white">34</div><div class="kpi-sub"><span class="kpi-trend up">+2</span> este mes</div></div>
+        <div class="kpi-card"><div class="kpi-icon">📈</div><div class="kpi-label">Utilidad bruta</div><div class="kpi-value">38%</div><div class="kpi-sub"><span class="kpi-trend down">↓ 2%</span> vs mes ant.</div></div>
+      </div>
+
+      <!-- Gráfico + Pedidos -->
+      <div class="section-divider" style="margin-top:8px;">
+        <span class="section-divider-label">Ventas de la semana</span>
+        <div class="section-divider-line"></div>
+      </div>
+      <div class="mid-grid">
+        <div class="card">
+          <div class="card-header"><span class="card-title">Ventas · Últimos 7 días</span><span class="card-action">Ver todo</span></div>
+          <div class="card-body">
+            <div class="chart-wrap" id="chart"></div>
+            <div style="display:flex;justify-content:space-between;margin-top:12px;padding:0 4px;">
+              <span style="font-size:11px;color:var(--text3)">Total semana</span>
+              <span style="font-family:'Cormorant Garamond',serif;font-size:16px;font-weight:600;color:var(--gold)">$4.230.000</span>
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-header"><span class="card-title">Pedidos recientes</span><span class="card-action">Ver todo</span></div>
+          <div class="card-body" style="padding:12px 16px;"><div class="order-list" id="orderList"></div></div>
+        </div>
+      </div>
+
+      <!-- Bottom -->
+      <div class="section-divider">
+        <span class="section-divider-label">Inventario · Productos · Fidelización</span>
+        <div class="section-divider-line"></div>
+      </div>
+      <div class="bottom-grid">
+        <div class="card"><div class="card-header"><span class="card-title">Inventario</span><span class="card-action">Gestionar</span></div><div class="card-body" style="padding:12px 20px;" id="inventoryList"></div></div>
+        <div class="card"><div class="card-header"><span class="card-title">Top Productos</span><span class="card-action">Análisis</span></div><div class="card-body" style="padding:12px 20px;" id="productList"></div></div>
+        <div class="card"><div class="card-header"><span class="card-title">Top Clientes · Puntos</span><span class="card-action">Ver ranking</span></div><div class="card-body" style="padding:12px 20px;" id="pointsList"></div></div>
+      </div>
+
+      <!-- Financiero -->
+      <div class="section-divider">
+        <span class="section-divider-label">Resumen financiero · Mes actual</span>
+        <div class="section-divider-line"></div>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:24px;" id="financialGrid"></div>
+
+      <div style="border-top:1px solid var(--border);padding-top:16px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+        <div style="font-family:'Cormorant Garamond',serif;font-size:14px;color:var(--text3);">La Cava Oficial · Sistema de Gestión Premium</div>
+        <div style="font-size:11px;color:var(--text3);">Powered by <strong style="color:var(--gold);">Digital Mibe Group</strong></div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script>
+// ── CONFIGURACIÓN SUPABASE ──
+const SUPABASE_URL = 'https://egjlrcokerffuoqwbxlh.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVnamxyY29rZXJmZnVvcXdieGxoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY3OTMzMjcsImV4cCI6MjA5MjM2OTMyN30.XpOcqMBKFSv3-mYmM-uvQSU12VZppqNfmShEhihwD9c';
+
+// ── CLIENTE A VERIFICAR ──
+// Cambia este valor según el cliente al que le entregues el dashboard
+const CLIENTE_ID = 'lacava';
+
+// ── VERIFICAR LICENCIA ──
+async function verificarLicencia() {
+  try {
+    const res = await fetch(
+      `${SUPABASE_URL}/rest/v1/licencias?cliente=eq.${CLIENTE_ID}&select=*`,
+      {
+        headers: {
+          'apikey': SUPABASE_KEY,
+          'Authorization': `Bearer ${SUPABASE_KEY}`,
+          'Content-Type': 'application/json'
+        }
+      }
+    );
+
+    if (!res.ok) throw new Error('Error de conexión');
+
+    const data = await res.json();
+
+    if (!data || data.length === 0) {
+      // No existe el cliente → bloquear
+      mostrarBloqueo();
+      return false;
+    }
+
+    const licencia = data[0];
+
+    // Verificar si está activo
+    if (!licencia.activo) {
+      mostrarBloqueo();
+      return false;
+    }
+
+    // Verificar fecha de vencimiento
+    if (licencia.vence) {
+      const hoy = new Date();
+      const vence = new Date(licencia.vence);
+      if (hoy > vence) {
+        mostrarBloqueo();
+        return false;
+      }
+    }
+
+    // Licencia válida → mostrar dashboard
+    if (licencia.cliente) {
+      document.getElementById('clienteNombre').textContent = 'La Cava Oficial';
+    }
+    if (licencia.plan) {
+      document.getElementById('clientePlan').textContent = licencia.plan;
+    }
+
+    return true;
+
+  } catch(e) {
+    // Si hay error de red, mostrar el dashboard igual
+    // (para no bloquear al cliente por problemas de conectividad)
+    console.log('Advertencia:', e.message);
+    return true;
+  }
+}
+
+function mostrarBloqueo() {
+  document.getElementById('loadingScreen').classList.add('hidden');
+  document.getElementById('lockScreen').style.display = 'flex';
+  document.getElementById('appMain').style.display = 'none';
+}
+
+async function iniciarApp() {
+  const acceso = await verificarLicencia();
+
+  document.getElementById('loadingScreen').classList.add('hidden');
+
+  if (acceso) {
+    document.getElementById('appMain').style.display = 'flex';
+    cargarDashboard();
+  }
+}
+
+// ── FECHA ──
+function updateDate() {
+  const d = new Date();
+  const str = d.toLocaleDateString('es-CO', {weekday:'long',year:'numeric',month:'long',day:'numeric'});
+  document.getElementById('topbarDate').textContent = str.charAt(0).toUpperCase() + str.slice(1);
+}
+
+// ── SIDEBAR ──
+function toggleSidebar() {
+  document.getElementById('sidebar').classList.toggle('open');
+  document.getElementById('overlay').classList.toggle('open');
+}
+function closeSidebar() {
+  document.getElementById('sidebar').classList.remove('open');
+  document.getElementById('overlay').classList.remove('open');
+}
+
+// ── DATOS DE EJEMPLO ──
+function cargarDashboard() {
+  updateDate();
+
+  // GRÁFICO
+  const DAYS = ['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'];
+  const SALES = [320,480,290,610,540,720,470];
+  const MAX = Math.max(...SALES);
+  const chart = document.getElementById('chart');
+  DAYS.forEach((d,i) => {
+    const pct = (SALES[i]/MAX*100).toFixed(0);
+    const isToday = i === 5;
+    const g = document.createElement('div');
+    g.className = 'bar-group';
+    g.innerHTML = `
+      <div style="font-family:'Cormorant Garamond',serif;font-size:12px;color:var(--gold);opacity:${isToday?1:0};margin-bottom:2px;">$${SALES[i]}K</div>
+      <div class="bar-track" style="height:120px;" title="${d}: $${SALES[i]}K">
+        <div class="bar-fill" style="height:0%;${isToday?'background:linear-gradient(180deg,#E8C96D 0%,#C9A84C 100%)':''}"></div>
+      </div>
+      <div class="bar-label">${d}</div>`;
+    chart.appendChild(g);
+    setTimeout(() => { g.querySelector('.bar-fill').style.height = pct+'%'; }, 100+i*60);
+  });
+
+  // PEDIDOS
+  const orders = [
+    {name:'Carolina M.',detail:'Ron Medellín 750ml × 2',amount:'$148.000',time:'Hace 14 min',status:'pendiente',color:'#C9A84C'},
+    {name:'Santiago R.',detail:'Whisky Old Parr × 1',amount:'$210.000',time:'Hace 1h',status:'proceso',color:'#E8C96D'},
+    {name:'Valentina G.',detail:'Aguardiente × 3',amount:'$96.000',time:'Hace 2h',status:'entregado',color:'#9A7B2E'},
+    {name:'Daniela P.',detail:'Ron Caucano × 4',amount:'$64.000',time:'Hace 3h',status:'entregado',color:'#C9A84C'},
+    {name:'Andrés T.',detail:'Tequila Jimador × 1',amount:'$87.000',time:'Ayer',status:'entregado',color:'#E8C96D'},
+  ];
+  const ol = document.getElementById('orderList');
+  orders.forEach(o => {
+    const ini = o.name.split(' ').map(x=>x[0]).join('').slice(0,2);
+    ol.innerHTML += `
+    <div class="order-item">
+      <div class="order-avatar" style="background:${o.color}20;color:${o.color};border:1px solid ${o.color}40;">${ini}</div>
+      <div class="order-info"><div class="order-name">${o.name}</div><div class="order-detail">${o.detail}</div></div>
+      <div class="order-right"><div class="order-amount">${o.amount}</div><div class="order-time">${o.time}</div></div>
+    </div>`;
+  });
+
+  // INVENTARIO
+  const inv = [
+    {name:'Ron Medellín 750ml',stock:18,max:30,level:'ok'},
+    {name:'Aguardiente Antioqueño',stock:7,max:30,level:'low'},
+    {name:'Whisky Old Parr',stock:3,max:20,level:'critical'},
+    {name:'Tequila Jimador',stock:12,max:25,level:'ok'},
+    {name:'Vino La Playa Tinto',stock:2,max:20,level:'critical'},
+  ];
+  const dc = {ok:'var(--green)',low:'var(--gold)',critical:'var(--red)'};
+  const invEl = document.getElementById('inventoryList');
+  inv.forEach(item => {
+    const pct = (item.stock/item.max*100).toFixed(0);
+    invEl.innerHTML += `
+    <div class="inv-item">
+      <div class="inv-dot" style="background:${dc[item.level]}"></div>
+      <div class="inv-name">${item.name}</div>
+      <div class="inv-bar-track"><div class="inv-bar-fill" data-w="${pct}" style="width:0%;background:${dc[item.level]}"></div></div>
+      <div class="inv-stock ${item.level}">${item.stock} u</div>
+    </div>`;
+  });
+  setTimeout(()=>{ document.querySelectorAll('.inv-bar-fill').forEach(el=>el.style.width=el.dataset.w+'%'); },300);
+
+  // PRODUCTOS
+  const prods = [
+    {rank:1,name:'Ron Medellín 750ml',units:'23 und',revenue:'$689.000'},
+    {rank:2,name:'Aguardiente Antioqueño',units:'19 und',revenue:'$380.000'},
+    {rank:3,name:'Whisky Old Parr',units:'8 und',revenue:'$336.000'},
+    {rank:4,name:'Tequila Jimador',units:'11 und',revenue:'$297.000'},
+    {rank:5,name:'Vino La Playa',units:'6 und',revenue:'$198.000'},
+  ];
+  const pl = document.getElementById('productList');
+  prods.forEach(p => {
+    pl.innerHTML += `
+    <div class="prod-item">
+      <div class="prod-rank ${p.rank===1?'gold':''}">${p.rank}</div>
+      <div class="prod-info"><div class="prod-name">${p.name}</div><div class="prod-units">${p.units} · este mes</div></div>
+      <div class="prod-revenue">${p.revenue}</div>
+    </div>`;
+  });
+
+  // PUNTOS
+  const clients = [
+    {name:'Carolina M.',pts:2840,max:3000,color:'#C9A84C'},
+    {name:'Daniela P.',pts:1920,max:3000,color:'#E8C96D'},
+    {name:'Santiago R.',pts:1540,max:3000,color:'#9A7B2E'},
+    {name:'Valentina G.',pts:980,max:3000,color:'#C9A84C'},
+  ];
+  const ptEl = document.getElementById('pointsList');
+  clients.forEach(c => {
+    const ini = c.name.split(' ').map(x=>x[0]).join('').slice(0,2);
+    const pct = (c.pts/c.max*100).toFixed(0);
+    ptEl.innerHTML += `
+    <div class="pts-item">
+      <div class="pts-avatar" style="background:${c.color}25;color:${c.color};border:1px solid ${c.color}40;">${ini}</div>
+      <div class="pts-info">
+        <div class="pts-name">${c.name}</div>
+        <div class="pts-bar-wrap">
+          <div class="pts-bar-track"><div class="pts-bar-fill" data-w="${pct}" style="width:0%;background:${c.color}"></div></div>
+          <span class="pts-label">${c.pts.toLocaleString('es-CO')} / ${c.max.toLocaleString('es-CO')}</span>
+        </div>
+      </div>
+      <div class="pts-score">${c.pts.toLocaleString('es-CO')}<small>puntos</small></div>
+    </div>`;
+  });
+  setTimeout(()=>{ document.querySelectorAll('.pts-bar-fill').forEach(el=>el.style.width=el.dataset.w+'%'); },400);
+
+  // FINANCIERO
+  const fin = [
+    {label:'Ingresos del mes',value:'$8.430.000',sub:'Total ventas',trend:'+15%',up:true},
+    {label:'Costo de productos',value:'$5.230.000',sub:'62% de ingresos',trend:'-3%',up:false},
+    {label:'Utilidad bruta',value:'$3.200.000',sub:'Margen 38%',trend:'+18%',up:true},
+  ];
+  const fg = document.getElementById('financialGrid');
+  fin.forEach(f => {
+    fg.innerHTML += `
+    <div class="kpi-card" style="animation-delay:0.3s;">
+      <div class="kpi-label">${f.label}</div>
+      <div class="kpi-value" style="font-size:22px;">${f.value}</div>
+      <div class="kpi-sub"><span class="kpi-trend ${f.up?'up':'down'}">${f.trend}</span> ${f.sub}</div>
+    </div>`;
+  });
+}
+
+// ── INICIAR ──
+setTimeout(() => iniciarApp(), 1200);
+</script>
+</body>
+</html>
