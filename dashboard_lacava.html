@@ -3,927 +3,1059 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>La Cava Oficial · Dashboard</title>
-<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet"/>
+<title>La Cava Oficial</title>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
 <style>
-:root{--gold:#B8860B;--gold-light:#DAA520;--gold-soft:#FFF8E7;--gold-border:#F0D080;--bg:#F7F8FA;--bg2:#FFFFFF;--bg3:#F0F2F5;--border:#E8EAED;--border2:#D0D5DD;--text:#1A1D23;--text2:#4B5563;--text3:#9CA3AF;--green:#10B981;--green-bg:#ECFDF5;--green-border:#A7F3D0;--red:#EF4444;--red-bg:#FEF2F2;--blue:#3B82F6;--blue-bg:#EFF6FF;--orange:#F59E0B;--orange-bg:#FFFBEB;--purple:#8B5CF6;--shadow:0 1px 3px rgba(0,0,0,0.08),0 1px 2px rgba(0,0,0,0.04);--shadow-md:0 4px 6px rgba(0,0,0,0.06),0 2px 4px rgba(0,0,0,0.04);--radius:10px;--sidebar:230px;}
+:root{
+  --gold:#B8860B;--gold-l:#DAA520;--gold-s:#FFF8E7;--gold-b:#F0D080;
+  --accent:#C9622F;--accent-l:#E8814A;--accent-s:#FFF3EE;--accent-b:#F5C4A8;
+  --bg:#F7F8FA;--white:#fff;--border:#E8EAED;--border2:#D0D5DD;
+  --text:#1A1D23;--text2:#4B5563;--text3:#9CA3AF;
+  --green:#10B981;--green-bg:#ECFDF5;--red:#EF4444;--red-bg:#FEF2F2;--blue:#3B82F6;
+  --shadow:0 1px 3px rgba(0,0,0,0.07),0 1px 2px rgba(0,0,0,0.04);
+  --shadow-md:0 4px 12px rgba(0,0,0,0.09);
+  --r:10px;--sidebar:230px;
+}
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
-body{background:var(--bg);color:var(--text);font-family:'Plus Jakarta Sans',sans-serif;font-size:14px;min-height:100vh;overflow-x:hidden;}
+body{background:var(--bg);color:var(--text);font-family:'Plus Jakarta Sans',sans-serif;font-size:14px;min-height:100vh;}
 
-/* ── LOADING ── */
-#loadingScreen{position:fixed;inset:0;background:#fff;z-index:9999;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:16px;transition:opacity 0.4s;}
-#loadingScreen.hidden{opacity:0;pointer-events:none;}
-.load-logo{display:flex;align-items:center;gap:10px;}
-.load-icon{width:40px;height:40px;background:var(--gold-soft);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:20px;}
-.load-name{font-size:20px;font-weight:700;color:var(--text);}
-.load-name span{color:var(--gold);}
-.load-bar{width:200px;height:3px;background:var(--bg3);border-radius:10px;overflow:hidden;}
-.load-bar-fill{height:100%;background:var(--gold-light);border-radius:10px;animation:loadBar 1.2s ease forwards;}
-@keyframes loadBar{from{width:0%}to{width:85%}}
-.load-text{font-size:12px;color:var(--text3);}
+/* LOADING */
+#ls{position:fixed;inset:0;background:#fff;z-index:9999;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:16px;transition:opacity .4s;}
+#ls.h{opacity:0;pointer-events:none;}
+.lb{width:200px;height:3px;background:var(--bg);border-radius:10px;overflow:hidden;}
+.lbf{height:100%;background:var(--gold-l);animation:lb 1.2s ease forwards;}
+@keyframes lb{from{width:0}to{width:85%}}
 
-/* ── LOCK ── */
-#lockScreen{position:fixed;inset:0;background:var(--bg);z-index:9998;display:none;align-items:center;justify-content:center;flex-direction:column;gap:24px;}
-.lock-wrap{background:#fff;border:1px solid var(--border);border-radius:16px;padding:48px 40px;text-align:center;max-width:400px;width:90%;box-shadow:var(--shadow-md);}
-.lock-icon-wrap{width:64px;height:64px;background:var(--red-bg);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:28px;margin:0 auto 16px;}
-.lock-title{font-size:20px;font-weight:700;color:var(--text);margin-bottom:8px;}
-.lock-msg{font-size:14px;color:var(--text2);line-height:1.6;margin-bottom:24px;}
-.lock-btn{display:inline-flex;align-items:center;gap:8px;background:var(--gold-light);color:#fff;padding:12px 24px;border-radius:8px;font-size:14px;font-weight:600;text-decoration:none;transition:background 0.2s;}
+/* LOCK */
+#lock{position:fixed;inset:0;background:var(--bg);z-index:9998;display:none;align-items:center;justify-content:center;}
+.lkw{background:#fff;border:1px solid var(--border);border-radius:16px;padding:48px 40px;text-align:center;max-width:400px;width:90%;}
+.lki{width:64px;height:64px;background:var(--red-bg);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:28px;margin:0 auto 16px;}
+.lkt{font-size:20px;font-weight:700;margin-bottom:8px;}
+.lkm{font-size:14px;color:var(--text2);line-height:1.6;margin-bottom:24px;}
+.lkb{display:inline-flex;align-items:center;gap:8px;background:var(--gold-l);color:#fff;padding:12px 24px;border-radius:8px;font-size:14px;font-weight:600;text-decoration:none;}
 
-/* ── APP SHELL ── */
+/* OVERLAY */
+.sov{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:99;}
+.sov.o{display:block;}
+
+/* APP */
 .app{display:flex;min-height:100vh;}
-.sidebar{width:var(--sidebar);background:#fff;border-right:1px solid var(--border);display:flex;flex-direction:column;position:fixed;top:0;left:0;bottom:0;z-index:100;transition:transform 0.3s;}
-.sidebar-logo{padding:20px 20px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;}
-.logo-icon{width:36px;height:36px;background:var(--gold-soft);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;}
-.logo-name{font-size:14px;font-weight:700;color:var(--text);}
-.logo-sub{font-size:10px;color:var(--text3);}
+
+/* SIDEBAR */
+.sb{width:var(--sidebar);background:#fff;border-right:1px solid var(--border);display:flex;flex-direction:column;position:fixed;top:0;left:0;bottom:0;z-index:100;transition:transform .3s;}
+.sb-logo{padding:20px 20px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;}
+.sb-ic{width:36px;height:36px;background:var(--gold-s);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;}
+.sb-nm{font-size:14px;font-weight:700;}.sb-sb{font-size:10px;color:var(--text3);}
 .nav{flex:1;padding:12px 10px;overflow-y:auto;}
-.nav-section{margin-bottom:20px;}
-.nav-section-label{font-size:10px;font-weight:600;letter-spacing:0.8px;text-transform:uppercase;color:var(--text3);padding:0 10px 6px;}
-.nav-item{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;cursor:pointer;color:var(--text2);font-size:13px;font-weight:500;transition:all 0.15s;text-decoration:none;margin-bottom:2px;}
-.nav-item:hover{background:var(--bg3);color:var(--text);}
-.nav-item.active{background:var(--gold-soft);color:var(--gold);}
-.nav-icon-wrap{width:28px;height:28px;border-radius:6px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
-.nav-item:hover .nav-icon-wrap{background:var(--border);}
-.nav-item.active .nav-icon-wrap{background:var(--gold-border);}
-.nav-badge{margin-left:auto;background:var(--gold-light);color:#fff;font-size:9px;font-weight:700;padding:2px 6px;border-radius:10px;}
-.nav-badge.new{background:var(--green);}
-.sidebar-bottom{padding:12px 10px;border-top:1px solid var(--border);}
-.user-pill{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;}
-.user-av{width:32px;height:32px;border-radius:50%;background:var(--gold-soft);border:2px solid var(--gold-border);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:var(--gold);flex-shrink:0;}
-.user-name{font-size:12px;font-weight:600;color:var(--text);}
-.user-plan{font-size:10px;color:var(--text3);}
+.nav-s{margin-bottom:20px;}
+.nav-sl{font-size:10px;font-weight:600;letter-spacing:.8px;text-transform:uppercase;color:var(--text3);padding:0 10px 6px;}
+.ni{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;cursor:pointer;color:var(--text2);font-size:13px;font-weight:500;transition:all .15s;text-decoration:none;margin-bottom:2px;}
+.ni:hover{background:var(--bg);color:var(--text);}
+.ni.on{background:var(--gold-s);color:var(--gold);}
+.ni-ic{width:28px;height:28px;border-radius:6px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.ni:hover .ni-ic{background:var(--border);}
+.ni.on .ni-ic{background:var(--gold-b);}
+.nbadge{margin-left:auto;background:var(--gold-l);color:#fff;font-size:9px;font-weight:700;padding:2px 6px;border-radius:10px;}
+.nbadge.new{background:var(--green);}
+.sb-bot{padding:12px 10px;border-top:1px solid var(--border);}
+.uav{width:32px;height:32px;border-radius:50%;background:var(--gold-s);border:2px solid var(--gold-b);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:var(--gold);flex-shrink:0;}
 .main{margin-left:var(--sidebar);flex:1;display:flex;flex-direction:column;min-height:100vh;}
-.topbar{height:56px;background:#fff;border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 24px;gap:16px;position:sticky;top:0;z-index:50;}
-.topbar-greeting{flex:1;}
-.topbar-greeting-text{font-size:15px;font-weight:600;color:var(--text);}
-.topbar-greeting-sub{font-size:11px;color:var(--text3);margin-top:1px;}
-.topbar-date{font-size:12px;color:var(--text3);background:var(--bg3);padding:5px 10px;border-radius:6px;white-space:nowrap;}
-.topbar-btn{display:flex;align-items:center;gap:6px;background:var(--gold-light);color:#fff;border:none;padding:8px 16px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;transition:background 0.2s;white-space:nowrap;}
-.topbar-btn:hover{background:var(--gold);}
+
+/* TOPBAR */
+.tb{height:56px;background:#fff;border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 24px;gap:16px;position:sticky;top:0;z-index:50;}
+.tb-g{flex:1;}.tb-gt{font-size:15px;font-weight:600;}.tb-gs{font-size:11px;color:var(--text3);margin-top:1px;}
+.tb-d{font-size:12px;color:var(--text3);background:var(--bg);padding:5px 10px;border-radius:6px;white-space:nowrap;}
+.tb-btn{display:flex;align-items:center;gap:6px;background:var(--gold-l);color:#fff;border:none;padding:8px 16px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap;}
+.tb-btn:hover{background:var(--gold);}
 .menu-toggle{display:none;background:none;border:1px solid var(--border);color:var(--text2);width:34px;height:34px;border-radius:8px;cursor:pointer;align-items:center;justify-content:center;}
-.sidebar-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.4);z-index:99;}
 
-/* ── VISTAS (dashboard / pos) ── */
-.view{display:none;}
-.view.active{display:block;}
-
-/* ── DASHBOARD ── */
+/* VIEWS */
+#vInicio{display:block;}
+/* DASHBOARD */
 .content{padding:24px;flex:1;}
-.wa-banner{background:#fff;border:1px solid var(--border);border-radius:var(--radius);padding:16px 20px;display:flex;align-items:center;gap:14px;margin-bottom:20px;box-shadow:var(--shadow);}
-.wa-icon-wrap{width:44px;height:44px;background:#F0FFF4;border:1px solid #C6F6D5;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;}
-.wa-info{flex:1;}
-.wa-title{font-size:14px;font-weight:600;color:var(--text);}
-.wa-sub{font-size:12px;color:var(--text3);margin-top:2px;}
-.wa-badge{display:inline-flex;align-items:center;gap:4px;background:var(--green-bg);color:var(--green);font-size:11px;font-weight:600;padding:2px 8px;border-radius:10px;margin-left:8px;}
-.wa-actions{display:flex;gap:8px;flex-shrink:0;}
-.wa-btn{padding:7px 14px;border-radius:7px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;transition:all 0.15s;border:1px solid;white-space:nowrap;}
-.wa-btn.outline{background:#fff;color:var(--text2);border-color:var(--border2);}
-.wa-btn.filled{background:var(--gold-light);color:#fff;border-color:var(--gold-light);}
-.section-header{display:flex;align-items:center;gap:12px;margin-bottom:14px;}
-.section-title{font-size:13px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:0.5px;white-space:nowrap;}
-.section-line{flex:1;height:1px;background:var(--border);}
+.wab{background:#fff;border:1px solid var(--border);border-radius:var(--r);padding:16px 20px;display:flex;align-items:center;gap:14px;margin-bottom:20px;box-shadow:var(--shadow);}
+.wai{width:44px;height:44px;background:#F0FFF4;border:1px solid #C6F6D5;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;}
+.sh{display:flex;align-items:center;gap:12px;margin-bottom:14px;}
+.st{font-size:13px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;white-space:nowrap;}
+.sl{flex:1;height:1px;background:var(--border);}
 .kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px;}
-.kpi-card{background:#fff;border:1px solid var(--border);border-radius:var(--radius);padding:20px;box-shadow:var(--shadow);transition:box-shadow 0.2s,transform 0.2s;animation:fadeUp 0.35s ease both;}
-.kpi-card:hover{box-shadow:var(--shadow-md);transform:translateY(-1px);}
-.kpi-card:nth-child(1){animation-delay:0.05s;}.kpi-card:nth-child(2){animation-delay:0.10s;}.kpi-card:nth-child(3){animation-delay:0.15s;}.kpi-card:nth-child(4){animation-delay:0.20s;}
-@keyframes fadeUp{from{opacity:0;transform:translateY(10px);}to{opacity:1;transform:translateY(0);}}
-.kpi-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;}
-.kpi-label{font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px;}
-.kpi-icon-wrap{width:36px;height:36px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:16px;}
-.kpi-value{font-size:26px;font-weight:700;color:var(--text);line-height:1;margin-bottom:8px;}
-.kpi-value.gold{color:var(--gold);}
-.kpi-footer{display:flex;align-items:center;gap:6px;}
-.kpi-trend{display:inline-flex;align-items:center;gap:3px;font-size:11px;font-weight:600;padding:2px 6px;border-radius:4px;}
-.kpi-trend.up{background:var(--green-bg);color:var(--green);}
-.kpi-trend.down{background:var(--red-bg);color:var(--red);}
-.kpi-trend-label{font-size:11px;color:var(--text3);}
+.kc{background:#fff;border:1px solid var(--border);border-radius:var(--r);padding:20px;box-shadow:var(--shadow);}
 .mid-grid{display:grid;grid-template-columns:1fr 320px;gap:16px;margin-bottom:24px;}
-.card{background:#fff;border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);overflow:hidden;}
-.card-header{padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;}
-.card-title{font-size:14px;font-weight:700;color:var(--text);}
-.card-subtitle{font-size:11px;color:var(--text3);margin-top:1px;}
-.card-action{font-size:12px;color:var(--blue);font-weight:600;cursor:pointer;padding:4px 10px;border-radius:6px;transition:background 0.15s;}
-.card-action:hover{background:var(--blue-bg);}
-.card-body{padding:20px;}
-.chart-area{display:flex;align-items:flex-end;gap:6px;height:140px;padding:0 4px;}
-.chart-bar-wrap{flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;}
-.chart-bar-track{width:100%;background:var(--bg3);border-radius:6px;position:relative;overflow:hidden;cursor:pointer;}
-.chart-bar-fill{border-radius:6px;width:100%;position:absolute;bottom:0;transition:height 0.8s cubic-bezier(0.34,1.56,0.64,1);background:var(--gold-border);}
-.chart-bar-fill.today{background:var(--gold-light);}
-.chart-bar-label{font-size:10px;color:var(--text3);font-weight:500;}
-.chart-footer{display:flex;justify-content:space-between;align-items:center;margin-top:12px;padding-top:12px;border-top:1px solid var(--border);}
-.chart-total-label{font-size:12px;color:var(--text3);}
-.chart-total-value{font-size:18px;font-weight:700;color:var(--text);}
-.order-list{display:flex;flex-direction:column;}
-.order-item{display:flex;align-items:center;gap:12px;padding:10px 20px;transition:background 0.15s;cursor:pointer;border-bottom:1px solid var(--border);}
-.order-item:last-child{border-bottom:none;}
-.order-item:hover{background:var(--bg3);}
-.order-av{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;flex-shrink:0;}
-.order-info{flex:1;min-width:0;}
-.order-name{font-size:13px;font-weight:600;color:var(--text);overflow:hidden;white-space:nowrap;text-overflow:ellipsis;}
-.order-detail{font-size:11px;color:var(--text3);margin-top:1px;}
-.order-right{text-align:right;flex-shrink:0;}
-.order-amount{font-size:14px;font-weight:700;color:var(--text);}
-.order-time{font-size:10px;color:var(--text3);margin-top:2px;}
-.bottom-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:24px;}
-.inv-row{display:flex;align-items:center;gap:12px;padding:10px 20px;border-bottom:1px solid var(--border);transition:background 0.15s;cursor:pointer;}
-.inv-row:last-child{border-bottom:none;}
-.inv-row:hover{background:var(--bg3);}
-.inv-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
-.inv-name{flex:1;font-size:13px;color:var(--text);font-weight:500;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;}
-.inv-bar-track{width:50px;height:4px;background:var(--bg3);border-radius:4px;overflow:hidden;}
-.inv-bar-fill{height:100%;border-radius:4px;transition:width 1s ease;}
-.inv-qty{font-size:12px;font-weight:600;min-width:32px;text-align:right;}
-.prod-row{display:flex;align-items:center;gap:12px;padding:10px 20px;border-bottom:1px solid var(--border);transition:background 0.15s;cursor:pointer;}
-.prod-row:last-child{border-bottom:none;}
-.prod-row:hover{background:var(--bg3);}
-.prod-rank{font-size:14px;font-weight:700;color:var(--text3);width:18px;text-align:center;flex-shrink:0;}
-.prod-rank.top1{color:var(--gold);}
-.prod-info{flex:1;min-width:0;}
-.prod-name{font-size:12px;font-weight:500;color:var(--text);overflow:hidden;white-space:nowrap;text-overflow:ellipsis;}
-.prod-units{font-size:10px;color:var(--text3);margin-top:1px;}
-.prod-rev{font-size:13px;font-weight:700;color:var(--text);flex-shrink:0;}
-.pts-row{display:flex;align-items:center;gap:10px;padding:10px 20px;border-bottom:1px solid var(--border);transition:background 0.15s;cursor:pointer;}
-.pts-row:last-child{border-bottom:none;}
-.pts-row:hover{background:var(--bg3);}
-.pts-av{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0;}
-.pts-info{flex:1;min-width:0;}
-.pts-name{font-size:12px;font-weight:500;color:var(--text);}
-.pts-progress{display:flex;align-items:center;gap:6px;margin-top:3px;}
-.pts-bar-track{flex:1;height:3px;background:var(--bg3);border-radius:4px;overflow:hidden;}
-.pts-bar-fill{height:100%;border-radius:4px;}
-.pts-bar-label{font-size:10px;color:var(--text3);white-space:nowrap;}
-.pts-score{text-align:right;flex-shrink:0;}
-.pts-score-num{font-size:13px;font-weight:700;color:var(--text);}
-.pts-score-label{font-size:10px;color:var(--text3);}
+.card{background:#fff;border:1px solid var(--border);border-radius:var(--r);box-shadow:var(--shadow);overflow:hidden;}
+.ch{padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;}
+.ct{font-size:14px;font-weight:700;}.cs{font-size:11px;color:var(--text3);margin-top:1px;}
+.ca{font-size:12px;color:var(--blue);font-weight:600;cursor:pointer;}
+.cb{padding:20px;}
+.chart-area{display:flex;align-items:flex-end;gap:6px;height:140px;}
+.cbw{flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;}
+.cbt{width:100%;background:var(--bg);border-radius:6px;position:relative;overflow:hidden;}
+.cbf{border-radius:6px;width:100%;position:absolute;bottom:0;transition:height .8s cubic-bezier(.34,1.56,.64,1);background:var(--gold-b);}
+.cbf.today{background:var(--gold-l);}
+.cbl{font-size:10px;color:var(--text3);}
+.cfoot{display:flex;justify-content:space-between;margin-top:12px;padding-top:12px;border-top:1px solid var(--border);}
+.ol{display:flex;flex-direction:column;}
+.oi{display:flex;align-items:center;gap:12px;padding:10px 20px;border-bottom:1px solid var(--border);cursor:pointer;}
+.oi:last-child{border-bottom:none;}.oi:hover{background:var(--bg);}
+.oav{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;flex-shrink:0;}
+.on2{flex:1;min-width:0;}.oname{font-size:13px;font-weight:600;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;}
+.odet{font-size:11px;color:var(--text3);}.or{text-align:right;flex-shrink:0;}
+.oamt{font-size:14px;font-weight:700;}.otm{font-size:10px;color:var(--text3);}
+.bot-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:24px;}
+.ir{display:flex;align-items:center;gap:12px;padding:10px 20px;border-bottom:1px solid var(--border);cursor:pointer;}
+.ir:last-child{border-bottom:none;}.ir:hover{background:var(--bg);}
+.idot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
+.iname{flex:1;font-size:13px;font-weight:500;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;}
+.ibar{width:50px;height:4px;background:var(--bg);border-radius:4px;overflow:hidden;}
+.ibf{height:100%;border-radius:4px;transition:width 1s ease;}
+.iqty{font-size:12px;font-weight:600;min-width:32px;text-align:right;}
+.pr{display:flex;align-items:center;gap:12px;padding:10px 20px;border-bottom:1px solid var(--border);cursor:pointer;}
+.pr:last-child{border-bottom:none;}.pr:hover{background:var(--bg);}
+.prank{font-size:14px;font-weight:700;color:var(--text3);width:18px;text-align:center;}
+.prank.t1{color:var(--gold);}
+.pn2{flex:1;min-width:0;}.pname{font-size:12px;font-weight:500;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;}
+.punits{font-size:10px;color:var(--text3);}.prev{font-size:13px;font-weight:700;}
+.ptr{display:flex;align-items:center;gap:10px;padding:10px 20px;border-bottom:1px solid var(--border);cursor:pointer;}
+.ptr:last-child{border-bottom:none;}.ptr:hover{background:var(--bg);}
+.pav{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0;}
+.pinfo{flex:1;min-width:0;}.pnm{font-size:12px;font-weight:500;}
+.pprog{display:flex;align-items:center;gap:6px;margin-top:3px;}
+.pbt{flex:1;height:3px;background:var(--bg);border-radius:4px;overflow:hidden;}
+.pbf{height:100%;border-radius:4px;}.pbl{font-size:10px;color:var(--text3);}
+.psc{text-align:right;flex-shrink:0;}.psn{font-size:13px;font-weight:700;}.psl{font-size:10px;color:var(--text3);}
 .fin-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:24px;}
-.fin-card{background:#fff;border:1px solid var(--border);border-radius:var(--radius);padding:20px;box-shadow:var(--shadow);}
-.fin-label{font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;}
-.fin-value{font-size:22px;font-weight:700;color:var(--text);margin-bottom:4px;}
-.fin-sub{font-size:11px;color:var(--text3);display:flex;align-items:center;gap:6px;}
-.dash-footer{border-top:1px solid var(--border);padding:16px 0 0;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;}
-.footer-brand{font-size:12px;color:var(--text3);font-weight:500;}
-.footer-powered{font-size:11px;color:var(--text3);}
-.footer-powered strong{color:var(--gold);}
+.fc{background:#fff;border:1px solid var(--border);border-radius:var(--r);padding:20px;box-shadow:var(--shadow);}
+.fl{font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;}
+.fv{font-size:22px;font-weight:700;margin-bottom:4px;}
+.fs{font-size:11px;color:var(--text3);display:flex;align-items:center;gap:6px;}
+.trend{display:inline-flex;align-items:center;font-size:11px;font-weight:600;padding:2px 6px;border-radius:4px;}
+.trend.up{background:var(--green-bg);color:var(--green);}.trend.dn{background:var(--red-bg);color:var(--red);}
+.footer{border-top:1px solid var(--border);padding:16px 0 0;display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;}
+.fb{font-size:12px;color:var(--text3);}.fp{font-size:11px;color:var(--text3);}
+.fp strong{color:var(--gold);}
 
-/* ══════════════════════════════
-   POS EMBEBIDO
-══════════════════════════════ */
-#viewPOS{height:calc(100vh - 56px);display:none;flex-direction:row;overflow:hidden;}
-#viewPOS.active{display:flex;}
+/* ═══════════════════════
+   POS — NUEVO DISEÑO
+═══════════════════════ */
+#vPOS{display:none;flex-direction:row;height:calc(100vh - 56px);overflow:hidden;}
 
 /* Panel izquierdo */
-.pos-left{display:flex;flex-direction:column;flex:1;overflow:hidden;border-right:1px solid var(--border);background:#fff;}
-.cat-bar{display:flex;overflow-x:auto;padding:8px 10px;gap:6px;border-bottom:1px solid var(--border);flex-shrink:0;scrollbar-width:none;}
-.cat-bar::-webkit-scrollbar{display:none;}
-.cat-pill{padding:6px 12px;border:1px solid var(--border);border-radius:20px;font-size:11px;font-weight:600;color:var(--text2);cursor:pointer;white-space:nowrap;flex-shrink:0;transition:all .15s;}
-.cat-pill.on{background:var(--gold-soft);border-color:var(--gold-border);color:var(--gold);}
-.pos-search{padding:8px 10px;border-bottom:1px solid var(--border);flex-shrink:0;position:relative;}
-.pos-search input{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 10px 8px 32px;font-size:13px;font-family:inherit;color:var(--text);outline:none;}
-.pos-search input:focus{border-color:var(--gold-light);}
-.pos-search-icon{position:absolute;left:19px;top:50%;transform:translateY(-50%);font-size:13px;pointer-events:none;}
-.prod-grid{overflow-y:auto;flex:1;padding:8px 10px;display:grid;grid-template-columns:repeat(2,1fr);gap:8px;align-content:start;}
-.pc{background:var(--bg);border:1px solid var(--border);border-radius:9px;padding:10px;cursor:pointer;transition:all .12s;position:relative;user-select:none;}
+.pos-l{display:flex;flex-direction:column;flex:1;min-width:0;overflow:hidden;border-right:1px solid var(--border);background:var(--bg);}
+
+/* Header del POS */
+.pos-header{background:#fff;border-bottom:1px solid var(--border);padding:12px 16px;display:flex;align-items:center;gap:12px;flex-shrink:0;}
+.pos-title{font-size:15px;font-weight:700;color:var(--text);flex:1;}
+
+/* Categorias */
+.cats{display:flex;overflow-x:auto;padding:10px 16px;gap:8px;background:#fff;border-bottom:1px solid var(--border);flex-shrink:0;scrollbar-width:none;}
+.cats::-webkit-scrollbar{display:none;}
+.cat{padding:7px 16px;border:1.5px solid var(--border);border-radius:20px;font-size:12px;font-weight:600;color:var(--text2);cursor:pointer;white-space:nowrap;flex-shrink:0;background:#fff;transition:all .15s;user-select:none;}
+.cat:hover{border-color:var(--accent-b);color:var(--accent);}
+.cat.on{background:var(--accent);border-color:var(--accent);color:#fff;}
+
+/* Busqueda */
+.srch{padding:10px 16px;background:#fff;border-bottom:1px solid var(--border);flex-shrink:0;position:relative;}
+.srch input{width:100%;background:var(--bg);border:1.5px solid var(--border);border-radius:8px;padding:9px 12px 9px 36px;font-size:13px;font-family:inherit;color:var(--text);outline:none;transition:border .15s;}
+.srch input:focus{border-color:var(--accent-l);background:#fff;}
+.srch-i{position:absolute;left:25px;top:50%;transform:translateY(-50%);font-size:15px;color:var(--text3);pointer-events:none;}
+
+/* Grid productos — 4 columnas como la imagen */
+.pgrid{overflow-y:auto;flex:1;padding:16px;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;align-content:start;}
+
+/* Tarjeta producto — estilo imagen de referencia */
+.pc{background:#fff;border:1.5px solid var(--border);border-radius:12px;padding:14px 12px;cursor:pointer;transition:all .15s;position:relative;user-select:none;}
+.pc:hover{border-color:var(--accent-b);box-shadow:var(--shadow-md);transform:translateY(-1px);}
 .pc:active{transform:scale(.97);}
-.pc.sel{background:var(--gold-soft);border-color:var(--gold-border);}
-.pc.zero{opacity:.45;cursor:not-allowed;}
-.pe{font-size:22px;display:block;margin-bottom:5px;line-height:1;}
-.pn{font-size:11px;font-weight:600;color:var(--text);line-height:1.3;margin-bottom:2px;}
-.pcat{font-size:10px;color:var(--text3);margin-bottom:4px;}
-.pp{font-size:13px;font-weight:700;color:var(--gold);}
-.pst{font-size:10px;color:var(--text3);}
-.pq-badge{position:absolute;top:6px;right:6px;background:var(--gold-light);color:#fff;font-size:10px;font-weight:700;padding:2px 6px;border-radius:8px;}
+.pc.sel{border-color:var(--accent);background:var(--accent-s);}
+.pc.sel .pc-price{color:var(--accent);}
+.pc.zero{opacity:.45;cursor:not-allowed;pointer-events:none;}
+.pc-qty{position:absolute;top:8px;right:8px;background:var(--accent);color:#fff;font-size:10px;font-weight:700;padding:2px 7px;border-radius:10px;line-height:1.4;}
+.pc-name{font-size:12px;font-weight:500;color:var(--text);line-height:1.4;margin-bottom:8px;min-height:34px;}
+.pc-price{font-size:14px;font-weight:700;color:var(--accent);}
 
 /* Panel derecho */
-.pos-right{width:260px;flex-shrink:0;display:flex;flex-direction:column;background:#fff;}
-.pos-section{padding:10px 12px;border-bottom:1px solid var(--border);flex-shrink:0;}
-.pos-label{font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px;}
-.cli-search-wrap{position:relative;margin-bottom:6px;}
-.cli-search-wrap input{width:100%;border:1px solid var(--border);border-radius:7px;padding:7px 10px 7px 28px;font-size:12px;font-family:inherit;color:var(--text);outline:none;transition:border .15s;}
-.cli-search-wrap input:focus{border-color:var(--gold-light);}
-.cli-search-icon{position:absolute;left:9px;top:50%;transform:translateY(-50%);font-size:12px;}
-.cli-drop{position:absolute;left:0;right:0;top:100%;background:#fff;border:1px solid var(--border);border-radius:8px;box-shadow:var(--shadow-md);z-index:50;max-height:140px;overflow-y:auto;margin-top:2px;}
-.cli-drop-item{padding:8px 12px;cursor:pointer;font-size:12px;border-bottom:1px solid var(--border);}
-.cli-drop-item:last-child{border-bottom:none;}
-.cli-drop-item:hover{background:var(--bg);}
-.cli-drop-item .cdn{font-weight:600;color:var(--text);}
-.cli-drop-item .cdp{font-size:11px;color:var(--text3);}
-.cli-drop-item .cdpts{font-size:11px;color:var(--gold);font-weight:600;}
-.cli-wa-input{width:100%;border:1px solid var(--border);border-radius:7px;padding:7px 10px;font-size:12px;font-family:inherit;color:var(--text);outline:none;transition:border .15s;}
-.cli-wa-input:focus{border-color:var(--gold-light);}
-.cli-tag{display:flex;align-items:center;gap:6px;background:var(--green-bg);border:1px solid var(--green-border);border-radius:7px;padding:5px 10px;font-size:11px;font-weight:600;color:var(--green);cursor:default;}
-.cli-tag-x{margin-left:auto;cursor:pointer;color:var(--text3);font-size:14px;line-height:1;}
-.cli-pts{font-size:11px;color:var(--gold);margin-top:4px;display:none;}
+.pos-r{width:290px;flex-shrink:0;display:flex;flex-direction:column;background:#fff;}
+.pos-s{padding:12px 14px;border-bottom:1px solid var(--border);flex-shrink:0;}
+.pos-lbl{font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.6px;margin-bottom:7px;}
+.cli-sw{position:relative;margin-bottom:7px;}
+.cli-sw input{width:100%;border:1.5px solid var(--border);border-radius:8px;padding:8px 10px 8px 28px;font-size:12px;font-family:inherit;color:var(--text);outline:none;transition:border .15s;}
+.cli-sw input:focus{border-color:var(--accent-l);}
+.cli-si{position:absolute;left:9px;top:50%;transform:translateY(-50%);font-size:13px;color:var(--text3);}
+.cli-drop{position:absolute;left:0;right:0;top:100%;background:#fff;border:1.5px solid var(--border);border-radius:9px;box-shadow:var(--shadow-md);z-index:50;max-height:150px;overflow-y:auto;margin-top:3px;}
+.cdi{padding:9px 12px;cursor:pointer;font-size:12px;border-bottom:1px solid var(--border);}
+.cdi:last-child{border-bottom:none;}.cdi:hover{background:var(--bg);}
+.cdn{font-weight:600;color:var(--text);margin-bottom:2px;}
+.cdp{font-size:10px;color:var(--text3);}.cdpts{font-size:10px;color:var(--gold);font-weight:700;}
+.cli-wa{width:100%;border:1.5px solid var(--border);border-radius:8px;padding:8px 10px;font-size:12px;font-family:inherit;color:var(--text);outline:none;transition:border .15s;}
+.cli-wa:focus{border-color:var(--accent-l);}
+.cli-tag{display:flex;align-items:center;gap:7px;background:var(--green-bg);border:1.5px solid #A7F3D0;border-radius:8px;padding:7px 10px;font-size:12px;font-weight:600;color:var(--green);}
+.cli-tx{margin-left:auto;cursor:pointer;color:var(--text3);font-size:16px;line-height:1;}
+.cli-pts{font-size:11px;color:var(--gold);font-weight:600;margin-top:5px;display:none;}
 
-/* Items venta */
-.pos-items{flex:1;overflow-y:auto;border-bottom:1px solid var(--border);}
-.pos-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:8px;color:var(--text3);}
-.pos-empty-icon{font-size:32px;}
-.pos-empty-txt{font-size:12px;}
-.vi{display:flex;align-items:center;gap:6px;padding:8px 12px;border-bottom:1px solid var(--border);}
+/* Items del pedido */
+.pos-items{flex:1;min-height:120px;overflow-y:auto;border-bottom:1px solid var(--border);}
+.pos-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:8px;color:var(--text3);text-align:center;}
+.vi{display:flex;align-items:center;gap:8px;padding:9px 14px;border-bottom:1px solid var(--border);}
 .vi:last-child{border-bottom:none;}
-.vi:hover{background:var(--bg);}
 .vi-info{flex:1;min-width:0;}
-.vi-name{font-size:11px;font-weight:600;color:var(--text);overflow:hidden;white-space:nowrap;text-overflow:ellipsis;}
+.vi-name{font-size:11px;font-weight:600;color:var(--text);overflow:hidden;white-space:nowrap;text-overflow:ellipsis;margin-bottom:2px;}
 .vi-price{font-size:10px;color:var(--text3);}
 .qc{display:flex;align-items:center;gap:4px;flex-shrink:0;}
-.qb{width:22px;height:22px;border:1px solid var(--border);border-radius:5px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:13px;font-weight:700;color:var(--text2);background:#fff;}
+.qb{width:24px;height:24px;border:1.5px solid var(--border);border-radius:6px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:15px;font-weight:700;color:var(--text2);background:#fff;transition:all .12s;}
+.qb:hover{border-color:var(--accent-b);color:var(--accent);}
 .qb:active{background:var(--bg);}
-.qn{font-size:12px;font-weight:700;min-width:18px;text-align:center;}
-.vi-total{font-size:12px;font-weight:700;color:var(--gold);min-width:52px;text-align:right;flex-shrink:0;}
+.qn{font-size:13px;font-weight:700;min-width:20px;text-align:center;}
+.vi-tot{font-size:12px;font-weight:700;color:var(--accent);min-width:60px;text-align:right;flex-shrink:0;}
 
 /* Footer POS */
-.pos-footer{padding:10px 12px;flex-shrink:0;}
-.pago-grid{display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-bottom:10px;}
-.po{border:1px solid var(--border);border-radius:7px;padding:6px 4px;text-align:center;cursor:pointer;transition:all .15s;}
-.po.on{border-color:var(--gold-light);background:var(--gold-soft);}
-.po-icon{font-size:15px;display:block;margin-bottom:2px;}
-.po-label{font-size:10px;font-weight:600;color:var(--text2);}
-.po.on .po-label{color:var(--gold);}
-.pos-total-row{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px;padding:8px 10px;background:var(--bg);border-radius:8px;}
-.pos-total-label{font-size:12px;color:var(--text2);}
-.pos-total-val{font-size:20px;font-weight:800;color:var(--text);}
-.pos-pts-preview{font-size:10px;color:var(--gold);font-weight:600;display:none;}
-.btn-registrar{width:100%;background:var(--gold-light);color:#fff;border:none;padding:13px;border-radius:9px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;transition:background .2s;}
-.btn-registrar:active{background:var(--gold);}
-.btn-registrar:disabled{background:var(--border2);color:var(--text3);cursor:not-allowed;}
-.btn-limpiar{width:100%;background:none;border:none;color:var(--text3);font-size:11px;cursor:pointer;padding:6px;font-family:inherit;margin-top:4px;}
+.pos-foot{padding:12px 14px;flex-shrink:0;}
+.pago-g{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:12px;}
+.po{border:1.5px solid var(--border);border-radius:8px;padding:8px 4px;text-align:center;cursor:pointer;transition:all .15s;}
+.po:hover{border-color:var(--accent-b);}
+.po.on{border-color:var(--accent);background:var(--accent-s);}
+.po-ic{font-size:17px;display:block;margin-bottom:3px;}
+.po-lbl{font-size:10px;font-weight:600;color:var(--text2);}
+.po.on .po-lbl{color:var(--accent);}
+.tot-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;padding:10px 14px;background:var(--bg);border-radius:10px;border:1px solid var(--border);}
+.tot-lbl{font-size:12px;color:var(--text2);font-weight:500;}
+.tot-val{font-size:22px;font-weight:800;color:var(--text);}
+.tot-pts{font-size:10px;color:var(--gold);font-weight:600;display:none;margin-top:2px;}
+.btn-reg{width:100%;background:var(--accent);color:#fff;border:none;padding:14px;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;transition:background .2s;}
+.btn-reg:hover{background:var(--accent-l);}
+.btn-reg:disabled{background:var(--border2);color:var(--text3);cursor:not-allowed;}
+.btn-clr{width:100%;background:none;border:none;color:var(--text3);font-size:11px;cursor:pointer;padding:6px;font-family:inherit;margin-top:4px;}
+.btn-clr:hover{color:var(--red);}
+.hist-lnk{padding:9px 14px;border-top:1px solid var(--border);text-align:center;font-size:11px;color:var(--blue);font-weight:600;cursor:pointer;}
+.hist-lnk:hover{background:var(--bg);}
 
-/* ── MODAL ÉXITO POS ── */
-#posModal{position:fixed;inset:0;z-index:500;display:none;align-items:center;justify-content:center;padding:20px;background:rgba(0,0,0,.45);}
-#posModal.open{display:flex;}
-.pos-modal-wrap{background:#fff;border-radius:18px;padding:36px 28px;text-align:center;max-width:340px;width:100%;animation:popIn .4s cubic-bezier(.34,1.56,.64,1);}
+/* MODAL */
+#modal{position:fixed;inset:0;z-index:500;display:none;align-items:center;justify-content:center;padding:20px;background:rgba(0,0,0,.45);}
+#modal.o{display:flex;}
+.mw{background:#fff;border-radius:20px;padding:40px 32px;text-align:center;max-width:340px;width:100%;animation:popIn .4s cubic-bezier(.34,1.56,.64,1);}
 @keyframes popIn{from{transform:scale(.75);opacity:0}to{transform:scale(1);opacity:1}}
-.pm-icon{font-size:48px;margin-bottom:14px;}
-.pm-title{font-size:19px;font-weight:800;margin-bottom:6px;}
-.pm-sub{font-size:13px;color:var(--text2);line-height:1.5;margin-bottom:6px;}
-.pm-num{font-size:12px;font-weight:600;color:var(--gold);background:var(--gold-soft);padding:5px 14px;border-radius:14px;display:inline-block;margin-bottom:20px;}
-.pm-actions{display:flex;flex-direction:column;gap:7px;}
-.pm-btn{padding:11px;border-radius:9px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;border:none;}
-.pm-btn.wa{background:#25D366;color:#fff;}
-.pm-btn.pr{background:var(--gold-light);color:#fff;}
-.pm-btn.sc{background:var(--bg);color:var(--text2);}
+.mi{font-size:52px;margin-bottom:14px;}.mt{font-size:20px;font-weight:800;margin-bottom:8px;}
+.ms{font-size:13px;color:var(--text2);margin-bottom:6px;line-height:1.5;}
+.mn{font-size:12px;font-weight:600;color:var(--accent);background:var(--accent-s);padding:6px 16px;border-radius:14px;display:inline-block;margin-bottom:22px;}
+.ma{display:flex;flex-direction:column;gap:8px;}
+.mb{padding:12px;border-radius:10px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;border:none;}
+.mb.wa{background:#25D366;color:#fff;}.mb.pr{background:var(--accent);color:#fff;}.mb.sc{background:var(--bg);color:var(--text2);}
 
-/* ── TOAST ── */
-.toast{position:fixed;bottom:16px;left:50%;transform:translateX(-50%) translateY(80px);background:var(--text);color:#fff;padding:9px 16px;border-radius:9px;font-size:12px;font-weight:600;z-index:600;transition:transform .3s cubic-bezier(.34,1.56,.64,1);white-space:nowrap;pointer-events:none;}
-.toast.show{transform:translateX(-50%) translateY(0);}
+/* HISTORIAL */
+#hov{position:fixed;inset:0;z-index:400;display:none;flex-direction:column;background:#fff;}
+#hov.o{display:flex;}
+.htb{height:52px;background:#fff;border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 16px;gap:12px;flex-shrink:0;}
+.hbk{width:34px;height:34px;border:1.5px solid var(--border);border-radius:8px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:16px;color:var(--text2);}
+.htitle{font-size:15px;font-weight:700;}
+.hl{flex:1;overflow-y:auto;padding:12px;}
+.hi{background:#fff;border:1px solid var(--border);border-radius:var(--r);margin-bottom:8px;padding:14px 16px;}
+.hi-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;}
+.hi-num{font-size:12px;font-weight:700;color:var(--accent);}.hi-tot{font-size:16px;font-weight:700;}
+.hi-cli{font-size:13px;color:var(--text2);font-weight:500;}.hi-time{font-size:11px;color:var(--text3);}
+.hi-pago{display:inline-flex;align-items:center;gap:4px;background:var(--bg);border-radius:6px;padding:3px 8px;font-size:10px;font-weight:600;color:var(--text2);margin-top:6px;}
 
-/* ── HISTORIAL OVERLAY ── */
-#histOv{position:fixed;inset:0;z-index:400;display:none;flex-direction:column;background:#fff;}
-#histOv.open{display:flex;}
-.hov-tb{height:50px;background:#fff;border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 16px;gap:12px;flex-shrink:0;}
-.hov-back{width:32px;height:32px;border:1px solid var(--border);border-radius:8px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:15px;color:var(--text2);}
-.hov-title{font-size:15px;font-weight:700;}
-.hist-list{flex:1;overflow-y:auto;padding:12px;}
-.hi{background:#fff;border:1px solid var(--border);border-radius:var(--radius);margin-bottom:8px;padding:12px 14px;}
-.hi-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;}
-.hi-num{font-size:12px;font-weight:700;color:var(--gold);}
-.hi-total{font-size:15px;font-weight:700;}
-.hi-cli{font-size:12px;color:var(--text2);}
-.hi-time{font-size:11px;color:var(--text3);}
-.hi-pago{display:inline-flex;align-items:center;gap:4px;background:var(--bg);border-radius:5px;padding:2px 7px;font-size:10px;font-weight:600;color:var(--text2);margin-top:5px;}
+/* TOAST */
+.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%) translateY(80px);background:var(--text);color:#fff;padding:10px 18px;border-radius:10px;font-size:12px;font-weight:600;z-index:600;transition:transform .3s cubic-bezier(.34,1.56,.64,1);white-space:nowrap;pointer-events:none;box-shadow:var(--shadow-md);}
+.toast.s{transform:translateX(-50%) translateY(0);}
 
-/* ── RESPONSIVE ── */
-::-webkit-scrollbar{width:5px;}::-webkit-scrollbar-track{background:#f1f1f1;}::-webkit-scrollbar-thumb{background:#D0D5DD;border-radius:4px;}
+/* SCROLLBAR */
+::-webkit-scrollbar{width:5px;}::-webkit-scrollbar-track{background:transparent;}::-webkit-scrollbar-thumb{background:#D0D5DD;border-radius:4px;}
+
+/* RESPONSIVE */
+@media(max-width:1100px){.pgrid{grid-template-columns:repeat(3,minmax(0,1fr));}}
+@media(max-width:900px){.pgrid{grid-template-columns:repeat(2,minmax(0,1fr));}}
 @media(max-width:768px){
   :root{--sidebar:240px;}
-  .sidebar{transform:translateX(-100%);}
-  .sidebar.open{transform:translateX(0);box-shadow:4px 0 20px rgba(0,0,0,0.15);}
-  .sidebar-overlay.open{display:block;}
-  .main{margin-left:0;}
-  .menu-toggle{display:flex;}
-  .topbar{padding:0 16px;gap:10px;}
-  .topbar-date{display:none;}
-  .content{padding:16px;}
-  .kpi-grid{grid-template-columns:repeat(2,1fr);gap:12px;}
-  .mid-grid{grid-template-columns:1fr;}
-  .bottom-grid{grid-template-columns:1fr;}
-  .fin-grid{grid-template-columns:1fr;}
-  .wa-banner{flex-wrap:wrap;}
-  .wa-actions{width:100%;}
-  .pos-right{width:200px;}
+  .sb{transform:translateX(-100%)}.sb.o{transform:translateX(0);box-shadow:4px 0 20px rgba(0,0,0,.15)}
+  .sov.o{display:block}.main{margin-left:0}.menu-toggle{display:flex}
+  .tb{padding:0 16px;gap:10px}.tb-d{display:none}
+  .content{padding:16px}
+  .kpi-grid{grid-template-columns:repeat(2,1fr);gap:12px}
+  .mid-grid{grid-template-columns:1fr}.bot-grid{grid-template-columns:1fr}.fin-grid{grid-template-columns:1fr}
+  .pos-r{width:210px}
+  .pgrid{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;padding:10px;}
+}
+
+/* DOMICILIO */
+.dom-row{display:flex;align-items:center;gap:8px;margin-bottom:8px;}
+.dom-label{font-size:11px;color:var(--text2);font-weight:600;white-space:nowrap;}
+.dom-input{flex:1;border:1.5px solid var(--border);border-radius:8px;padding:7px 10px;font-size:12px;font-family:inherit;color:var(--text);outline:none;text-align:right;}
+.dom-input:focus{border-color:var(--accent-l);}
+.dom-badge{font-size:10px;color:var(--accent);font-weight:600;display:none;text-align:right;margin-bottom:6px;}
+
+/* CLIENTES MODULE */
+#vClientes{display:none;flex-direction:column;flex:1;overflow:hidden;}
+.cli-mod-header{background:#fff;border-bottom:1px solid var(--border);padding:16px 24px;display:flex;align-items:center;gap:14px;flex-shrink:0;}
+.cli-mod-title{font-size:16px;font-weight:700;flex:1;}
+.cli-mod-count{font-size:12px;color:var(--text3);background:var(--bg);padding:4px 10px;border-radius:20px;}
+.cli-search-bar{padding:12px 24px;background:#fff;border-bottom:1px solid var(--border);flex-shrink:0;}
+.cli-search-bar input{width:100%;max-width:400px;background:var(--bg);border:1.5px solid var(--border);border-radius:8px;padding:9px 14px 9px 38px;font-size:13px;font-family:inherit;color:var(--text);outline:none;}
+.cli-search-bar input:focus{border-color:var(--accent-l);}
+.cli-search-icon{position:absolute;left:37px;top:50%;transform:translateY(-50%);font-size:15px;color:var(--text3);pointer-events:none;}
+.cli-list{flex:1;overflow-y:auto;padding:16px 24px;}
+.cli-row{background:#fff;border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin-bottom:10px;display:flex;align-items:center;gap:14px;transition:box-shadow .15s;}
+.cli-row:hover{box-shadow:var(--shadow-md);}
+.cli-av{width:44px;height:44px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;flex-shrink:0;}
+.cli-info{flex:1;min-width:0;}
+.cli-nombre{font-size:14px;font-weight:700;color:var(--text);margin-bottom:3px;}
+.cli-sub{font-size:11px;color:var(--text3);margin-top:1px;}
+.cli-stats{display:flex;gap:16px;flex-shrink:0;}
+.cli-stat{text-align:center;}
+.cli-stat-val{font-size:14px;font-weight:700;color:var(--text);}
+.cli-stat-lbl{font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;}
+.cli-meta{text-align:right;flex-shrink:0;min-width:100px;}
+.cli-wa-btn{display:inline-flex;align-items:center;gap:4px;background:#25D366;color:#fff;border-radius:6px;padding:4px 10px;font-size:11px;font-weight:600;margin-top:6px;text-decoration:none;cursor:pointer;}
+@media(max-width:768px){
+  .cli-stats{gap:10px;}
+  .cli-mod-header{padding:12px 16px;}
+  .cli-list{padding:12px 16px;}
 }
 </style>
 </head>
 <body>
 
 <!-- LOADING -->
-<div id="loadingScreen">
-  <div class="load-logo"><div class="load-icon">🍾</div><div class="load-name">La Cava <span>Oficial</span></div></div>
-  <div class="load-bar"><div class="load-bar-fill"></div></div>
-  <div class="load-text">Verificando acceso al sistema...</div>
+<div id="ls">
+  <div style="display:flex;align-items:center;gap:10px;">
+    <div style="width:40px;height:40px;background:#FFF8E7;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:20px;">&#127870;</div>
+    <div style="font-size:20px;font-weight:700;">La Cava <span style="color:#DAA520;">Oficial</span></div>
+  </div>
+  <div class="lb"><div class="lbf"></div></div>
+  <div style="font-size:12px;color:#9CA3AF;">Verificando acceso...</div>
 </div>
 
 <!-- LOCK -->
-<div id="lockScreen">
-  <div class="lock-wrap">
-    <div class="lock-icon-wrap">🔒</div>
-    <div class="lock-title">Acceso suspendido</div>
-    <div class="lock-msg">Tu suscripción al sistema ha vencido o ha sido suspendida.<br>Contacta a <strong>Digital Mibe Group</strong> para renovar tu plan.</div>
-    <a href="https://wa.me/573205566145?text=Hola,%20quiero%20renovar%20mi%20plan" class="lock-btn" target="_blank">💬 Contactar para renovar</a>
+<div id="lock">
+  <div class="lkw">
+    <div class="lki">&#128274;</div>
+    <div class="lkt">Acceso suspendido</div>
+    <div class="lkm">Tu suscripcion ha vencido. Contacta a <strong>Digital Mibe Group</strong> para renovar.</div>
+    <a href="https://wa.me/573205566145?text=Quiero+renovar+mi+plan" class="lkb" target="_blank">Contactar soporte</a>
   </div>
 </div>
 
-<!-- OVERLAY SIDEBAR MOBILE -->
-<div class="sidebar-overlay" id="overlay" onclick="closeSidebar()"></div>
+<div class="sov" id="sov" onclick="closeSB()"></div>
 
 <!-- APP -->
-<div class="app" id="appMain" style="display:none;">
+<div class="app" id="app" style="display:none;">
 
   <!-- SIDEBAR -->
-  <aside class="sidebar" id="sidebar">
-    <div class="sidebar-logo">
-      <div class="logo-icon">🍾</div>
-      <div><div class="logo-name">La Cava Oficial</div><div class="logo-sub">Sistema de gestión</div></div>
+  <aside class="sb" id="sb">
+    <div class="sb-logo">
+      <div class="sb-ic">&#127870;</div>
+      <div><div class="sb-nm">La Cava Oficial</div><div class="sb-sb">Sistema de gestion</div></div>
     </div>
     <nav class="nav">
-      <div class="nav-section">
-        <div class="nav-section-label">Principal</div>
-        <a class="nav-item active" id="navInicio" onclick="irVista('inicio',this)">
-          <div class="nav-icon-wrap"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></div>
-          Resumen
-        </a>
-        <a class="nav-item" id="navPOS" onclick="irVista('pos',this)">
-          <div class="nav-icon-wrap"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg></div>
-          Punto de Venta<span class="nav-badge">POS</span>
-        </a>
-        <a class="nav-item" onclick="showToast('Ventas · Próximamente')">
-          <div class="nav-icon-wrap"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></div>
-          Ventas
-        </a>
+      <div class="nav-s">
+        <div class="nav-sl">Principal</div>
+        <a class="ni on" id="niInicio" onclick="goView('inicio',this)"><div class="ni-ic"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></div>Resumen</a>
+        <a class="ni" id="niPOS" onclick="goView('pos',this)"><div class="ni-ic"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg></div>Punto de Venta<span class="nbadge">POS</span></a>
+        <a class="ni" onclick="toast('Ventas · Proximamente')"><div class="ni-ic"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></div>Ventas</a>
       </div>
-      <div class="nav-section">
-        <div class="nav-section-label">Clientes</div>
-        <a class="nav-item" onclick="showToast('Puntos · Próximamente')">
-          <div class="nav-icon-wrap"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></div>
-          Programa Puntos<span class="nav-badge new">NEW</span>
-        </a>
-        <a class="nav-item" onclick="showToast('WhatsApp · Próximamente')">
-          <div class="nav-icon-wrap"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></div>
-          WhatsApp
-        </a>
+      <div class="nav-s">
+        <div class="nav-sl">Clientes</div>
+        <a class="ni" onclick="toast('Puntos · Proximamente')"><div class="ni-ic"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></div>Programa Puntos<span class="nbadge new">NEW</span></a>
+        <a class="ni" onclick="toast('WhatsApp · Proximamente')"><div class="ni-ic"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></div>WhatsApp</a>
+        <a class="ni" id="niClientes" onclick="goView('clientes',this)"><div class="ni-ic"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></div>Clientes</a>
       </div>
-      <div class="nav-section">
-        <div class="nav-section-label">Operaciones</div>
-        <a class="nav-item" onclick="showToast('Inventario · Próximamente')">
-          <div class="nav-icon-wrap"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg></div>
-          Inventario
-        </a>
-        <a class="nav-item" onclick="showToast('Contabilidad · Próximamente')">
-          <div class="nav-icon-wrap"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></div>
-          Contabilidad
-        </a>
-        <a class="nav-item" onclick="showToast('Reportes · Próximamente')">
-          <div class="nav-icon-wrap"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div>
-          Reportes
-        </a>
+      <div class="nav-s">
+        <div class="nav-sl">Operaciones</div>
+        <a class="ni" onclick="toast('Inventario · Proximamente')"><div class="ni-ic"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg></div>Inventario</a>
+        <a class="ni" onclick="toast('Contabilidad · Proximamente')"><div class="ni-ic"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></div>Contabilidad</a>
+        <a class="ni" onclick="toast('Reportes · Proximamente')"><div class="ni-ic"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div>Reportes</a>
       </div>
     </nav>
-    <div class="sidebar-bottom">
-      <div class="user-pill">
-        <div class="user-av">LC</div>
-        <div><div class="user-name" id="clienteNombre">La Cava Oficial</div><div class="user-plan" id="clientePlan">Plan Base</div></div>
+    <div class="sb-bot">
+      <div style="display:flex;align-items:center;gap:10px;padding:8px 10px;">
+        <div class="uav">LC</div>
+        <div><div style="font-size:12px;font-weight:600;" id="uname">La Cava Oficial</div><div style="font-size:10px;color:var(--text3);" id="uplan">Plan Base</div></div>
       </div>
     </div>
   </aside>
 
   <!-- MAIN -->
   <main class="main">
-
-    <!-- TOPBAR -->
-    <div class="topbar">
-      <button class="menu-toggle" id="menuToggle" onclick="toggleSidebar()">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
-      </button>
-      <div class="topbar-greeting">
-        <div class="topbar-greeting-text" id="greetingText">Buenos días 👋</div>
-        <div class="topbar-greeting-sub" id="topbarSub">Aquí está el resumen de tu negocio</div>
-      </div>
-      <div class="topbar-date" id="topbarDate"></div>
-      <button class="topbar-btn" onclick="irVista('pos', document.getElementById('navPOS'))">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-        Nueva Venta
-      </button>
+    <div class="tb">
+      <button class="menu-toggle" onclick="toggleSB()"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg></button>
+      <div class="tb-g"><div class="tb-gt" id="tgt">Bienvenido</div><div class="tb-gs" id="tgs">Resumen de tu negocio</div></div>
+      <div class="tb-d" id="tbd"></div>
+      <button class="tb-btn" onclick="goView('pos',document.getElementById('niPOS'))">+ Nueva Venta</button>
     </div>
 
-    <!-- ── VISTA INICIO ── -->
-    <div class="view active" id="viewInicio">
+    <!-- INICIO -->
+    <div id="vInicio">
       <div class="content">
-        <div class="wa-banner">
-          <div class="wa-icon-wrap">💬</div>
-          <div class="wa-info">
-            <div class="wa-title">WhatsApp Business <span class="wa-badge">● Conectado</span></div>
-            <div class="wa-sub">3 mensajes pendientes · Último pedido hace 14 min</div>
+        <div class="wab">
+          <div class="wai">&#128172;</div>
+          <div style="flex:1;">
+            <div style="font-size:14px;font-weight:600;">WhatsApp Business <span style="display:inline-flex;background:#ECFDF5;color:#10B981;font-size:11px;font-weight:600;padding:2px 8px;border-radius:10px;margin-left:8px;">Conectado</span></div>
+            <div style="font-size:12px;color:var(--text3);margin-top:2px;">3 mensajes pendientes</div>
           </div>
-          <div class="wa-actions">
-            <button class="wa-btn outline" onclick="showToast('Ver mensajes · Próximamente')">Ver mensajes</button>
-            <button class="wa-btn filled" onclick="showToast('Enviar campaña · Próximamente')">Enviar campaña</button>
+          <div style="display:flex;gap:8px;flex-shrink:0;">
+            <button style="padding:7px 14px;border-radius:7px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;border:1px solid var(--border2);background:#fff;color:var(--text2);">Ver mensajes</button>
+            <button style="padding:7px 14px;border-radius:7px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;border:none;background:var(--gold-l);color:#fff;">Enviar campana</button>
           </div>
         </div>
-        <div class="section-header"><div class="section-title">Resumen del día</div><div class="section-line"></div></div>
+        <div class="sh"><div class="st">Resumen del dia</div><div class="sl"></div></div>
         <div class="kpi-grid">
-          <div class="kpi-card"><div class="kpi-top"><div class="kpi-label">Ventas hoy</div><div class="kpi-icon-wrap" style="background:#FFF8E7;">💰</div></div><div class="kpi-value gold">$847.000</div><div class="kpi-footer"><span class="kpi-trend up">↑ 12%</span><span class="kpi-trend-label">vs ayer</span></div></div>
-          <div class="kpi-card"><div class="kpi-top"><div class="kpi-label">Pedidos hoy</div><div class="kpi-icon-wrap" style="background:#EFF6FF;">📦</div></div><div class="kpi-value">7</div><div class="kpi-footer"><span class="kpi-trend up">↑ 3</span><span class="kpi-trend-label">vs ayer</span></div></div>
-          <div class="kpi-card"><div class="kpi-top"><div class="kpi-label">Clientes activos</div><div class="kpi-icon-wrap" style="background:#F0FFF4;">👥</div></div><div class="kpi-value">34</div><div class="kpi-footer"><span class="kpi-trend up">+2</span><span class="kpi-trend-label">este mes</span></div></div>
-          <div class="kpi-card"><div class="kpi-top"><div class="kpi-label">Utilidad bruta</div><div class="kpi-icon-wrap" style="background:#FFF5F5;">📈</div></div><div class="kpi-value">38%</div><div class="kpi-footer"><span class="kpi-trend down">↓ 2%</span><span class="kpi-trend-label">vs mes ant.</span></div></div>
+          <div class="kc"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;"><div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;">Ventas hoy</div><div style="width:36px;height:36px;border-radius:8px;background:#FFF8E7;display:flex;align-items:center;justify-content:center;font-size:16px;">&#128176;</div></div><div style="font-size:26px;font-weight:700;color:var(--gold);margin-bottom:8px;">$847.000</div><div style="display:flex;align-items:center;gap:6px;"><span class="trend up">+12%</span><span style="font-size:11px;color:var(--text3);">vs ayer</span></div></div>
+          <div class="kc"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;"><div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;">Pedidos hoy</div><div style="width:36px;height:36px;border-radius:8px;background:#EFF6FF;display:flex;align-items:center;justify-content:center;font-size:16px;">&#128230;</div></div><div style="font-size:26px;font-weight:700;margin-bottom:8px;">7</div><div style="display:flex;align-items:center;gap:6px;"><span class="trend up">+3</span><span style="font-size:11px;color:var(--text3);">vs ayer</span></div></div>
+          <div class="kc"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;"><div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;">Clientes activos</div><div style="width:36px;height:36px;border-radius:8px;background:#F0FFF4;display:flex;align-items:center;justify-content:center;font-size:16px;">&#128101;</div></div><div style="font-size:26px;font-weight:700;margin-bottom:8px;">34</div><div style="display:flex;align-items:center;gap:6px;"><span class="trend up">+2</span><span style="font-size:11px;color:var(--text3);">este mes</span></div></div>
+          <div class="kc"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;"><div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;">Utilidad bruta</div><div style="width:36px;height:36px;border-radius:8px;background:#FFF5F5;display:flex;align-items:center;justify-content:center;font-size:16px;">&#128200;</div></div><div style="font-size:26px;font-weight:700;margin-bottom:8px;">38%</div><div style="display:flex;align-items:center;gap:6px;"><span class="trend dn">-2%</span><span style="font-size:11px;color:var(--text3);">vs mes ant.</span></div></div>
         </div>
-        <div class="section-header"><div class="section-title">Ventas de la semana</div><div class="section-line"></div></div>
+        <div class="sh"><div class="st">Ventas de la semana</div><div class="sl"></div></div>
         <div class="mid-grid">
-          <div class="card">
-            <div class="card-header"><div><div class="card-title">Ventas · Últimos 7 días</div><div class="card-subtitle">Comparativo diario en COP</div></div><span class="card-action">Ver reporte</span></div>
-            <div class="card-body">
-              <div class="chart-area" id="chart"></div>
-              <div class="chart-footer"><span class="chart-total-label">Total semana</span><span class="chart-total-value">$4.230.000</span></div>
-            </div>
-          </div>
-          <div class="card">
-            <div class="card-header"><div><div class="card-title">Pedidos recientes</div><div class="card-subtitle">Últimas transacciones</div></div><span class="card-action">Ver todos</span></div>
-            <div class="order-list" id="orderList"></div>
-          </div>
+          <div class="card"><div class="ch"><div><div class="ct">Ventas Ultimos 7 dias</div><div class="cs">Comparativo COP</div></div><span class="ca">Ver reporte</span></div><div class="cb"><div class="chart-area" id="chart"></div><div class="cfoot"><span style="font-size:12px;color:var(--text3);">Total semana</span><span style="font-size:18px;font-weight:700;">$4.230.000</span></div></div></div>
+          <div class="card"><div class="ch"><div><div class="ct">Pedidos recientes</div><div class="cs">Ultimas transacciones</div></div><span class="ca">Ver todos</span></div><div class="ol" id="orderList"></div></div>
         </div>
-        <div class="section-header"><div class="section-title">Inventario · Productos · Fidelización</div><div class="section-line"></div></div>
-        <div class="bottom-grid">
-          <div class="card"><div class="card-header"><div class="card-title">Inventario</div><span class="card-action">Gestionar</span></div><div id="inventoryList"></div></div>
-          <div class="card"><div class="card-header"><div class="card-title">Top Productos</div><span class="card-action">Ver análisis</span></div><div id="productList"></div></div>
-          <div class="card"><div class="card-header"><div class="card-title">Ranking · Puntos</div><span class="card-action">Ver programa</span></div><div id="pointsList"></div></div>
+        <div class="sh"><div class="st">Inventario Productos Fidelizacion</div><div class="sl"></div></div>
+        <div class="bot-grid">
+          <div class="card"><div class="ch"><div class="ct">Inventario</div><span class="ca">Gestionar</span></div><div id="invList"></div></div>
+          <div class="card"><div class="ch"><div class="ct">Top Productos</div><span class="ca">Analisis</span></div><div id="prodList"></div></div>
+          <div class="card"><div class="ch"><div class="ct">Ranking Puntos</div><span class="ca">Ver programa</span></div><div id="ptsList"></div></div>
         </div>
-        <div class="section-header"><div class="section-title">Estado financiero · Mes actual</div><div class="section-line"></div></div>
+        <div class="sh"><div class="st">Estado financiero Mes actual</div><div class="sl"></div></div>
         <div class="fin-grid" id="finGrid"></div>
-        <div class="dash-footer">
-          <div class="footer-brand">La Cava Oficial · Sistema de Gestión</div>
-          <div class="footer-powered">Powered by <strong>Digital Mibe Group</strong></div>
-        </div>
+        <div class="footer"><div class="fb">La Cava Oficial</div><div class="fp">Powered by <strong>Digital Mibe Group</strong></div></div>
       </div>
     </div>
 
-    <!-- ── VISTA POS ── -->
-    <div id="viewPOS">
-
-      <!-- Izquierda: catálogo -->
-      <div class="pos-left">
-        <div class="cat-bar" id="catBar"></div>
-        <div class="pos-search">
-          <span class="pos-search-icon">🔍</span>
-          <input type="text" id="posSearch" placeholder="Buscar producto..." oninput="renderProds()"/>
+    <!-- POS -->
+    <div id="vPOS">
+      <!-- Izquierda: catalogo -->
+      <div class="pos-l">
+        <div class="cats" id="cats"></div>
+        <div class="srch">
+          <span class="srch-i">&#128269;</span>
+          <input type="text" id="srch" placeholder="Buscar producto..." oninput="renderP()"/>
         </div>
-        <div class="prod-grid" id="prodGrid"></div>
+        <div class="pgrid" id="pgrid"></div>
       </div>
 
-      <!-- Derecha: venta activa -->
-      <div class="pos-right">
+      
+      <!-- Derecha: pedido activo -->
+      <div class="pos-r">
 
-        <!-- Cliente -->
-        <div class="pos-section">
-          <div class="pos-label">Cliente</div>
+        <!-- CLIENTE — compacto, colapsable -->
+        <div class="pos-s" style="padding:8px 12px;">
           <div id="cliTag" style="display:none;" class="cli-tag">
-            <span id="cliTagNombre"></span>
-            <span class="cli-tag-x" onclick="limpiarCliente()">✕</span>
+            <span id="cliTN" style="flex:1;min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;"></span>
+            <span class="cli-tx" onclick="clearCli()">&#215;</span>
           </div>
           <div id="cliForm">
-            <div class="cli-search-wrap">
-              <span class="cli-search-icon">👤</span>
-              <input type="text" id="cliNombreInput" placeholder="Nombre o WA..." oninput="buscarCliente()" autocomplete="off"/>
+            <div class="cli-sw" style="margin-bottom:5px;">
+              <span class="cli-si">&#128100;</span>
+              <input type="text" id="cliN" placeholder="Nombre o WhatsApp..." oninput="searchCli()" autocomplete="off" style="padding:6px 10px 6px 28px;font-size:12px;"/>
               <div class="cli-drop" id="cliDrop" style="display:none;"></div>
             </div>
-            <input class="cli-wa-input" type="tel" id="cliWA" placeholder="WhatsApp" maxlength="15" style="margin-top:6px;"/>
+            <div style="margin-bottom:5px;">
+              <input class="cli-wa" type="tel" id="cliW" placeholder="WhatsApp" maxlength="15" style="margin-top:0;padding:6px 8px;font-size:11px;width:100%;"/>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px;">
+              <input class="cli-wa" type="text" id="cliDir" placeholder="Direccion" maxlength="100" style="margin-top:0;padding:6px 8px;font-size:11px;"/>
+              <input class="cli-wa" type="text" id="cliDet" placeholder="Apto / Casa / Piso" maxlength="80" style="margin-top:0;padding:6px 8px;font-size:11px;"/>
+            </div>
           </div>
-          <div class="cli-pts" id="cliPts"></div>
+          <div class="cli-pts" id="cliPts" style="font-size:10px;margin-top:4px;"></div>
         </div>
 
-        <!-- Items -->
+        <!-- PRODUCTOS SELECCIONADOS — area principal -->
         <div class="pos-items" id="posItems">
           <div class="pos-empty">
-            <div class="pos-empty-icon">🛒</div>
-            <div class="pos-empty-txt">Toca un producto</div>
+            <div style="font-size:36px;">&#128722;</div>
+            <div style="font-size:12px;color:var(--text3);">Toca un producto</div>
           </div>
         </div>
 
-        <!-- Footer -->
-        <div class="pos-footer">
-          <div class="pos-label">Método de pago</div>
-          <div class="pago-grid">
-            <div class="po on" onclick="selPago(this,'efectivo')"><span class="po-icon">💵</span><span class="po-label">Efectivo</span></div>
-            <div class="po" onclick="selPago(this,'transferencia')"><span class="po-icon">🏦</span><span class="po-label">Transfer</span></div>
-            <div class="po" onclick="selPago(this,'nequi')"><span class="po-icon">📱</span><span class="po-label">Nequi</span></div>
-            <div class="po" onclick="selPago(this,'daviplata')"><span class="po-icon">🔴</span><span class="po-label">Daviplata</span></div>
+        <!-- FOOTER — pago y total -->
+        <div class="pos-foot" style="padding:10px 12px;">
+          <div class="dom-row" style="margin-bottom:8px;">
+            <span class="dom-label">&#128666; Domicilio</span>
+            <input class="dom-input" type="number" id="domInput" placeholder="$0" min="0" step="500" oninput="setDomicilio(this.value)"/>
           </div>
-          <div class="pos-total-row">
+          <div class="dom-badge" id="domLabel"></div>
+          <div class="pago-g" style="margin-bottom:8px;">
+            <div class="po on" onclick="setPago(this,'efectivo')"><span class="po-ic">&#128181;</span><span class="po-lbl">Efectivo</span></div>
+            <div class="po" onclick="setPago(this,'transferencia')"><span class="po-ic">&#127974;</span><span class="po-lbl">Transfer</span></div>
+            <div class="po" onclick="setPago(this,'nequi')"><span class="po-ic">&#128241;</span><span class="po-lbl">Nequi</span></div>
+            <div class="po" onclick="setPago(this,'daviplata')"><span class="po-ic">&#128308;</span><span class="po-lbl">Daviplata</span></div>
+          </div>
+          <div class="tot-row" style="margin-bottom:8px;">
             <div>
-              <div class="pos-total-label">Total</div>
-              <div class="pos-pts-preview" id="ptsPreview"></div>
+              <div class="tot-lbl">Total a cobrar</div>
+              <div class="tot-pts" id="totPts"></div>
             </div>
-            <div class="pos-total-val" id="posTotal">$0</div>
+            <div class="tot-val" id="totVal">$0</div>
           </div>
-          <button class="btn-registrar" id="btnRegistrar" onclick="procesarVenta()" disabled>✅ Registrar venta</button>
-          <button class="btn-limpiar" onclick="limpiarVenta()">Limpiar todo</button>
+          <button class="btn-reg" id="btnReg" onclick="doVenta()" disabled>Registrar venta</button>
+          <button class="btn-clr" onclick="clearVenta()">Limpiar pedido</button>
         </div>
+        <div class="hist-lnk" onclick="openHist()">&#128203; Ver historial</div>
+      </div>
+    </div>
 
-        <!-- Historial link -->
-        <div style="padding:8px 12px;border-top:1px solid var(--border);text-align:center;">
-          <span style="font-size:11px;color:var(--blue);font-weight:600;cursor:pointer;" onclick="abrirHistorial()">📋 Ver historial de ventas</span>
-        </div>
+    <!-- CLIENTES -->
+    <div id="vClientes" style="display:none;flex-direction:column;flex:1;overflow:hidden;">
+      <div class="cli-mod-header">
+        <div class="cli-mod-title">&#128101; Clientes</div>
+        <div class="cli-mod-count" id="cliCount">0 clientes</div>
+        <button style="padding:8px 16px;background:var(--accent);color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;" onclick="loadClientesView()">Actualizar</button>
+      </div>
+      <div class="cli-search-bar" style="position:relative;">
+        <span class="cli-search-icon">&#128269;</span>
+        <input type="text" id="cliSearchInput" placeholder="Buscar por nombre o WhatsApp..." oninput="filterClientes()"/>
+      </div>
+      <div class="cli-list" id="cliTable">
+        <div style="text-align:center;padding:60px;color:#9CA3AF;">Cargando...</div>
       </div>
     </div>
 
   </main>
 </div>
 
-<!-- MODAL ÉXITO -->
-<div id="posModal">
-  <div class="pos-modal-wrap">
-    <div class="pm-icon">🎉</div>
-    <div class="pm-title">¡Venta registrada!</div>
-    <div class="pm-sub" id="pmSub"></div>
-    <div class="pm-num" id="pmNum"></div>
-    <div class="pm-actions">
-      <button class="pm-btn wa" onclick="enviarWA()">💬 Enviar por WhatsApp</button>
-      <button class="pm-btn pr" onclick="nuevaVenta()">+ Nueva venta</button>
-      <button class="pm-btn sc" onclick="irVista('inicio',document.getElementById('navInicio'));document.getElementById('posModal').classList.remove('open')">← Ver resumen</button>
+<!-- MODAL -->
+<div id="modal">
+  <div class="mw">
+    <div class="mi">&#127881;</div>
+    <div class="mt">Venta registrada</div>
+    <div class="ms" id="mSub"></div>
+    <div class="mn" id="mNum"></div>
+    <div class="ma">
+      <button class="mb wa" onclick="sendWA()">Enviar por WhatsApp</button>
+      <button class="mb pr" onclick="newVenta()">+ Nueva venta</button>
+      <button class="mb sc" onclick="goView('inicio',document.getElementById('niInicio'));document.getElementById('modal').classList.remove('o')">Ver resumen</button>
     </div>
   </div>
 </div>
 
 <!-- HISTORIAL -->
-<div id="histOv">
-  <div class="hov-tb">
-    <div class="hov-back" onclick="cerrarHistorial()">←</div>
-    <div class="hov-title">📋 Historial de ventas</div>
+<div id="hov">
+  <div class="htb">
+    <div class="hbk" onclick="closeHist()">&#8592;</div>
+    <div class="htitle">Historial de ventas</div>
   </div>
-  <div class="hist-list" id="histList"></div>
+  <div class="hl" id="hl"></div>
 </div>
 
-<!-- TOAST -->
 <div class="toast" id="toast"></div>
 
 <script>
-/* ══════════════════
-   CONFIG
-══════════════════ */
 const SB='https://egjlrcokerffuoqwbxlh.supabase.co';
 const SK='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVnamxyY29rZXJmZnVvcXdieGxoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY3OTMzMjcsImV4cCI6MjA5MjM2OTMyN30.XpOcqMBKFSv3-mYmM-uvQSU12VZppqNfmShEhihwD9c';
 const CID='lacava';
 const H={'apikey':SK,'Authorization':'Bearer '+SK,'Content-Type':'application/json','Prefer':'return=representation'};
 const fmt=n=>'$'+Math.round(n).toLocaleString('es-CO');
+let cart=[],pago='efectivo',cliActivo=null,lastVenta=null,clisDB=[];
+let domicilio=0;
 
-/* ══════════════════
-   ESTADO POS
-══════════════════ */
-let carrito=[], pago='efectivo', clienteActivo=null, ultimaVenta=null, clientesDB=[];
+const CATNAMES={
+  AGUARDIENTE:'Aguardiente',CERVEZAS:'Cervezas',COCTELES:'Cocteles',
+  COMBOS:'Combos',CREMARON:'Crema de Ron',CREMAWISKY:'Crema de Wisky',
+  ENERGIZANTE:'Energizante',HIDRATANTE:'Hidratante',REFAJO:'Refajo',
+  RON:'Ron',TEQUILA:'Tequila',VINOS:'Vinos',VODKA:'Vodka',WHISKY:'Whisky'
+};
+const CATS=['Todos','AGUARDIENTE','CERVEZAS','COCTELES','COMBOS','CREMARON','CREMAWISKY','ENERGIZANTE','HIDRATANTE','REFAJO','RON','TEQUILA','VINOS','VODKA','WHISKY'];
+let catA='Todos';
 
-/* ══════════════════
-   CATÁLOGO
-══════════════════ */
-const EM={Aguardiente:'🥃',Ron:'🍹',Whisky:'🥂',Cervezas:'🍺',Tequila:'🌵',Vinos:'🍷',Vodka:'🫗','Cócteles':'🍸',Combos:'🎁','Crema de Ron':'🍮','Crema de Whisky':'🍯',Energizante:'⚡',Hidratante:'💧',Refajo:'🥤'};
-const CATS=['Todos','Aguardiente','Ron','Whisky','Cervezas','Tequila','Vinos','Vodka','Cócteles','Combos','Energizante','Hidratante','Refajo'];
-let catActiva='Todos';
 const PRODS=[
-  {id:'a1',n:'Aguardiente Antioqueño Sin Azúcar 750ml',c:'Aguardiente',p:35000,s:30},
-  {id:'a2',n:'Aguardiente Antioqueño Azul 750ml',c:'Aguardiente',p:33000,s:25},
-  {id:'a3',n:'Aguardiente Cristal 750ml',c:'Aguardiente',p:30000,s:20},
-  {id:'a4',n:'Aguardiente Néctar 750ml',c:'Aguardiente',p:28000,s:15},
-  {id:'r1',n:'Ron Medellín 750ml',c:'Ron',p:52000,s:20},
-  {id:'r2',n:'Ron Viejo de Caldas 750ml',c:'Ron',p:32000,s:18},
-  {id:'r3',n:'Ron Caucano 750ml',c:'Ron',p:22000,s:22},
-  {id:'r4',n:'Ron Añejo Medellín 750ml',c:'Ron',p:75000,s:8},
-  {id:'w1',n:'Whisky Old Parr 750ml',c:'Whisky',p:210000,s:5},
-  {id:'w2',n:"Whisky Buchanan's 12 750ml",c:'Whisky',p:185000,s:6},
-  {id:'w3',n:"Whisky Jack Daniel's 750ml",c:'Whisky',p:165000,s:7},
-  {id:'w4',n:'Whisky JW Red Label 750ml',c:'Whisky',p:120000,s:10},
-  {id:'w5',n:'Whisky JW Black Label 750ml',c:'Whisky',p:195000,s:4},
-  {id:'c1',n:'Cerveza Club Colombia 330ml×6',c:'Cervezas',p:24000,s:40},
-  {id:'c2',n:'Cerveza Águila 330ml×6',c:'Cervezas',p:18000,s:50},
-  {id:'c3',n:'Cerveza Poker 330ml×6',c:'Cervezas',p:16000,s:35},
-  {id:'c4',n:'Cerveza Corona 330ml×6',c:'Cervezas',p:36000,s:12},
-  {id:'c5',n:'Cerveza Heineken 330ml×6',c:'Cervezas',p:32000,s:15},
-  {id:'t1',n:'Tequila Jimador Blanco 750ml',c:'Tequila',p:87000,s:12},
-  {id:'t2',n:'Tequila José Cuervo 750ml',c:'Tequila',p:95000,s:8},
-  {id:'v1',n:'Vino Gato Negro Cabernet 750ml',c:'Vinos',p:33000,s:10},
-  {id:'v2',n:'Vino Santa Helena 750ml',c:'Vinos',p:28000,s:12},
-  {id:'v3',n:'Vino Frontera Tinto 750ml',c:'Vinos',p:25000,s:15},
-  {id:'vk1',n:'Vodka Absolut 750ml',c:'Vodka',p:95000,s:8},
-  {id:'vk2',n:'Vodka Smirnoff 750ml',c:'Vodka',p:65000,s:10},
-  {id:'co1',n:'Cóctel Listo Ron Cola 250ml',c:'Cócteles',p:8500,s:24},
-  {id:'co2',n:'Cóctel Listo Gin Tonic 250ml',c:'Cócteles',p:8500,s:20},
-  {id:'cb1',n:'Combo Rumba (Agdt + Jugos)',c:'Combos',p:65000,s:10},
-  {id:'cb2',n:'Combo Farra (Ron+Hielo+Vaso)',c:'Combos',p:75000,s:8},
-  {id:'e1',n:'Energizante Monster 473ml',c:'Energizante',p:8500,s:30},
-  {id:'h1',n:'Gatorade 600ml',c:'Hidratante',p:4500,s:40},
-  {id:'rf1',n:'Refajo Colombiana 300ml',c:'Refajo',p:3500,s:60},
+  {id:'ag01',n:'Aguardiente Amarillo Real 750ml',c:'AGUARDIENTE',p:44253},
+  {id:'ag02',n:'Aguardiente Botella Tapa Azul 750ml',c:'AGUARDIENTE',p:56538},
+  {id:'ag03',n:'Aguardiente Botella Tapa Verde 750ml',c:'AGUARDIENTE',p:49949},
+  {id:'ag04',n:'Aguardiente Amarillo Manzanares',c:'AGUARDIENTE',p:62450},
+  {id:'ag05',n:'Aguardiente Botella Tapa Roja 750ml',c:'AGUARDIENTE',p:53260},
+  {id:'ag06',n:'Aguardiente Garrafa Tapa Azul 200ml',c:'AGUARDIENTE',p:138550},
+  {id:'ag07',n:'Aguardiente Garrafa Tapa Roja 2000ml',c:'AGUARDIENTE',p:130650},
+  {id:'ag08',n:'Aguardiente Garrafa Tapa Verde 1750ml',c:'AGUARDIENTE',p:106771},
+  {id:'ag09',n:'Aguardiente Litro Tapa Azul',c:'AGUARDIENTE',p:70804},
+  {id:'ag10',n:'Aguardiente Litro Tapa Roja 1000ml',c:'AGUARDIENTE',p:66746},
+  {id:'ag11',n:'Aguardiente Litro Tapa Verde 1000ml',c:'AGUARDIENTE',p:64230},
+  {id:'ag12',n:'Aguardiente Media Tapa Azul 375ml',c:'AGUARDIENTE',p:30369},
+  {id:'ag13',n:'Aguardiente Media Tapa Roja 375ml',c:'AGUARDIENTE',p:28584},
+  {id:'ag14',n:'Aguardiente Media Tapa Verde 375ml',c:'AGUARDIENTE',p:27068},
+  {id:'ag15',n:'Aguardiente Real Sin Azucar 750ml',c:'AGUARDIENTE',p:81309},
+  {id:'ag16',n:'Aguardiente Tetra 1.05L Tapa Roja',c:'AGUARDIENTE',p:57989},
+  {id:'ag17',n:'Aguardiente Tetra 1.05L Tapa Azul',c:'AGUARDIENTE',p:61349},
+  {id:'ag18',n:'Aguardiente Tetra 1.05L Tapa Verde',c:'AGUARDIENTE',p:55161},
+  {id:'cv01',n:'Cerveza A Sin Alcohol 330ml',c:'CERVEZAS',p:1750},
+  {id:'cv02',n:'Cerveza Aguila 1000ml',c:'CERVEZAS',p:7000},
+  {id:'cv03',n:'Cerveza Aguila Lata 269ml',c:'CERVEZAS',p:2650},
+  {id:'cv04',n:'Cerveza Aguila Lata 330ml',c:'CERVEZAS',p:3917},
+  {id:'cv05',n:'Cerveza Aguila Light 269ml',c:'CERVEZAS',p:2800},
+  {id:'cv06',n:'Cerveza Aguila Light 330ml',c:'CERVEZAS',p:3970},
+  {id:'cv07',n:'Cerveza Club Colombia Dorada 269ml',c:'CERVEZAS',p:3166},
+  {id:'cv08',n:'Cerveza Corona 330ml',c:'CERVEZAS',p:4883},
+  {id:'cv09',n:'Cerveza Coronita 210ml',c:'CERVEZAS',p:3900},
+  {id:'cv10',n:'Cerveza Heineken 310ml',c:'CERVEZAS',p:3733},
+  {id:'cv11',n:'Cerveza Pilsen 1000ml',c:'CERVEZAS',p:7000},
+  {id:'cv12',n:'Cerveza Pilsen Lata 330ml',c:'CERVEZAS',p:4100},
+  {id:'cv13',n:'Club Colombia Dorada 330ml',c:'CERVEZAS',p:4083},
+  {id:'cv14',n:'Club Colombia Roja 330ml',c:'CERVEZAS',p:4100},
+  {id:'cv15',n:'SixPack A Sin Alcohol 330ml',c:'CERVEZAS',p:10667},
+  {id:'cv16',n:'SixPack Aguila Lata 269ml',c:'CERVEZAS',p:16000},
+  {id:'cv17',n:'SixPack Aguila Lata 330ml',c:'CERVEZAS',p:23500},
+  {id:'cv18',n:'SixPack Aguila Light 269ml',c:'CERVEZAS',p:16800},
+  {id:'cv19',n:'SixPack Aguila Light 330ml',c:'CERVEZAS',p:23800},
+  {id:'cv20',n:'SixPack Club Colombia Dorada 330ml',c:'CERVEZAS',p:24500},
+  {id:'cv21',n:'SixPack Club Colombia Dorada 269ml',c:'CERVEZAS',p:19000},
+  {id:'cv22',n:'SixPack Club Colombia Roja 330ml',c:'CERVEZAS',p:24500},
+  {id:'cv23',n:'SixPack Corona 330ml',c:'CERVEZAS',p:29300},
+  {id:'cv24',n:'SixPack Coronita 210ml',c:'CERVEZAS',p:23500},
+  {id:'cv25',n:'SixPack Pilsen Lata 330ml',c:'CERVEZAS',p:24630},
+  {id:'co01',n:'Coctel Los Cuates Tequila 269ml',c:'COCTELES',p:5500},
+  {id:'co02',n:'Coctel Aguardiente Manzanares 330ml',c:'COCTELES',p:11000},
+  {id:'co03',n:'Coctel Bretana Lata 269ml',c:'COCTELES',p:6000},
+  {id:'co04',n:'Coctel Los Cuates Tequila 473ml',c:'COCTELES',p:8700},
+  {id:'co05',n:'Coctel Four Loko 473ml',c:'COCTELES',p:19500},
+  {id:'co06',n:'Coctel Smirnoff Lata 250ml Rojo',c:'COCTELES',p:8933},
+  {id:'co07',n:'Coctel Smirnoff Lata 250ml Verde',c:'COCTELES',p:9000},
+  {id:'cw01',n:'Baileys Botella 700ml',c:'CREMAWISKY',p:84285},
+  {id:'cw02',n:'Baileys Media 375ml',c:'CREMAWISKY',p:48571},
+  {id:'en01',n:'Redbull 250ml',c:'ENERGIZANTE',p:8500},
+  {id:'hi01',n:'Electrolit 650ml',c:'HIDRATANTE',p:8900},
+  {id:'hi02',n:'Gatorade Gatorlit 620ml',c:'HIDRATANTE',p:4500},
+  {id:'rf01',n:'Cola y Pola Lata 330ml',c:'REFAJO',p:3000},
+  {id:'rn01',n:'Ron VdC Carta de Oro 8 anos 750ml',c:'RON',p:106350},
+  {id:'rn02',n:'Ron VdC Esencial 1000ml',c:'RON',p:66826},
+  {id:'rn03',n:'Ron VdC Esencial 1750ml',c:'RON',p:117039},
+  {id:'rn04',n:'Ron VdC Esencial 375ml',c:'RON',p:27200},
+  {id:'rn05',n:'Ron VdC Esencial 750ml',c:'RON',p:52000},
+  {id:'rn06',n:'Ron VdC Oscuro 700ml',c:'RON',p:56000},
+  {id:'rn07',n:'Ron VdC Roble Blanco 750ml',c:'RON',p:53000},
+  {id:'rn08',n:'Ron VdC Tradicional 375ml',c:'RON',p:32657},
+  {id:'rn09',n:'Ron VdC Tradicional 750ml',c:'RON',p:62570},
+  {id:'rn10',n:'Ron Zacapa Solera 23 anos',c:'RON',p:343375},
+  {id:'rn11',n:'Ron Medellin 8 anos Extra Anejo 750ml',c:'RON',p:88000},
+  {id:'tq01',n:'Tequila El Jimador Reposado 700ml',c:'TEQUILA',p:121000},
+  {id:'tq02',n:'Tequila Jose Cuervo Reposado 750ml',c:'TEQUILA',p:99600},
+  {id:'tq03',n:'Tequila Blanco El Jimador 700ml',c:'TEQUILA',p:120000},
+  {id:'vn01',n:'Vino Tinto Gato Negro Malbec 750ml',c:'VINOS',p:60000},
+  {id:'vn02',n:'Vino Tinto Gato Negro Merlot 750ml',c:'VINOS',p:56500},
+  {id:'vk01',n:'Vodka Smirnoff Lulo 750ml',c:'VODKA',p:67357},
+  {id:'vk02',n:'Vodka Smirnoff Tamarindo Picante 750ml',c:'VODKA',p:52000},
+  {id:'wh01',n:'Buchanans De Luxe 12 anos 750ml',c:'WHISKY',p:226900},
+  {id:'wh02',n:'Chivas Regal 12 anos 700ml',c:'WHISKY',p:168700},
+  {id:'wh03',n:'Johnnie Walker Black Label 700ml',c:'WHISKY',p:180700},
+  {id:'wh04',n:'Old Parr 12 anos 750ml',c:'WHISKY',p:154500},
+  {id:'wh05',n:'Something Special 1793 750ml',c:'WHISKY',p:77000},
+  {id:'wh06',n:'Whisky Black and White 700ml',c:'WHISKY',p:61000},
+  {id:'wh07',n:'Glen Morangie',c:'WHISKY',p:0},
 ];
 
-/* ══════════════════
-   LICENCIA
-══════════════════ */
-async function verificarLicencia(){
+/* LICENCIA */
+async function checkLic(){
   try{
-    const r=await fetch(`${SB}/rest/v1/licencias?id_cliente=eq.${CID}&select=*`,{headers:{'apikey':SK,'Authorization':'Bearer '+SK}});
-    if(!r.ok) return true;
+    const r=await fetch(SB+'/rest/v1/licencias?id_cliente=eq.'+CID+'&select=*',{headers:{'apikey':SK,'Authorization':'Bearer '+SK}});
+    if(!r.ok)return true;
     const d=await r.json();
-    if(!d||!d.length){mostrarBloqueo();return false;}
+    if(!d||!d.length){showLock();return false;}
     const l=d[0];
-    if(!l.activo){mostrarBloqueo();return false;}
-    if(l.vence&&new Date()>new Date(l.vence)){mostrarBloqueo();return false;}
-    if(l.plan) document.getElementById('clientePlan').textContent=l.plan;
+    if(!l.activo){showLock();return false;}
+    if(l.vence&&new Date()>new Date(l.vence)){showLock();return false;}
+    if(l.plan)document.getElementById('uplan').textContent=l.plan;
     return true;
   }catch(e){return true;}
 }
-function mostrarBloqueo(){document.getElementById('loadingScreen').classList.add('hidden');document.getElementById('lockScreen').style.display='flex';}
-
-/* ══════════════════
-   INIT
-══════════════════ */
-async function iniciarApp(){
-  const ok=await verificarLicencia();
-  document.getElementById('loadingScreen').classList.add('hidden');
-  if(ok){
-    document.getElementById('appMain').style.display='flex';
-    setupDateTime();
-    cargarDashboard();
-    buildCats();
-    cargarClientes();
-  }
-}
-setTimeout(iniciarApp,1400);
-
-function setupDateTime(){
-  const n=new Date();
-  const h=n.getHours();
-  document.getElementById('greetingText').textContent=h<12?'Buenos días 👋':h<18?'Buenas tardes 👋':'Buenas noches 👋';
-  document.getElementById('topbarDate').textContent=n.toLocaleDateString('es-CO',{weekday:'long',day:'numeric',month:'long',year:'numeric'}).replace(/^\w/,c=>c.toUpperCase());
+function showLock(){
+  document.getElementById('ls').classList.add('h');
+  document.getElementById('lock').style.display='flex';
 }
 
-/* ══════════════════
-   NAVEGACIÓN VISTAS
-══════════════════ */
-function irVista(vista, navEl){
-  // Actualizar nav activo
-  document.querySelectorAll('.nav-item').forEach(i=>i.classList.remove('active'));
-  if(navEl) navEl.classList.add('active');
-  closeSidebar();
+async function init(){
+  const ok=await checkLic();
+  document.getElementById('ls').classList.add('h');
+  if(!ok)return;
+  document.getElementById('app').style.display='flex';
+  setupTime();
+  loadDash();
+  buildCats();
+  loadClis();
+}
+setTimeout(init,1400);
 
-  if(vista==='pos'){
-    document.getElementById('viewInicio').style.display='none';
-    document.getElementById('viewPOS').style.display='flex';
-    document.getElementById('topbarSub').textContent='Registra ventas rápidamente';
-    renderProds();
+function setupTime(){
+  const n=new Date(),h=n.getHours();
+  document.getElementById('tgt').textContent=h<12?'Buenos dias':h<18?'Buenas tardes':'Buenas noches';
+  document.getElementById('tbd').textContent=n.toLocaleDateString('es-CO',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+}
+
+/* NAVEGACION */
+function goView(v,el){
+  document.querySelectorAll('.ni').forEach(i=>i.classList.remove('on'));
+  if(el)el.classList.add('on');
+  closeSB();
+  const views=['vInicio','vPOS','vClientes'];
+  views.forEach(id=>document.getElementById(id).style.display='none');
+  if(v==='pos'){
+    document.getElementById('vPOS').style.display='flex';
+    document.getElementById('tgs').textContent='Registra ventas rapidamente';
+    renderP();
+  } else if(v==='clientes'){
+    document.getElementById('vClientes').style.display='flex';
+    document.getElementById('tgs').textContent='Gestion de clientes';
+    loadClientesView();
   } else {
-    document.getElementById('viewInicio').style.display='block';
-    document.getElementById('viewPOS').style.display='none';
-    document.getElementById('topbarSub').textContent='Aquí está el resumen de tu negocio';
+    document.getElementById('vInicio').style.display='block';
+    document.getElementById('tgs').textContent='Resumen de tu negocio';
   }
 }
+function toggleSB(){document.getElementById('sb').classList.toggle('o');document.getElementById('sov').classList.toggle('o');}
+function closeSB(){document.getElementById('sb').classList.remove('o');document.getElementById('sov').classList.remove('o');}
 
-function toggleSidebar(){document.getElementById('sidebar').classList.toggle('open');document.getElementById('overlay').classList.toggle('open');}
-function closeSidebar(){document.getElementById('sidebar').classList.remove('open');document.getElementById('overlay').classList.remove('open');}
-
-/* ══════════════════
-   DASHBOARD
-══════════════════ */
-function cargarDashboard(){
-  const days=['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'],sales=[320,480,290,610,540,720,470],max=Math.max(...sales);
+/* DASHBOARD */
+function loadDash(){
+  const days=['Lun','Mar','Mie','Jue','Vie','Sab','Dom'],sales=[320,480,290,610,540,720,470],max=Math.max(...sales);
   const chart=document.getElementById('chart');
-  days.forEach((d,i)=>{const pct=(sales[i]/max*100).toFixed(0);const g=document.createElement('div');g.className='chart-bar-wrap';g.innerHTML=`<div class="chart-bar-track" style="height:130px;"><div class="chart-bar-fill ${i===5?'today':''}" style="height:0%"></div></div><div class="chart-bar-label">${d}</div>`;chart.appendChild(g);setTimeout(()=>g.querySelector('.chart-bar-fill').style.height=pct+'%',100+i*60);});
-  const orders=[{name:'Carolina M.',detail:'Ron Medellín 750ml × 2',amount:'$148.000',time:'14 min',bg:'#FFF8E7',color:'#B8860B'},{name:'Santiago R.',detail:'Whisky Old Parr × 1',amount:'$210.000',time:'1h',bg:'#EFF6FF',color:'#3B82F6'},{name:'Valentina G.',detail:'Aguardiente × 3',amount:'$96.000',time:'2h',bg:'#F0FFF4',color:'#10B981'},{name:'Daniela P.',detail:'Ron Caucano × 4',amount:'$64.000',time:'3h',bg:'#FFF0F0',color:'#EF4444'},{name:'Andrés T.',detail:'Tequila Jimador × 1',amount:'$87.000',time:'Ayer',bg:'#F5F3FF',color:'#8B5CF6'}];
+  days.forEach((d,i)=>{
+    const pct=(sales[i]/max*100).toFixed(0);
+    const g=document.createElement('div');g.className='cbw';
+    g.innerHTML='<div class="cbt" style="height:130px;"><div class="cbf'+(i===5?' today':'')+'" style="height:0%"></div></div><div class="cbl">'+d+'</div>';
+    chart.appendChild(g);
+    setTimeout(()=>g.querySelector('.cbf').style.height=pct+'%',100+i*60);
+  });
+  const orders=[
+    {name:'Carolina M.',detail:'Ron Medellin x 2',amount:'$148.000',time:'14 min',bg:'#FFF8E7',col:'#B8860B'},
+    {name:'Santiago R.',detail:'Whisky Old Parr x 1',amount:'$210.000',time:'1h',bg:'#EFF6FF',col:'#3B82F6'},
+    {name:'Valentina G.',detail:'Aguardiente x 3',amount:'$96.000',time:'2h',bg:'#F0FFF4',col:'#10B981'},
+    {name:'Daniela P.',detail:'Ron x 4',amount:'$64.000',time:'3h',bg:'#FFF0F0',col:'#EF4444'},
+    {name:'Andres T.',detail:'Tequila x 1',amount:'$87.000',time:'Ayer',bg:'#F5F3FF',col:'#8B5CF6'}
+  ];
   const ol=document.getElementById('orderList');
-  orders.forEach(o=>{const ini=o.name.split(' ').map(x=>x[0]).join('').slice(0,2);ol.innerHTML+=`<div class="order-item"><div class="order-av" style="background:${o.bg};color:${o.color};">${ini}</div><div class="order-info"><div class="order-name">${o.name}</div><div class="order-detail">${o.detail}</div></div><div class="order-right"><div class="order-amount">${o.amount}</div><div class="order-time">Hace ${o.time}</div></div></div>`;});
-  const inv=[{name:'Ron Medellín 750ml',qty:18,max:30,c:'#10B981'},{name:'Aguardiente Antioqueño',qty:7,max:30,c:'#F59E0B'},{name:'Whisky Old Parr',qty:3,max:20,c:'#EF4444'},{name:'Tequila Jimador',qty:12,max:25,c:'#10B981'},{name:'Vino Gato Negro',qty:2,max:20,c:'#EF4444'}];
-  const il=document.getElementById('inventoryList');
-  inv.forEach(item=>{const pct=(item.qty/item.max*100).toFixed(0);il.innerHTML+=`<div class="inv-row"><div class="inv-dot" style="background:${item.c}"></div><div class="inv-name">${item.name}</div><div class="inv-bar-track"><div class="inv-bar-fill" data-w="${pct}" style="width:0%;background:${item.c}"></div></div><div class="inv-qty" style="color:${item.c}">${item.qty}u</div></div>`;});
-  setTimeout(()=>document.querySelectorAll('.inv-bar-fill').forEach(el=>el.style.width=el.dataset.w+'%'),300);
-  const prods=[{rank:1,name:'Ron Medellín 750ml',units:'23 und',rev:'$689.000'},{rank:2,name:'Aguardiente Antioqueño',units:'19 und',rev:'$380.000'},{rank:3,name:'Whisky Old Parr',units:'8 und',rev:'$336.000'},{rank:4,name:'Tequila Jimador',units:'11 und',rev:'$297.000'},{rank:5,name:'Vino Gato Negro',units:'6 und',rev:'$198.000'}];
-  const pl=document.getElementById('productList');
-  prods.forEach(p=>{pl.innerHTML+=`<div class="prod-row"><div class="prod-rank ${p.rank===1?'top1':''}">${p.rank}</div><div class="prod-info"><div class="prod-name">${p.name}</div><div class="prod-units">${p.units} · mes</div></div><div class="prod-rev">${p.rev}</div></div>`;});
+  orders.forEach(o=>{
+    const ini=o.name.split(' ').map(x=>x[0]).join('').slice(0,2);
+    ol.innerHTML+='<div class="oi"><div class="oav" style="background:'+o.bg+';color:'+o.col+';">'+ini+'</div><div class="on2"><div class="oname">'+o.name+'</div><div class="odet">'+o.detail+'</div></div><div class="or"><div class="oamt">'+o.amount+'</div><div class="otm">Hace '+o.time+'</div></div></div>';
+  });
+  const invs=[{name:'Ron VdC Esencial',qty:18,max:30,c:'#10B981'},{name:'Aguardiente Azul',qty:7,max:30,c:'#F59E0B'},{name:'Old Parr 750ml',qty:3,max:20,c:'#EF4444'},{name:'Tequila Jimador',qty:12,max:25,c:'#10B981'},{name:'Gato Negro Malbec',qty:2,max:20,c:'#EF4444'}];
+  const il=document.getElementById('invList');
+  invs.forEach(item=>{
+    const pct=(item.qty/item.max*100).toFixed(0);
+    il.innerHTML+='<div class="ir"><div class="idot" style="background:'+item.c+'"></div><div class="iname">'+item.name+'</div><div class="ibar"><div class="ibf" data-w="'+pct+'" style="width:0%;background:'+item.c+'"></div></div><div class="iqty" style="color:'+item.c+'">'+item.qty+'u</div></div>';
+  });
+  setTimeout(()=>document.querySelectorAll('.ibf').forEach(el=>el.style.width=el.dataset.w+'%'),300);
+  const top=[{rank:1,name:'Ron VdC Esencial',units:'23 und',rev:'$689.000'},{rank:2,name:'Aguardiente Azul',units:'19 und',rev:'$380.000'},{rank:3,name:'Old Parr 12 anos',units:'8 und',rev:'$336.000'},{rank:4,name:'Tequila Jimador',units:'11 und',rev:'$297.000'},{rank:5,name:'Gato Negro',units:'6 und',rev:'$198.000'}];
+  const pl=document.getElementById('prodList');
+  top.forEach(p=>{pl.innerHTML+='<div class="pr"><div class="prank'+(p.rank===1?' t1':'')+'">'+p.rank+'</div><div class="pn2"><div class="pname">'+p.name+'</div><div class="punits">'+p.units+' mes</div></div><div class="prev">'+p.rev+'</div></div>';});
   const pts=[{name:'Carolina M.',pts:2840,max:3000,bg:'#FFF8E7',c:'#B8860B'},{name:'Daniela P.',pts:1920,max:3000,bg:'#EFF6FF',c:'#3B82F6'},{name:'Santiago R.',pts:1540,max:3000,bg:'#F0FFF4',c:'#10B981'},{name:'Valentina G.',pts:980,max:3000,bg:'#F5F3FF',c:'#8B5CF6'}];
-  const ptEl=document.getElementById('pointsList');
-  pts.forEach(c=>{const ini=c.name.split(' ').map(x=>x[0]).join('').slice(0,2);const pct=(c.pts/c.max*100).toFixed(0);ptEl.innerHTML+=`<div class="pts-row"><div class="pts-av" style="background:${c.bg};color:${c.c};">${ini}</div><div class="pts-info"><div class="pts-name">${c.name}</div><div class="pts-progress"><div class="pts-bar-track"><div class="pts-bar-fill" data-w="${pct}" style="width:0%;background:${c.c}"></div></div><span class="pts-bar-label">${c.pts.toLocaleString('es-CO')}pts</span></div></div><div class="pts-score"><div class="pts-score-num">${c.pts.toLocaleString('es-CO')}</div><div class="pts-score-label">puntos</div></div></div>`;});
-  setTimeout(()=>document.querySelectorAll('.pts-bar-fill').forEach(el=>el.style.width=el.dataset.w+'%'),400);
-  const fin=[{label:'Ingresos del mes',value:'$8.430.000',sub:'Total ventas',trend:'+15%',up:true},{label:'Costo de productos',value:'$5.230.000',sub:'62% de ingresos',trend:'+3%',up:false},{label:'Utilidad bruta',value:'$3.200.000',sub:'Margen 38%',trend:'+18%',up:true}];
+  const ptEl=document.getElementById('ptsList');
+  pts.forEach(c=>{
+    const ini=c.name.split(' ').map(x=>x[0]).join('').slice(0,2);
+    const pct=(c.pts/c.max*100).toFixed(0);
+    ptEl.innerHTML+='<div class="ptr"><div class="pav" style="background:'+c.bg+';color:'+c.c+';">'+ini+'</div><div class="pinfo"><div class="pnm">'+c.name+'</div><div class="pprog"><div class="pbt"><div class="pbf" data-w="'+pct+'" style="width:0%;background:'+c.c+'"></div></div><span class="pbl">'+c.pts.toLocaleString('es-CO')+'pts</span></div></div><div class="psc"><div class="psn">'+c.pts.toLocaleString('es-CO')+'</div><div class="psl">puntos</div></div></div>';
+  });
+  setTimeout(()=>document.querySelectorAll('.pbf').forEach(el=>el.style.width=el.dataset.w+'%'),400);
+  const fin=[{label:'Ingresos del mes',value:'$8.430.000',sub:'Total ventas',trend:'+15%',up:true},{label:'Costo de productos',value:'$5.230.000',sub:'62% ingresos',trend:'+3%',up:false},{label:'Utilidad bruta',value:'$3.200.000',sub:'Margen 38%',trend:'+18%',up:true}];
   const fg=document.getElementById('finGrid');
-  fin.forEach(f=>{fg.innerHTML+=`<div class="fin-card"><div class="fin-label">${f.label}</div><div class="fin-value">${f.value}</div><div class="fin-sub"><span class="kpi-trend ${f.up?'up':'down'}" style="font-size:10px;">${f.trend}</span>${f.sub}</div></div>`;});
+  fin.forEach(f=>{fg.innerHTML+='<div class="fc"><div class="fl">'+f.label+'</div><div class="fv">'+f.value+'</div><div class="fs"><span class="trend '+(f.up?'up':'dn')+'" style="font-size:10px;">'+f.trend+'</span>'+f.sub+'</div></div>';});
 }
 
-/* ══════════════════
-   POS — CATEGORÍAS
-══════════════════ */
+/* POS — CATEGORIAS */
 function buildCats(){
-  const bar=document.getElementById('catBar');
+  const bar=document.getElementById('cats');
   CATS.forEach(c=>{
     const d=document.createElement('div');
-    d.className='cat-pill'+(c===catActiva?' on':'');
-    d.textContent=(EM[c]?EM[c]+' ':'')+c;
-    d.onclick=()=>{catActiva=c;document.querySelectorAll('.cat-pill').forEach(p=>p.classList.remove('on'));d.classList.add('on');document.getElementById('posSearch').value='';renderProds();};
+    d.className='cat'+(c===catA?' on':'');
+    d.textContent=c==='Todos'?'Todos':CATNAMES[c]||c;
+    d.onclick=()=>{catA=c;document.querySelectorAll('.cat').forEach(p=>p.classList.remove('on'));d.classList.add('on');document.getElementById('srch').value='';renderP();};
     bar.appendChild(d);
   });
 }
 
-/* ══════════════════
-   POS — PRODUCTOS
-══════════════════ */
-function renderProds(){
-  const q=document.getElementById('posSearch').value.toLowerCase();
-  const prods=PRODS.filter(p=>(catActiva==='Todos'||p.c===catActiva)&&(!q||p.n.toLowerCase().includes(q)||p.c.toLowerCase().includes(q)));
-  const g=document.getElementById('prodGrid');
-  if(!prods.length){g.innerHTML='<div style="grid-column:1/-1;display:flex;flex-direction:column;align-items:center;padding:40px 0;gap:8px;color:var(--text3);"><div style="font-size:32px;">🔍</div><div style="font-size:12px;">Sin resultados</div></div>';return;}
-  g.innerHTML=prods.map(p=>{
-    const ci=carrito.find(x=>x.id===p.id);
-    return`<div class="pc${ci?' sel':''}${p.s<=0?' zero':''}" onclick="toggleProd('${p.id}')">
-      ${ci?`<div class="pq-badge">${ci.qty}</div>`:''}
-      <span class="pe">${EM[p.c]||'🍶'}</span>
-      <div class="pn">${p.n}</div>
-      <div class="pcat">${p.c}</div>
-      <div class="pp">${fmt(p.p)}</div>
-      <div class="pst">Stock: ${p.s}</div>
-    </div>`;
+/* POS — PRODUCTOS */
+function renderP(){
+  const q=document.getElementById('srch').value.toLowerCase();
+  const ps=PRODS.filter(p=>(catA==='Todos'||p.c===catA)&&(!q||p.n.toLowerCase().includes(q)));
+  const g=document.getElementById('pgrid');
+  if(!ps.length){g.innerHTML='<div style="grid-column:1/-1;text-align:center;padding:60px;color:#9CA3AF;">Sin resultados</div>';return;}
+  const cm={};cart.forEach(x=>{cm[x.id]=x.qty;});
+  g.innerHTML=ps.map(p=>{
+    const qty=cm[p.id]||0;
+    const pr=p.p>0?fmt(p.p):'Consultar';
+    const cls='pc'+(qty?' sel':'')+(p.p===0?' zero':'');
+    const badge=qty?'<div class="pc-qty">'+qty+'</div>':'';
+    return '<div class="'+cls+'" onclick="addP(\''+p.id+'\')">'
+      +badge
+      +'<div class="pc-name">'+p.n+'</div>'
+      +'<div class="pc-price">'+pr+'</div>'
+    +'</div>';
   }).join('');
 }
 
-function toggleProd(id){
-  const prod=PRODS.find(p=>p.id===id);
-  if(!prod||prod.s<=0) return;
-  const ex=carrito.find(c=>c.id===id);
-  if(ex){ex.qty++;ex.total=ex.qty*prod.p;}
-  else carrito.push({id,nombre:prod.n,precio:prod.p,qty:1,total:prod.p,cat:prod.c});
-  renderProds();renderItems();updateTotal();
-  showToast((EM[prod.c]||'✅')+' '+prod.n.split(' ').slice(0,3).join(' '));
+function addP(id){
+  const p=PRODS.find(x=>x.id===id);
+  if(!p||p.p===0)return;
+  const ex=cart.find(c=>c.id===id);
+  if(ex){ex.qty++;ex.total=ex.qty*p.p;}
+  else cart.push({id:id,nombre:p.n,precio:p.p,qty:1,total:p.p,cat:p.c});
+  renderP();renderItems();updateTot();
+  toast('+ '+p.n.split(' ').slice(0,3).join(' '));
 }
 
-/* ══════════════════
-   POS — ITEMS
-══════════════════ */
 function renderItems(){
   const sec=document.getElementById('posItems');
-  if(!carrito.length){
-    sec.innerHTML='<div class="pos-empty"><div class="pos-empty-icon">🛒</div><div class="pos-empty-txt">Toca un producto</div></div>';
-    document.getElementById('btnRegistrar').disabled=true;
-    return;
+  if(!cart.length){
+    sec.innerHTML='<div class="pos-empty"><div style="font-size:32px;">&#128722;</div><div style="font-size:12px;margin-top:6px;">Agrega productos</div></div>';
+    document.getElementById('btnReg').disabled=true;return;
   }
-  sec.innerHTML=carrito.map(it=>`
-    <div class="vi">
-      <div class="vi-info">
-        <div class="vi-name">${it.nombre.split(' ').slice(0,4).join(' ')}</div>
-        <div class="vi-price">${fmt(it.precio)} c/u</div>
-      </div>
-      <div class="qc">
-        <div class="qb" onclick="cambiarQty('${it.id}',-1)">−</div>
-        <div class="qn">${it.qty}</div>
-        <div class="qb" onclick="cambiarQty('${it.id}',1)">+</div>
-      </div>
-      <div class="vi-total">${fmt(it.total)}</div>
-    </div>`).join('');
-  document.getElementById('btnRegistrar').disabled=false;
+  sec.innerHTML=cart.map(it=>'<div class="vi">'
+    +'<div class="vi-info"><div class="vi-name">'+it.nombre.split(' ').slice(0,4).join(' ')+'</div><div class="vi-price">'+fmt(it.precio)+' c/u</div></div>'
+    +'<div class="qc"><div class="qb" onclick="chgQty(\''+it.id+'\',-1)">-</div><div class="qn">'+it.qty+'</div><div class="qb" onclick="chgQty(\''+it.id+'\',1)">+</div></div>'
+    +'<div class="vi-tot">'+fmt(it.total)+'</div>'
+  +'</div>').join('');
+  document.getElementById('btnReg').disabled=false;
 }
 
-function cambiarQty(id,d){
-  const it=carrito.find(c=>c.id===id);
-  if(!it) return;
+function chgQty(id,d){
+  const it=cart.find(c=>c.id===id);if(!it)return;
   it.qty+=d;
-  if(it.qty<=0) carrito=carrito.filter(c=>c.id!==id);
+  if(it.qty<=0)cart=cart.filter(c=>c.id!==id);
   else it.total=it.qty*it.precio;
-  renderItems();renderProds();updateTotal();
+  renderItems();renderP();updateTot();
 }
 
-function updateTotal(){
-  const total=carrito.reduce((s,c)=>s+c.total,0);
-  document.getElementById('posTotal').textContent=fmt(total);
+function updateTot(){
+  const subtotal=cart.reduce((s,c)=>s+c.total,0);
+  const total=subtotal+domicilio;
+  document.getElementById('totVal').textContent=fmt(total);
   const pts=Math.floor(total/1000);
-  const pv=document.getElementById('ptsPreview');
-  if(pts>0&&clienteActivo){pv.textContent='+'+pts+' puntos';pv.style.display='block';}
+  const pv=document.getElementById('totPts');
+  if(pts>0&&cliActivo){pv.textContent='+'+pts+' puntos';pv.style.display='block';}
   else pv.style.display='none';
+  if(domicilio>0){
+    document.getElementById('domLabel').style.display='flex';
+    document.getElementById('domLabel').textContent='Domicilio: '+fmt(domicilio);
+  } else {
+    document.getElementById('domLabel').style.display='none';
+  }
 }
 
-function limpiarVenta(){carrito=[];renderItems();renderProds();updateTotal();}
+function setDomicilio(val){
+  domicilio=parseInt(val)||0;
+  updateTot();
+}
 
-/* ══════════════════
-   POS — CLIENTE
-══════════════════ */
-async function cargarClientes(){
+function clearVenta(){
+  cart=[];domicilio=0;
+  document.getElementById('domInput').value='';
+  document.getElementById('domLabel').style.display='none';
+  renderItems();renderP();updateTot();
+}
+
+/* CLIENTE — autocomplete desde 1 caracter */
+async function loadClis(){
   try{
-    const r=await fetch(`${SB}/rest/v1/clientes_frecuentes?id_licencia=eq.${CID}&select=*&order=total_compras.desc&limit=50`,{headers:{'apikey':SK,'Authorization':'Bearer '+SK}});
-    if(r.ok) clientesDB=await r.json();
+    const r=await fetch(SB+'/rest/v1/clientes_frecuentes?id_licencia=eq.'+CID+'&select=*&order=total_compras.desc&limit=100',{headers:{'apikey':SK,'Authorization':'Bearer '+SK}});
+    if(r.ok)clisDB=await r.json();
   }catch(e){}
 }
 
-function buscarCliente(){
-  const q=document.getElementById('cliNombreInput').value.toLowerCase().trim();
+function searchCli(){
+  const q=document.getElementById('cliN').value.toLowerCase().trim();
   const drop=document.getElementById('cliDrop');
-  if(!q||q.length<2){drop.style.display='none';return;}
-  const matches=clientesDB.filter(c=>c.nombre.toLowerCase().includes(q)||(c.whatsapp&&c.whatsapp.includes(q))).slice(0,5);
-  if(!matches.length){drop.style.display='none';return;}
-  drop.innerHTML=matches.map(c=>`
-    <div class="cli-drop-item" onclick='seleccionarCliente(${JSON.stringify(c)})'>
-      <div class="cdn">${c.nombre}</div>
-      <div style="display:flex;gap:8px;">
-        <span class="cdp">${c.whatsapp||'Sin WA'}</span>
-        <span class="cdpts">⭐ ${(c.puntos||0).toLocaleString('es-CO')} pts</span>
-      </div>
-    </div>`).join('');
+  if(!q){drop.style.display='none';return;}
+  const m=clisDB.filter(c=>c.nombre.toLowerCase().startsWith(q)||(c.whatsapp&&c.whatsapp.includes(q))).slice(0,6);
+  if(!m.length){drop.style.display='none';return;}
+  drop.innerHTML=m.map(c=>{
+    const enc=encodeURIComponent(JSON.stringify(c));
+    const pts=(c.puntos||0).toLocaleString('es-CO');
+    const wa=c.whatsapp||'';
+    return '<div class="cdi" onclick="selCli(decodeURIComponent(\''+enc+'\'))">'
+      +'<div class="cdn">'+c.nombre+'</div>'
+      +'<div style="display:flex;gap:8px;align-items:center;">'
+        +(wa?'<span class="cdp">'+wa+'</span>':'')
+        +'<span class="cdpts">'+pts+' pts</span>'
+      +'</div>'
+    +'</div>';
+  }).join('');
   drop.style.display='block';
 }
 
-function seleccionarCliente(cli){
-  clienteActivo=cli;
+function selCli(enc){
+  const c=JSON.parse(enc);
+  cliActivo=c;
   document.getElementById('cliForm').style.display='none';
   document.getElementById('cliTag').style.display='flex';
-  document.getElementById('cliTagNombre').textContent=cli.nombre;
+  document.getElementById('cliTN').textContent=c.nombre;
   document.getElementById('cliDrop').style.display='none';
+  if(c.whatsapp)document.getElementById('cliW').value=c.whatsapp;
+  if(c.direccion)document.getElementById('cliDir').value=c.direccion;
+  if(c.detalle)document.getElementById('cliDet').value=c.detalle;
   const cp=document.getElementById('cliPts');
-  cp.textContent='⭐ '+((cli.puntos||0).toLocaleString('es-CO'))+' puntos acumulados';
+  cp.textContent=(c.puntos||0).toLocaleString('es-CO')+' puntos acumulados';
   cp.style.display='block';
-  updateTotal();
-  showToast('👤 '+cli.nombre+' · '+((cli.puntos||0).toLocaleString('es-CO'))+' pts');
+  updateTot();
+  toast('Cliente: '+c.nombre+(c.puntos?' | '+(c.puntos||0).toLocaleString('es-CO')+' pts':''));
 }
 
-function limpiarCliente(){
-  clienteActivo=null;
+function clearCli(){
+  cliActivo=null;
   document.getElementById('cliForm').style.display='block';
   document.getElementById('cliTag').style.display='none';
-  document.getElementById('cliNombreInput').value='';
-  document.getElementById('cliWA').value='';
+  document.getElementById('cliN').value='';
+  document.getElementById('cliW').value='';
+  document.getElementById('cliDir').value='';
+  document.getElementById('cliDet').value='';
   document.getElementById('cliPts').style.display='none';
-  document.getElementById('ptsPreview').style.display='none';
+  document.getElementById('totPts').style.display='none';
 }
 
-document.addEventListener('click',e=>{if(!e.target.closest('.cli-search-wrap')) document.getElementById('cliDrop').style.display='none';});
+document.addEventListener('click',e=>{
+  if(!e.target.closest('.cli-sw')&&!e.target.closest('.cli-drop'))
+    document.getElementById('cliDrop').style.display='none';
+});
 
-function selPago(el,m){pago=m;document.querySelectorAll('.po').forEach(o=>o.classList.remove('on'));el.classList.add('on');}
+function setPago(el,m){pago=m;document.querySelectorAll('.po').forEach(o=>o.classList.remove('on'));el.classList.add('on');}
 
-/* ══════════════════
-   POS — PROCESAR
-══════════════════ */
-async function procesarVenta(){
-  if(!carrito.length) return;
-  const btn=document.getElementById('btnRegistrar');
-  btn.disabled=true;btn.textContent='⏳ Guardando...';
-  const total=carrito.reduce((s,c)=>s+c.total,0);
+/* PROCESAR VENTA */
+async function doVenta(){
+  if(!cart.length)return;
+  const btn=document.getElementById('btnReg');btn.disabled=true;btn.textContent='Guardando...';
+  const subtotal=cart.reduce((s,c)=>s+c.total,0);
+  const total=subtotal+domicilio;
   const pts=Math.floor(total/1000);
-  let cliNombre=document.getElementById('cliNombreInput').value.trim()||'Cliente';
-  let cliWA=document.getElementById('cliWA').value.trim()||null;
-  let cliId=null;
-  if(clienteActivo){cliNombre=clienteActivo.nombre;cliWA=clienteActivo.whatsapp;cliId=clienteActivo.id;}
+  let cn=document.getElementById('cliN').value.trim()||'Cliente';
+  let cw=document.getElementById('cliW').value.trim()||null;
+  let cdir=document.getElementById('cliDir').value.trim()||null;
+  let cdet=document.getElementById('cliDet').value.trim()||null;
+  let cid=null;
+  if(cliActivo){cn=cliActivo.nombre;cid=cliActivo.id;
+    if(!cw)cw=cliActivo.whatsapp;
+    if(!cdir)cdir=cliActivo.direccion;
+    if(!cdet)cdet=cliActivo.detalle;
+  }
   try{
-    const vRes=await fetch(`${SB}/rest/v1/ventas`,{method:'POST',headers:H,body:JSON.stringify({id_cliente:CID,cliente_nombre:cliNombre,total,subtotal:total,descuento:0,metodo_pago:pago,estado:'completada',puntos_ganados:pts})});
-    if(!vRes.ok) throw new Error(await vRes.text());
-    const [venta]=await vRes.json();
-    await fetch(`${SB}/rest/v1/detalle_ventas`,{method:'POST',headers:H,body:JSON.stringify(carrito.map(it=>({venta_id:venta.id,producto_nombre:it.nombre,categoria:it.cat,cantidad:it.qty,precio_unitario:it.precio,precio_total:it.total})))});
-    await upsertCliente(cliNombre,cliWA,total,pts,cliId);
-    ultimaVenta={id:venta.id,numero:venta.numero_venta,total,cliente:cliNombre,wa:cliWA,puntos:pts,items:[...carrito]};
-    document.getElementById('pmSub').textContent=`${cliNombre} · ${carrito.length} producto(s)`;
-    document.getElementById('pmNum').textContent=`#${String(venta.numero_venta||'---').padStart(3,'0')} · ${fmt(total)} · +${pts} pts`;
-    document.getElementById('posModal').classList.add('open');
-    carrito=[];renderItems();renderProds();updateTotal();limpiarCliente();cargarClientes();
-  }catch(e){showToast('❌ Error al guardar. Verifica conexión.');console.error(e);}
-  btn.disabled=false;btn.innerHTML='✅ Registrar venta';
+    const vr=await fetch(SB+'/rest/v1/ventas',{method:'POST',headers:H,body:JSON.stringify({
+      id_cliente:CID,cliente_nombre:cn,total:total,subtotal:subtotal,
+      descuento:0,metodo_pago:pago,estado:'completada',puntos_ganados:pts,
+      domicilio:domicilio,direccion_entrega:cdir,detalle_entrega:cdet
+    })});
+    if(!vr.ok)throw new Error(await vr.text());
+    const [v]=await vr.json();
+    await fetch(SB+'/rest/v1/detalle_ventas',{method:'POST',headers:H,body:JSON.stringify(
+      cart.map(it=>({venta_id:v.id,producto_nombre:it.nombre,categoria:it.cat,cantidad:it.qty,precio_unitario:it.precio,precio_total:it.total}))
+    )});
+    await upsertCli(cn,cw,cdir,cdet,total,pts,cid);
+    lastVenta={numero:v.numero_venta,total:total,subtotal:subtotal,domicilio:domicilio,cliente:cn,wa:cw,puntos:pts,items:cart.slice(),dir:cdir,det:cdet};
+    document.getElementById('mSub').textContent=cn+(cdir?' | '+cdir:'');
+    document.getElementById('mNum').textContent='#'+String(v.numero_venta||'---').padStart(3,'0')+' | '+fmt(total)+(domicilio?' (dom: '+fmt(domicilio)+')':'')+' | +'+pts+' pts';
+    document.getElementById('modal').classList.add('o');
+    cart=[];domicilio=0;document.getElementById('domInput').value='';
+    renderItems();renderP();updateTot();clearCli();loadClis();
+  }catch(e){toast('Error al guardar');console.error(e);}
+  btn.disabled=false;btn.textContent='Registrar venta';
 }
 
-async function upsertCliente(nombre,wa,total,pts,existeId){
+async function upsertCli(n,w,dir,det,t,pts,eid){
   try{
-    if(existeId){
-      const cli=clientesDB.find(c=>c.id===existeId);
-      await fetch(`${SB}/rest/v1/clientes_frecuentes?id=eq.${existeId}`,{method:'PATCH',headers:H,body:JSON.stringify({puntos:(cli?cli.puntos:0)+pts,total_compras:(cli?cli.total_compras:0)+total,num_pedidos:(cli?cli.num_pedidos:0)+1,ultima_compra:new Date().toISOString()})});
-    } else if(nombre&&nombre!=='Cliente'){
-      let q=`${SB}/rest/v1/clientes_frecuentes?id_licencia=eq.${CID}`;
-      if(wa) q+=`&whatsapp=eq.${wa}`;else q+=`&nombre=ilike.${encodeURIComponent(nombre)}`;
-      q+='&select=*&limit=1';
-      const r=await fetch(q,{headers:{'apikey':SK,'Authorization':'Bearer '+SK}});
+    const update={puntos:0,total_compras:0,num_pedidos:1,ultima_compra:new Date().toISOString(),nombre:n};
+    if(w)update.whatsapp=w;
+    if(dir)update.direccion=dir;
+    if(det)update.detalle=det;
+    if(eid){
+      const c2=clisDB.find(x=>x.id===eid)||{};
+      update.puntos=(c2.puntos||0)+pts;
+      update.total_compras=(c2.total_compras||0)+t;
+      update.num_pedidos=(c2.num_pedidos||0)+1;
+      await fetch(SB+'/rest/v1/clientes_frecuentes?id=eq.'+eid,{method:'PATCH',headers:H,body:JSON.stringify(update)});
+    } else if(n&&n!=='Cliente'){
+      let q=SB+'/rest/v1/clientes_frecuentes?id_licencia=eq.'+CID;
+      if(w)q+='&whatsapp=eq.'+w;
+      else q+='&nombre=ilike.'+encodeURIComponent(n);
+      const r=await fetch(q+'&select=*&limit=1',{headers:{'apikey':SK,'Authorization':'Bearer '+SK}});
       const d=await r.json();
-      if(d&&d.length){const cli=d[0];await fetch(`${SB}/rest/v1/clientes_frecuentes?id=eq.${cli.id}`,{method:'PATCH',headers:H,body:JSON.stringify({puntos:(cli.puntos||0)+pts,total_compras:(cli.total_compras||0)+total,num_pedidos:(cli.num_pedidos||0)+1,ultima_compra:new Date().toISOString(),nombre})});}
-      else await fetch(`${SB}/rest/v1/clientes_frecuentes`,{method:'POST',headers:H,body:JSON.stringify({id_licencia:CID,nombre,whatsapp:wa,puntos:pts,total_compras:total,num_pedidos:1,ultima_compra:new Date().toISOString()})});
+      if(d&&d.length){
+        const c2=d[0];
+        update.puntos=(c2.puntos||0)+pts;
+        update.total_compras=(c2.total_compras||0)+t;
+        update.num_pedidos=(c2.num_pedidos||0)+1;
+        await fetch(SB+'/rest/v1/clientes_frecuentes?id=eq.'+c2.id,{method:'PATCH',headers:H,body:JSON.stringify(update)});
+      } else {
+        update.id_licencia=CID;update.puntos=pts;update.total_compras=t;
+        await fetch(SB+'/rest/v1/clientes_frecuentes',{method:'POST',headers:H,body:JSON.stringify(update)});
+      }
     }
   }catch(e){console.warn(e);}
 }
 
-function enviarWA(){
-  if(!ultimaVenta) return;
-  const lines=ultimaVenta.items.map(i=>`• ${i.qty}× ${i.nombre.split(' ').slice(0,4).join(' ')}: ${fmt(i.total)}`).join('%0A');
-  const wa=ultimaVenta.wa;
-  const msg=`🍾 *La Cava Oficial*%0A%0A✅ Pedido registrado%0A%0A${lines}%0A%0A💰 *Total: ${fmt(ultimaVenta.total)}*%0A⭐ Puntos ganados: +${ultimaVenta.puntos} pts%0A%0A¡Gracias por tu compra! 🥂`;
-  window.open(wa?`https://wa.me/57${wa.replace(/\D/g,'')}?text=${msg}`:`https://wa.me/?text=${msg}`,'_blank');
+function sendWA(){
+  if(!lastVenta)return;
+  const lines=lastVenta.items.map(i=>'- '+i.qty+'x '+i.nombre.split(' ').slice(0,4).join(' ')+': '+fmt(i.total)).join('%0A');
+  const wa=lastVenta.wa;
+  let msg='La Cava Oficial%0A%0APedido #'+String(lastVenta.numero||'---').padStart(3,'0')+'%0A%0A'+lines;
+  if(lastVenta.domicilio)msg+='%0ADomicilio: '+fmt(lastVenta.domicilio);
+  msg+='%0A%0ATotal: '+fmt(lastVenta.total)+'%0APuntos: +'+lastVenta.puntos+'%0AGracias!';
+  if(lastVenta.dir)msg+='%0ADireccion: '+encodeURIComponent(lastVenta.dir)+(lastVenta.det?' - '+encodeURIComponent(lastVenta.det):'');
+  window.open(wa?'https://wa.me/57'+wa.replace(/\D/g,'')+('?text='+msg):'https://wa.me/?text='+msg,'_blank');
 }
-function nuevaVenta(){document.getElementById('posModal').classList.remove('open');}
+function newVenta(){document.getElementById('modal').classList.remove('o');}
 
-/* ══════════════════
-   HISTORIAL
-══════════════════ */
-async function abrirHistorial(){
-  document.getElementById('histOv').classList.add('open');
-  const hl=document.getElementById('histList');
-  hl.innerHTML='<div style="display:flex;flex-direction:column;align-items:center;padding:60px;gap:10px;color:var(--text3);"><div style="font-size:32px;">⏳</div><div style="font-size:12px;">Cargando...</div></div>';
+/* HISTORIAL */
+async function openHist(){
+  document.getElementById('hov').classList.add('o');
+  const hl=document.getElementById('hl');hl.innerHTML='<div style="text-align:center;padding:60px;color:#9CA3AF;">Cargando...</div>';
   try{
-    const r=await fetch(`${SB}/rest/v1/ventas?id_cliente=eq.${CID}&select=*&order=created_at.desc&limit=50`,{headers:{'apikey':SK,'Authorization':'Bearer '+SK}});
-    const data=r.ok?await r.json():[];
-    if(!data.length){hl.innerHTML='<div style="display:flex;flex-direction:column;align-items:center;padding:60px;gap:10px;color:var(--text3);"><div style="font-size:32px;">📋</div><div style="font-size:12px;">Sin ventas aún</div></div>';return;}
+    const r=await fetch(SB+'/rest/v1/ventas?id_cliente=eq.'+CID+'&select=*&order=created_at.desc&limit=50',{headers:{'apikey':SK,'Authorization':'Bearer '+SK}});
+    const d=r.ok?await r.json():[];
+    if(!d.length){hl.innerHTML='<div style="text-align:center;padding:60px;color:#9CA3AF;">Sin ventas aun</div>';return;}
     const PI={efectivo:'💵',transferencia:'🏦',nequi:'📱',daviplata:'🔴'};
-    hl.innerHTML=data.map(v=>`<div class="hi"><div class="hi-top"><div class="hi-num">#${String(v.numero_venta||'---').padStart(3,'0')}</div><div class="hi-total">${fmt(v.total)}</div></div><div class="hi-cli">${v.cliente_nombre||'Cliente'}</div><div class="hi-time">${new Date(v.created_at).toLocaleString('es-CO',{dateStyle:'short',timeStyle:'short'})}</div><div class="hi-pago">${PI[v.metodo_pago]||'💵'} ${v.metodo_pago}</div></div>`).join('');
-  }catch(e){hl.innerHTML='<div style="text-align:center;padding:40px;color:var(--red);">Error al cargar</div>';}
+    hl.innerHTML=d.map(v=>'<div class="hi"><div class="hi-top"><div class="hi-num">#'+String(v.numero_venta||'---').padStart(3,'0')+'</div><div class="hi-tot">'+fmt(v.total)+'</div></div><div class="hi-cli">'+(v.cliente_nombre||'Cliente')+'</div>'+(v.direccion_entrega?'<div class="hi-dir">'+v.direccion_entrega+(v.detalle_entrega?' - '+v.detalle_entrega:'')+'</div>':'')+'<div class="hi-time">'+new Date(v.created_at).toLocaleString('es-CO',{dateStyle:'short',timeStyle:'short'})+'</div><div class="hi-pago">'+(PI[v.metodo_pago]||'💵')+' '+v.metodo_pago+(v.domicilio&&v.domicilio>0?' | Dom: '+fmt(v.domicilio):'')+'</div></div>').join('');
+  }catch(e){hl.innerHTML='<div style="text-align:center;padding:40px;color:red;">Error al cargar</div>';}
 }
-function cerrarHistorial(){document.getElementById('histOv').classList.remove('open');}
+function closeHist(){document.getElementById('hov').classList.remove('o');}
 
-/* ══════════════════
-   TOAST
-══════════════════ */
-let toastT;
-function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');clearTimeout(toastT);toastT=setTimeout(()=>t.classList.remove('show'),2200);}
+/* MODULO CLIENTES */
+let cliSearch='';
+async function loadClientesView(){
+  const cont=document.getElementById('cliTable');
+  cont.innerHTML='<div style="text-align:center;padding:60px;color:#9CA3AF;">Cargando clientes...</div>';
+  try{
+    const r=await fetch(SB+'/rest/v1/clientes_frecuentes?id_licencia=eq.'+CID+'&select=*&order=total_compras.desc',{headers:{'apikey':SK,'Authorization':'Bearer '+SK}});
+    const d=r.ok?await r.json():[];
+    clisDB=d;
+    renderClientesView(d);
+  }catch(e){
+    document.getElementById('cliTable').innerHTML='<div style="text-align:center;padding:40px;color:red;">Error al cargar</div>';
+  }
+}
+
+function renderClientesView(data){
+  const cont=document.getElementById('cliTable');
+  const q=document.getElementById('cliSearchInput')?document.getElementById('cliSearchInput').value.toLowerCase():'';
+  const filtered=q?data.filter(c=>c.nombre.toLowerCase().includes(q)||(c.whatsapp&&c.whatsapp.includes(q))):data;
+  if(!filtered.length){
+    cont.innerHTML='<div style="text-align:center;padding:60px;color:#9CA3AF;"><div style="font-size:36px;margin-bottom:10px;">&#128101;</div>Sin clientes aun</div>';
+    return;
+  }
+  cont.innerHTML=filtered.map((c,i)=>{
+    const ini=c.nombre.split(' ').map(x=>x[0]).join('').slice(0,2).toUpperCase();
+    const colors=['#FFF8E7,#B8860B','#EFF6FF,#3B82F6','#F0FFF4,#10B981','#F5F3FF,#8B5CF6','#FFF0F0,#EF4444'];
+    const [bg,col]=colors[i%5].split(',');
+    const ult=c.ultima_compra?new Date(c.ultima_compra).toLocaleDateString('es-CO',{day:'numeric',month:'short',year:'numeric'}):'Nunca';
+    return '<div class="cli-row">'
+      +'<div class="cli-av" style="background:'+bg+';color:'+col+';">'+ini+'</div>'
+      +'<div class="cli-info">'
+        +'<div class="cli-nombre">'+c.nombre+'</div>'
+        +(c.whatsapp?'<div class="cli-sub">&#128241; '+c.whatsapp+'</div>':'')
+        +(c.direccion?'<div class="cli-sub">&#128205; '+c.direccion+(c.detalle?' - '+c.detalle:'')+'</div>':'')
+      +'</div>'
+      +'<div class="cli-stats">'
+        +'<div class="cli-stat"><div class="cli-stat-val">'+fmt(c.total_compras||0)+'</div><div class="cli-stat-lbl">compras</div></div>'
+        +'<div class="cli-stat"><div class="cli-stat-val">'+(c.num_pedidos||0)+'</div><div class="cli-stat-lbl">pedidos</div></div>'
+        +'<div class="cli-stat"><div class="cli-stat-val" style="color:var(--gold);">'+(c.puntos||0).toLocaleString('es-CO')+'</div><div class="cli-stat-lbl">puntos</div></div>'
+      +'</div>'
+      +'<div class="cli-meta">'
+        +'<div style="font-size:10px;color:var(--text3);">Ultima compra</div>'
+        +'<div style="font-size:12px;font-weight:600;color:var(--text2);margin-top:2px;">'+ult+'</div>'
+        +(c.whatsapp?'<a class="cli-wa-btn" href="https://wa.me/57'+c.whatsapp.replace(/[^0-9]/g,"")+'" target="_blank">WhatsApp</a>':'')
+      +'</div>'
+    +'</div>';
+  }).join('');
+}
+
+function filterClientes(){
+  renderClientesView(clisDB);
+}
+
+/* TOAST */
+var tT;
+function toast(m){var t=document.getElementById('toast');t.textContent=m;t.classList.add('s');clearTimeout(tT);tT=setTimeout(()=>t.classList.remove('s'),2300);}
+
 </script>
 </body>
 </html>
