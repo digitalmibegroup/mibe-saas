@@ -935,16 +935,17 @@ body{background:var(--bg);color:var(--text);font-family:'Plus Jakarta Sans',sans
       </div>
     </div>
 
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:8px;">
       <div>
-        <div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px;">Precio venta *</div>
+        <div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px;" id="npPvLabel">Precio venta *</div>
         <input class="inv-modal-input" type="number" id="npPrecioVenta" placeholder="$0" min="0"/>
       </div>
       <div>
-        <div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px;">Precio costo</div>
+        <div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px;" id="npPcLabel">Precio costo</div>
         <input class="inv-modal-input" type="number" id="npPrecioCosto" placeholder="$0" min="0"/>
       </div>
     </div>
+    <div id="npPrecioNota" style="display:none;font-size:11px;color:var(--blue);background:var(--blue-bg);border-radius:8px;padding:8px 12px;margin-bottom:12px;"></div>
 
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px;">
       <div>
@@ -1066,14 +1067,15 @@ body{background:var(--bg);color:var(--text);font-family:'Plus Jakarta Sans',sans
 
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:8px;">
       <div>
-        <div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px;">Precio venta</div>
+        <div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px;" id="editPvLabel">Precio venta</div>
         <input class="inv-modal-input" type="number" id="editPrecioVenta" placeholder="$0" min="0" oninput="updateEditMargen()"/>
       </div>
       <div>
-        <div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px;">Precio costo</div>
+        <div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px;" id="editPcLabel">Precio costo</div>
         <input class="inv-modal-input" type="number" id="editPrecioCosto" placeholder="$0" min="0" oninput="updateEditMargen()"/>
       </div>
     </div>
+    <div id="editPrecioNota" style="display:none;font-size:11px;color:var(--blue);background:var(--blue-bg);border-radius:8px;padding:8px 12px;margin-bottom:8px;"></div>
 
     <!-- Rentabilidad en tiempo real -->
     <div id="editMargenPreview" style="display:none;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px 16px;margin-bottom:12px;">
@@ -1364,7 +1366,11 @@ function addP(id,modo,precioCustom){
   /* precio: custom si viene del picker, sino calcular */
   var precioVenta = precioCustom||0;
   if(!precioVenta){
-    precioVenta = esUnidad ? p.precio_venta : p.precio_venta*(p.uds_empaque||1);
+    if(esUnidad && p.uds_empaque>1){
+      precioVenta = Math.round(p.precio_venta/(p.uds_empaque||1));
+    } else {
+      precioVenta = p.precio_venta;
+    }
   }
   var nombreVenta = esUnidad && p.uds_empaque>1 ? p.nombre.replace(/SixPack|Pack|Combo|Caja/gi,'').trim()+' (unidad)' : p.nombre;
   var cartKey = id+(esUnidad?'_und':'_emp');
@@ -1388,14 +1394,14 @@ function showEmpaquePicker(id){
   if(p.stock===0){toast('Producto agotado');return;}
   pickerProdId=id;
   var udsEmp=p.uds_empaque||1;
-  /* precio empaque = precio unitario * unidades por empaque */
-  var precioEmp=p.precio_venta*udsEmp;
-  var precioUnd=p.precio_venta;
+  /* precio_venta guardado = precio del empaque completo (six pack, combo, etc) */
+  var precioEmp=p.precio_venta;
+  var precioUnd=Math.round(p.precio_venta/udsEmp);
   var udsDisp=p.stock*udsEmp;
   document.getElementById('pickerTitle').textContent=p.nombre.split(' ').slice(0,4).join(' ');
   document.getElementById('pickerStock').textContent=p.stock+' '+p.empaque+' disponibles ('+udsDisp+' unidades)';
   document.getElementById('pickerBtnEmp').innerHTML=p.empaque.charAt(0).toUpperCase()+p.empaque.slice(1)+' completo (x'+udsEmp+')<br><strong>'+fmt(precioEmp)+'</strong>';
-  document.getElementById('pickerBtnUnd').innerHTML='Por unidad<br><strong>'+fmt(precioUnd)+'</strong> c/u';
+  document.getElementById('pickerBtnUnd').innerHTML='Por unidad (1 botella)<br><strong>'+fmt(precioUnd)+'</strong> c/u';
   document.getElementById('pickerBtnEmp').onclick=function(){setPrecioEditable(id,'empaque',precioEmp);};
   document.getElementById('pickerBtnUnd').onclick=function(){setPrecioEditable(id,'unidad',precioUnd);};
   document.getElementById('pickerPrecioWrap').style.display='none';
@@ -2643,6 +2649,21 @@ function updateNpEmpaqueFields(){
   } else {
     wrap.style.display='none';
   }
+  var nota=document.getElementById('npPrecioNota');
+  var pvl=document.getElementById('npPvLabel');
+  var pcl=document.getElementById('npPcLabel');
+  if(emp!=='unidad'){
+    var uds=parseInt(document.getElementById('npUdsEmpaque').value)||6;
+    var empNom=emp==='sixpack'?'six pack':emp;
+    nota.style.display='block';
+    nota.textContent='Ingresa el precio por '+empNom+' completo ('+uds+' unidades). Al vender por unidad, el sistema divide automaticamente.';
+    pvl.textContent='Precio venta (por '+empNom+') *';
+    pcl.textContent='Precio costo (por '+empNom+')';
+  } else {
+    nota.style.display='none';
+    pvl.textContent='Precio venta *';
+    pcl.textContent='Precio costo';
+  }
   updateNpPreview();
 }
 
@@ -2658,6 +2679,21 @@ function updateEditEmpaqueFields(){
   } else {
     wrap.style.display='none';
     document.getElementById('editUdsEmpaque').value=1;
+  }
+  var nota=document.getElementById('editPrecioNota');
+  var pvl=document.getElementById('editPvLabel');
+  var pcl=document.getElementById('editPcLabel');
+  if(emp!=='unidad'){
+    var uds=parseInt(document.getElementById('editUdsEmpaque').value)||6;
+    var empNom=emp==='sixpack'?'six pack':emp;
+    nota.style.display='block';
+    nota.textContent='Ingresa el precio por '+empNom+' completo ('+uds+' unidades). Al vender por unidad, el sistema divide automaticamente.';
+    pvl.textContent='Precio venta (por '+empNom+')';
+    pcl.textContent='Precio costo (por '+empNom+')';
+  } else {
+    nota.style.display='none';
+    pvl.textContent='Precio venta';
+    pcl.textContent='Precio costo';
   }
 }
 
