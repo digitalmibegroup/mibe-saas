@@ -1762,6 +1762,7 @@ function renderInvTable(){
     row+='<div class="inv-act-btn" onclick="openInvModal(\''+pid+'\',\'salida\')" title="Salida">&minus;</div>';
     row+='<div class="inv-act-btn" onclick="openEditProd(\''+pid+'\')" title="Editar" style="font-size:11px;">&#9998;</div>';
     if(estado!=='ok') row+='<div class="inv-act-btn" onclick="crearCompraDesdeInventario(\''+pid+'\')" title="Crear compra" style="background:var(--gold-s);border-color:var(--gold-b);color:var(--gold);font-size:11px;">&#128230;</div>';
+    row+='<div class="inv-act-btn" onclick="eliminarProducto(\''+pid+'\')" title="Eliminar" style="background:var(--red-bg);border-color:var(--red-b);color:var(--red);font-size:12px;">&#128465;</div>';
     row+='</div></td>';
     row+='</tr>';
     return row;
@@ -3232,6 +3233,24 @@ async function actualizarProdSB(prod){
   }catch(e){
     console.error('Error actualizando producto:', e);
     toast('Error al actualizar en base de datos');
+  }
+}
+
+/* Eliminar producto */
+async function eliminarProducto(id){
+  var prod=INVENTARIO.find(function(p){return p.id===id;});
+  if(!prod)return;
+  if(!confirm('¿Eliminar "'+prod.nombre+'"?\nEsta accion no se puede deshacer.'))return;
+  try{
+    var r=await fetch(SB+'/rest/v1/inventario?id=eq.'+id,{method:'DELETE',headers:H});
+    if(!r.ok) throw new Error(await r.text());
+    INVENTARIO=INVENTARIO.filter(function(p){return p.id!==id;});
+    renderInvTable();renderInvStats();renderInvAlerts();
+    if(document.getElementById('vPOS').style.display==='flex')renderPOS();
+    toast('Producto eliminado');
+  }catch(e){
+    console.error('Error eliminando producto:',e);
+    toast('Error al eliminar el producto');
   }
 }
 
