@@ -154,18 +154,22 @@ body{background:var(--bg);color:var(--text);font-family:'Plus Jakarta Sans',sans
 .srch input:focus{border-color:var(--accent-b);background:#fff;}
 .srch-i{position:absolute;left:25px;top:50%;transform:translateY(-50%);font-size:15px;color:var(--text3);}
 .pgrid{overflow-y:auto;flex:1;padding:16px;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;align-content:start;}
-.pc{background:#fff;border:1.5px solid var(--border);border-radius:12px;padding:14px 12px;cursor:pointer;transition:all .15s;position:relative;user-select:none;}
+.pc{background:#fff;border:1.5px solid var(--border);border-radius:12px;padding:0;cursor:pointer;transition:all .15s;position:relative;user-select:none;overflow:hidden;}
 .pc:hover{border-color:var(--accent-b);box-shadow:var(--shadow-md);transform:translateY(-1px);}
 .pc:active{transform:scale(.97);}
 .pc.sel{border-color:var(--accent);background:var(--accent-s);}
 .pc.sel .pc-price{color:var(--accent);}
 .pc.zero{opacity:.4;cursor:not-allowed;pointer-events:none;}
-.pc-qty{position:absolute;top:8px;right:8px;background:var(--accent);color:#fff;font-size:10px;font-weight:700;padding:2px 7px;border-radius:10px;}
-.pc-stock-badge{position:absolute;top:8px;left:8px;font-size:9px;font-weight:700;padding:2px 6px;border-radius:8px;}
+.pc-img-w{width:100%;height:90px;background:var(--bg);border-radius:10px 10px 0 0;overflow:hidden;flex-shrink:0;}
+.pc-img-w img{width:100%;height:100%;object-fit:cover;display:block;}
+.pc-img-ph{width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:28px;}
+.pc-body{padding:8px 10px 10px;}
+.pc-qty{position:absolute;top:8px;right:8px;background:var(--accent);color:#fff;font-size:10px;font-weight:700;padding:2px 7px;border-radius:10px;z-index:2;}
+.pc-stock-badge{position:absolute;top:8px;left:8px;font-size:9px;font-weight:700;padding:2px 6px;border-radius:8px;z-index:2;}
 .pc-stock-badge.ok{background:var(--green-bg);color:var(--green);}
 .pc-stock-badge.low{background:var(--yellow-bg);color:var(--yellow);}
 .pc-stock-badge.out{background:var(--red-bg);color:var(--red);}
-.pc-name{font-size:12px;font-weight:500;color:var(--text);line-height:1.4;margin-bottom:8px;min-height:34px;padding-top:4px;}
+.pc-name{font-size:12px;font-weight:500;color:var(--text);line-height:1.4;margin-bottom:6px;min-height:32px;}
 .pc-price{font-size:14px;font-weight:700;color:var(--accent);}
 .pos-r{width:290px;flex-shrink:0;display:flex;flex-direction:column;background:#fff;}
 .pos-s{padding:8px 12px;border-bottom:1px solid var(--border);flex-shrink:0;}
@@ -953,6 +957,22 @@ body{background:var(--bg);color:var(--text);font-family:'Plus Jakarta Sans',sans
       </div>
     </div>
 
+    <!-- Imagen producto -->
+    <div style="margin-bottom:16px;">
+      <div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;">Imagen del producto</div>
+      <div style="display:flex;align-items:center;gap:12px;">
+        <div id="npImgPreview" style="width:64px;height:64px;border-radius:10px;background:var(--bg);border:1.5px dashed var(--border2);display:flex;align-items:center;justify-content:center;font-size:26px;overflow:hidden;flex-shrink:0;">🍾</div>
+        <div>
+          <label style="display:inline-flex;align-items:center;gap:6px;background:var(--bg);border:1.5px solid var(--border2);border-radius:8px;padding:7px 12px;font-size:12px;font-weight:600;cursor:pointer;color:var(--text2);">
+            📷 Subir foto
+            <input type="file" id="npImgFile" accept="image/*" style="display:none;" onchange="seleccionarImagenNP(this)"/>
+          </label>
+          <button id="npBtnQuitarImg" onclick="quitarImagenNP()" style="display:none;margin-left:6px;padding:7px 12px;border:1.5px solid var(--red-b);border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;background:var(--red-bg);color:var(--red);font-family:inherit;">Quitar</button>
+          <div style="font-size:10px;color:var(--text3);margin-top:5px;">JPG/PNG max 5MB. Se comprime automaticamente.</div>
+        </div>
+      </div>
+    </div>
+
     <!-- Preview -->
     <div id="npPreview" style="display:none;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:16px;">
       <div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;">Vista previa en el POS</div>
@@ -1062,6 +1082,22 @@ body{background:var(--bg);color:var(--text);font-family:'Plus Jakarta Sans',sans
       <div>
         <div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px;">Stock actual</div>
         <input class="inv-modal-input" type="number" id="editStock" placeholder="0" min="0"/>
+      </div>
+    </div>
+
+    <!-- Imagen producto -->
+    <div style="margin-bottom:16px;">
+      <div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;">Imagen del producto</div>
+      <div style="display:flex;align-items:center;gap:12px;">
+        <div id="editImgPreview" style="width:64px;height:64px;border-radius:10px;background:var(--bg);border:1.5px dashed var(--border2);display:flex;align-items:center;justify-content:center;font-size:26px;overflow:hidden;flex-shrink:0;">🍾</div>
+        <div>
+          <label style="display:inline-flex;align-items:center;gap:6px;background:var(--bg);border:1.5px solid var(--border2);border-radius:8px;padding:7px 12px;font-size:12px;font-weight:600;cursor:pointer;color:var(--text2);">
+            📷 Cambiar foto
+            <input type="file" id="editImgFile" accept="image/*" style="display:none;" onchange="seleccionarImagenEdit(this)"/>
+          </label>
+          <button id="editBtnQuitarImg" onclick="quitarImagenEdit()" style="display:none;margin-left:6px;padding:7px 12px;border:1.5px solid var(--red-b);border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;background:var(--red-bg);color:var(--red);font-family:inherit;">Quitar</button>
+          <div style="font-size:10px;color:var(--text3);margin-top:5px;">JPG/PNG max 5MB. Se comprime automaticamente.</div>
+        </div>
       </div>
     </div>
 
@@ -1289,11 +1325,17 @@ function renderPOS(){
     else stockBadge='<div class="pc-stock-badge ok">'+stockLabel+'</div>';
     /* Si el producto tiene empaque multiple, mostrar picker al tocar */
     var clickFn = udsEmp>1 ? 'showEmpaquePicker(\''+p.id+'\')' : 'addP(\''+p.id+'\')';
+    var imgHtml = p.imagen
+      ? '<img src="'+p.imagen+'" alt="" style="width:100%;height:100%;object-fit:cover;display:block;"/>'
+      : '<div class="pc-img-ph">🍾</div>';
     return '<div class="'+cls+'" onclick="'+clickFn+'">'
       +badge
       +stockBadge
+      +'<div class="pc-img-w">'+imgHtml+'</div>'
+      +'<div class="pc-body">'
       +'<div class="pc-name">'+p.nombre+'</div>'
       +'<div class="pc-price">'+pr+'</div>'
+      +'</div>'
     +'</div>';
   }).join('');
 }
@@ -1668,7 +1710,10 @@ function renderInvTable(){
     var mLabel=margen!==null?margen+'%':'--';
     var pid=p.id;
     var row='<tr>';
-    row+='<td><div style="font-weight:600;color:var(--text);font-size:12px;">'+p.nombre+'</div><div style="font-size:10px;color:var(--text3);">'+p.categoria+'</div></td>';
+    var thumbHtml=p.imagen
+      ?'<img src="'+p.imagen+'" style="width:36px;height:36px;border-radius:6px;object-fit:cover;flex-shrink:0;" alt=""/>'
+      :'<div style="width:36px;height:36px;border-radius:6px;background:var(--bg);display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;">🍾</div>';
+    row+='<td><div style="display:flex;align-items:center;gap:8px;">'+thumbHtml+'<div><div style="font-weight:600;color:var(--text);font-size:12px;">'+p.nombre+'</div><div style="font-size:10px;color:var(--text3);">'+p.categoria+'</div></div></div></td>';
     row+='<td style="text-align:right;"><strong>'+fmt(p.precio_venta)+'</strong></td>';
     row+='<td style="text-align:right;">'+(p.precio_costo>0?fmt(p.precio_costo):'<span style="color:#9CA3AF;font-size:11px;">Sin costo</span>')+'</td>';
     row+='<td style="text-align:center;"><span style="font-size:13px;font-weight:800;color:'+mColor+';">'+mLabel+'</span></td>';
@@ -1708,6 +1753,73 @@ function renderInvTable(){
 }
 
 
+/* ==================== IMAGENES DE PRODUCTOS ==================== */
+var npImagenB64=null,editImagenB64=null,editImagenChanged=false;
+
+function comprimirImagen(file,cb){
+  var reader=new FileReader();
+  reader.onload=function(e){
+    var img=new Image();
+    img.onload=function(){
+      var max=400,w=img.width,h=img.height;
+      if(w>max){h=Math.round(h*max/w);w=max;}
+      if(h>max){w=Math.round(w*max/h);h=max;}
+      var canvas=document.createElement('canvas');
+      canvas.width=w;canvas.height=h;
+      canvas.getContext('2d').drawImage(img,0,0,w,h);
+      cb(canvas.toDataURL('image/jpeg',0.72));
+    };
+    img.src=e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+function seleccionarImagenNP(input){
+  if(!input.files||!input.files[0])return;
+  var file=input.files[0];
+  if(file.size>5*1024*1024){toast('La imagen es muy grande (max 5MB)');return;}
+  comprimirImagen(file,function(b64){
+    npImagenB64=b64;
+    var prev=document.getElementById('npImgPreview');
+    prev.innerHTML='<img src="'+b64+'" style="width:100%;height:100%;object-fit:cover;" alt=""/>';
+    document.getElementById('npBtnQuitarImg').style.display='inline-flex';
+  });
+}
+
+function quitarImagenNP(){
+  npImagenB64=null;
+  var prev=document.getElementById('npImgPreview');
+  var btn=document.getElementById('npBtnQuitarImg');
+  var fi=document.getElementById('npImgFile');
+  if(prev)prev.innerHTML='🍾';
+  if(btn)btn.style.display='none';
+  if(fi)fi.value='';
+}
+
+function seleccionarImagenEdit(input){
+  if(!input.files||!input.files[0])return;
+  var file=input.files[0];
+  if(file.size>5*1024*1024){toast('La imagen es muy grande (max 5MB)');return;}
+  comprimirImagen(file,function(b64){
+    editImagenB64=b64;
+    editImagenChanged=true;
+    var prev=document.getElementById('editImgPreview');
+    prev.innerHTML='<img src="'+b64+'" style="width:100%;height:100%;object-fit:cover;" alt=""/>';
+    document.getElementById('editBtnQuitarImg').style.display='inline-flex';
+  });
+}
+
+function quitarImagenEdit(){
+  editImagenB64=null;
+  editImagenChanged=true;
+  var prev=document.getElementById('editImgPreview');
+  var btn=document.getElementById('editBtnQuitarImg');
+  var fi=document.getElementById('editImgFile');
+  if(prev)prev.innerHTML='🍾';
+  if(btn)btn.style.display='none';
+  if(fi)fi.value='';
+}
+
 /* ==================== NUEVO PRODUCTO ==================== */
 function openNuevoProd(){
   document.getElementById('modalNuevoProd').style.display='flex';
@@ -1719,6 +1831,7 @@ function openNuevoProd(){
   document.getElementById('npStockMin').value='2';
   document.getElementById('npNuevaCatWrap').style.display='none';
   document.getElementById('npPreview').style.display='none';
+  quitarImagenNP();
   setTimeout(function(){document.getElementById('npNombre').focus();},100);
 }
 function closeNuevoProd(){document.getElementById('modalNuevoProd').style.display='none';}
@@ -2549,7 +2662,7 @@ function guardarNuevoProd(){
   if(!cat){toast('Selecciona una categoria');return;}
   if(!pv){toast('Ingresa el precio de venta');return;}
   var newId='prod_'+Date.now();
-  INVENTARIO.push({id:newId,nombre:nombre,categoria:cat,precio_venta:pv,precio_costo:pc,stock:stock,stock_min:stockMin,empaque:empaque,uds_empaque:udsEmpaque});
+  INVENTARIO.push({id:newId,nombre:nombre,categoria:cat,precio_venta:pv,precio_costo:pc,stock:stock,stock_min:stockMin,empaque:empaque,uds_empaque:udsEmpaque,imagen:npImagenB64||null});
   if(CATS_POS.indexOf(cat)===-1){
     CATS_POS.push(cat);
     var posBar=document.getElementById('cats');var d=document.createElement('div');d.className='cat';d.textContent=cat;
@@ -2597,6 +2710,7 @@ function guardarEditProd(){
   }
   prod.nombre=nombre;prod.categoria=cat;prod.precio_venta=pv;prod.precio_costo=pc;prod.stock_min=sm;prod.stock=st;
   prod.empaque=empaque;prod.uds_empaque=udsEmpaque;
+  if(editImagenChanged) prod.imagen=editImagenB64;
   /* Update Supabase */
   var editedProd=INVENTARIO.find(function(p){return p.id===editProdId;});
   if(editedProd) actualizarProdSB(editedProd);
@@ -2633,6 +2747,20 @@ function openEditProd(id){
     }
   }
   updateEditMargen();
+  /* Imagen */
+  editImagenB64=prod.imagen||null;
+  editImagenChanged=false;
+  var editPrev=document.getElementById('editImgPreview');
+  var editQBtn=document.getElementById('editBtnQuitarImg');
+  if(editPrev&&editQBtn){
+    if(prod.imagen){
+      editPrev.innerHTML='<img src="'+prod.imagen+'" style="width:100%;height:100%;object-fit:cover;" alt=""/>';
+      editQBtn.style.display='inline-flex';
+    } else {
+      editPrev.innerHTML='🍾';
+      editQBtn.style.display='none';
+    }
+  }
   document.getElementById('modalEditProd').style.display='flex';
 }
 
@@ -3019,7 +3147,8 @@ async function cargarInventarioSB(){
           stock_min: parseInt(p.stock_min)||2,
           empaque: p.empaque||'unidad',
           uds_empaque: parseInt(p.uds_empaque)||1,
-          uds_sueltas: parseInt(p.uds_sueltas)||0
+          uds_sueltas: parseInt(p.uds_sueltas)||0,
+          imagen: p.imagen||null
         };
       });
       /* Rebuild CATS_POS from loaded products */
@@ -3052,6 +3181,7 @@ async function guardarProdSB(prod){
         empaque: prod.empaque||'unidad',
         uds_empaque: prod.uds_empaque||1,
         uds_sueltas: prod.uds_sueltas||0,
+        imagen: prod.imagen||null,
         id_licencia: CID
       })
     });
@@ -3078,7 +3208,8 @@ async function actualizarProdSB(prod){
         stock_min: prod.stock_min,
         empaque: prod.empaque||'unidad',
         uds_empaque: prod.uds_empaque||1,
-        uds_sueltas: prod.uds_sueltas||0
+        uds_sueltas: prod.uds_sueltas||0,
+        imagen: prod.imagen!==undefined?prod.imagen:null
       })
     });
     if(!r.ok) throw new Error(await r.text());
