@@ -1031,6 +1031,22 @@ body{background:var(--bg);color:var(--text);font-family:'Plus Jakarta Sans',sans
 
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
       <div>
+        <div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px;">Tipo de empaque</div>
+        <select class="inv-modal-input" id="editEmpaque" onchange="updateEditEmpaqueFields()">
+          <option value="unidad">Unidad (venta individual)</option>
+          <option value="sixpack">Six Pack (6 unidades)</option>
+          <option value="combo">Combo (personalizado)</option>
+          <option value="caja">Caja (personalizado)</option>
+        </select>
+      </div>
+      <div id="editUdsEmpaqueWrap" style="display:none;">
+        <div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px;">Unidades por empaque</div>
+        <input class="inv-modal-input" type="number" id="editUdsEmpaque" placeholder="Ej: 6" min="2" value="6"/>
+      </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
+      <div>
         <div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px;">Categoria</div>
         <select class="inv-modal-input" id="editCategoria">
           <option>Aguardiente</option><option>Cervezas</option><option>Cocteles</option>
