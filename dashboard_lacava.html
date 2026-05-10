@@ -375,6 +375,27 @@ body{background:var(--bg);color:var(--text);font-family:'Plus Jakarta Sans',sans
 @media(max-width:768px){.nueva-compra-grid{grid-template-columns:1fr;}.add-item-row{grid-template-columns:1fr 1fr;}.compras-stats{grid-template-columns:1fr 1fr;}.compras-body{padding:12px 16px;}.compras-tabs{padding:0 16px;}}
 
 
+/* VENTAS MODULE */
+#vVentas{flex-direction:column;flex:1;overflow:hidden;}
+.ven-header{padding:16px 24px;background:#fff;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;flex-shrink:0;flex-wrap:wrap;}
+.ven-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;padding:16px 24px;flex-shrink:0;}
+.ven-stat{background:#fff;border:1px solid var(--border);border-radius:var(--r);padding:14px 16px;box-shadow:var(--shadow);}
+.ven-stat-lbl{font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;}
+.ven-stat-val{font-size:20px;font-weight:800;color:var(--text);}
+.ven-stat-sub{font-size:11px;color:var(--text3);margin-top:3px;}
+.ven-list{flex:1;overflow-y:auto;padding:0 24px 24px;}
+.ven-card{background:#fff;border:1px solid var(--border);border-radius:10px;padding:14px 16px;margin-bottom:8px;display:flex;align-items:center;gap:12px;cursor:pointer;transition:all .15s;}
+.ven-card:hover{border-color:var(--gold-b);box-shadow:var(--shadow-md);}
+.ven-num{font-size:11px;font-weight:700;color:var(--text3);min-width:38px;}
+.ven-info{flex:1;min-width:0;}
+.ven-cli{font-size:13px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.ven-meta{font-size:11px;color:var(--text3);margin-top:2px;}
+.ven-right{text-align:right;flex-shrink:0;}
+.ven-total{font-size:15px;font-weight:800;color:var(--text);}
+.ven-pago{font-size:11px;color:var(--text3);margin-top:2px;}
+.ven-det-btn{font-size:11px;font-weight:600;color:var(--gold);background:var(--gold-s);border:1px solid var(--gold-b);border-radius:7px;padding:5px 10px;flex-shrink:0;white-space:nowrap;}
+.ven-empty{text-align:center;padding:80px 20px;color:var(--text3);}
+
 /* GASTOS & CONTABILIDAD */
 #vGastos,#vContabilidad{flex-direction:column;flex:1;overflow:hidden;}
 .mod-body{flex:1;overflow-y:auto;padding:20px 24px;}
@@ -455,7 +476,7 @@ body{background:var(--bg);color:var(--text);font-family:'Plus Jakarta Sans',sans
         <div class="nav-sl">Principal</div>
         <a class="ni on" id="niInicio" onclick="goView('inicio',this)"><div class="ni-ic"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></div>Resumen</a>
         <a class="ni" id="niPOS" onclick="goView('pos',this)"><div class="ni-ic"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg></div>Punto de Venta<span class="nbadge">POS</span></a>
-        <a class="ni" onclick="toast('Ventas proximamente')"><div class="ni-ic"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></div>Ventas</a>
+        <a class="ni" id="niVentas" onclick="goView('ventas',this)"><div class="ni-ic"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></div>Ventas</a>
       </div>
       <div class="nav-s">
         <div class="nav-sl">Clientes</div>
@@ -808,7 +829,43 @@ body{background:var(--bg);color:var(--text);font-family:'Plus Jakarta Sans',sans
       </div>
     </div>
 
+    <!-- VENTAS -->
+    <div id="vVentas" style="display:none;">
+      <div class="ven-header">
+        <input type="month" id="venFiltroMes" style="border:1.5px solid var(--border);border-radius:8px;padding:7px 12px;font-size:13px;font-family:inherit;color:var(--text);outline:none;" onchange="cambiarMesVentas()"/>
+        <select id="venFiltroMetodo" style="border:1.5px solid var(--border);border-radius:8px;padding:7px 12px;font-size:13px;font-family:inherit;color:var(--text);outline:none;background:#fff;" onchange="renderVentasList()">
+          <option value="">Todos los pagos</option>
+          <option value="efectivo">💵 Efectivo</option>
+          <option value="transferencia">🏦 Transferencia</option>
+          <option value="nequi">📱 Nequi</option>
+          <option value="daviplata">🔴 Daviplata</option>
+        </select>
+        <input type="text" id="venSearch" placeholder="Buscar cliente..." style="border:1.5px solid var(--border);border-radius:8px;padding:7px 12px;font-size:13px;font-family:inherit;color:var(--text);outline:none;width:180px;" oninput="renderVentasList()"/>
+        <div style="margin-left:auto;font-size:12px;color:var(--text3);" id="venCount"></div>
+      </div>
+      <div class="ven-stats" id="venStats"></div>
+      <div class="ven-list" id="venList"></div>
+    </div>
+
   </main>
+</div>
+
+<!-- MODAL DETALLE VENTA -->
+<div id="modalVentaDet" style="position:fixed;inset:0;z-index:600;display:none;align-items:center;justify-content:center;padding:20px;background:rgba(0,0,0,.5);">
+  <div style="background:#fff;border-radius:18px;max-width:500px;width:100%;max-height:88vh;overflow-y:auto;animation:popIn .3s cubic-bezier(.34,1.56,.64,1);">
+    <div style="padding:24px 24px 0;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+        <div style="font-size:17px;font-weight:700;" id="venDetTitulo">Venta #---</div>
+        <div onclick="closeVentaDet()" style="cursor:pointer;font-size:20px;color:var(--text3);line-height:1;">&#215;</div>
+      </div>
+      <div style="font-size:12px;color:var(--text3);margin-bottom:16px;" id="venDetMeta"></div>
+      <div id="venDetItems" style="margin-bottom:16px;"></div>
+      <div id="venDetTotales" style="background:var(--bg);border-radius:10px;padding:14px 16px;margin-bottom:20px;"></div>
+    </div>
+    <div style="padding:0 24px 24px;">
+      <button onclick="closeVentaDet()" style="width:100%;padding:11px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;background:#fff;color:var(--text2);">Cerrar</button>
+    </div>
+  </div>
 </div>
 
 <!-- MODAL VENTA -->
@@ -1213,7 +1270,7 @@ function goView(v,el){
   document.querySelectorAll('.ni').forEach(function(i){i.classList.remove('on');});
   if(el)el.classList.add('on');
   closeSB();
-  var views=['vInicio','vPOS','vClientes','vInventario','vCompras','vGastos','vContabilidad'];
+  var views=['vInicio','vPOS','vClientes','vInventario','vCompras','vGastos','vContabilidad','vVentas'];
   views.forEach(function(id){document.getElementById(id).style.display='none';});
 
   if(v==='pos'){
@@ -1241,6 +1298,10 @@ function goView(v,el){
     document.getElementById('vContabilidad').style.display='flex';
     document.getElementById('tgs').textContent='Estado de resultados';
     initContabilidad();
+  } else if(v==='ventas'){
+    document.getElementById('vVentas').style.display='flex';
+    document.getElementById('tgs').textContent='Historial de ventas';
+    initVentas();
   } else {
     document.getElementById('vInicio').style.display='block';
     document.getElementById('tgs').textContent='Resumen de tu negocio';
@@ -3185,6 +3246,145 @@ function updateEditMargen(){
 }
 
 /* ==================== SUPABASE — INVENTARIO ==================== */
+
+/* ==================== MODULO VENTAS ==================== */
+var VENTAS_MES=[];
+
+async function initVentas(){
+  var mes=new Date().toISOString().slice(0,7);
+  document.getElementById('venFiltroMes').value=mes;
+  document.getElementById('venFiltroMetodo').value='';
+  document.getElementById('venSearch').value='';
+  await cargarVentasSB(mes);
+  renderVentasStats();
+  renderVentasList();
+}
+
+async function cargarVentasSB(mes){
+  try{
+    var parts=mes.split('-');
+    var desde=mes+'-01T00:00:00';
+    var hasta=new Date(parseInt(parts[0]),parseInt(parts[1]),1).toISOString();
+    var r=await fetch(SB+'/rest/v1/ventas?id_cliente=eq.'+CID
+      +'&created_at=gte.'+desde+'&created_at=lt.'+hasta
+      +'&select=*&order=created_at.desc',
+      {headers:{'apikey':SK,'Authorization':'Bearer '+SK}});
+    VENTAS_MES=r.ok?await r.json():[];
+  }catch(e){VENTAS_MES=[];}
+}
+
+async function cambiarMesVentas(){
+  var mes=document.getElementById('venFiltroMes').value;
+  document.getElementById('venList').innerHTML='<div class="ven-empty">Cargando...</div>';
+  await cargarVentasSB(mes);
+  renderVentasStats();
+  renderVentasList();
+}
+
+function renderVentasStats(){
+  var total=VENTAS_MES.reduce(function(s,v){return s+(parseFloat(v.total)||0);},0);
+  var num=VENTAS_MES.length;
+  var ticket=num>0?Math.round(total/num):0;
+  var metodos={};
+  VENTAS_MES.forEach(function(v){metodos[v.metodo_pago]=(metodos[v.metodo_pago]||0)+1;});
+  var favMetodo=Object.keys(metodos).sort(function(a,b){return metodos[b]-metodos[a];})[0]||'--';
+  var PI={efectivo:'💵',transferencia:'🏦',nequi:'📱',daviplata:'🔴'};
+  var favLabel=(PI[favMetodo]||'')+' '+(favMetodo.charAt(0).toUpperCase()+favMetodo.slice(1));
+  document.getElementById('venStats').innerHTML=
+    '<div class="ven-stat"><div class="ven-stat-lbl">Total del mes</div><div class="ven-stat-val" style="color:var(--green);font-size:18px;">'+fmt(total)+'</div><div class="ven-stat-sub">ingresos</div></div>'
+   +'<div class="ven-stat"><div class="ven-stat-lbl">Ventas</div><div class="ven-stat-val">'+num+'</div><div class="ven-stat-sub">transacciones</div></div>'
+   +'<div class="ven-stat"><div class="ven-stat-lbl">Ticket promedio</div><div class="ven-stat-val" style="font-size:18px;">'+fmt(ticket)+'</div><div class="ven-stat-sub">por venta</div></div>'
+   +'<div class="ven-stat"><div class="ven-stat-lbl">Metodo favorito</div><div class="ven-stat-val" style="font-size:15px;">'+favLabel+'</div><div class="ven-stat-sub">'+(metodos[favMetodo]||0)+' ventas</div></div>';
+}
+
+function renderVentasList(){
+  var metodoF=document.getElementById('venFiltroMetodo').value;
+  var q=(document.getElementById('venSearch').value||'').toLowerCase();
+  var PI={efectivo:'💵',transferencia:'🏦',nequi:'📱',daviplata:'🔴'};
+  var data=VENTAS_MES.filter(function(v){
+    var matchM=!metodoF||v.metodo_pago===metodoF;
+    var matchQ=!q||(v.cliente_nombre||'').toLowerCase().indexOf(q)>=0;
+    return matchM&&matchQ;
+  });
+  document.getElementById('venCount').textContent=data.length+' venta'+(data.length!==1?'s':'');
+  if(!data.length){
+    document.getElementById('venList').innerHTML='<div class="ven-empty"><div style="font-size:40px;margin-bottom:12px;">📋</div><div>Sin ventas en este periodo</div></div>';
+    return;
+  }
+  document.getElementById('venList').innerHTML=data.map(function(v){
+    var num='#'+String(v.numero_venta||'---').padStart(3,'0');
+    var fecha=new Date(v.created_at).toLocaleString('es-CO',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'});
+    var cli=v.cliente_nombre||'Cliente';
+    var icono=PI[v.metodo_pago]||'💵';
+    var dom=parseFloat(v.domicilio)||0;
+    var domTxt=dom>0?' · Dom: '+fmt(dom):'';
+    return '<div class="ven-card" onclick="openVentaDet(\''+v.id+'\',this)">'
+      +'<div class="ven-num">'+num+'</div>'
+      +'<div class="ven-info">'
+        +'<div class="ven-cli">'+cli+'</div>'
+        +'<div class="ven-meta">'+fecha+' · '+icono+' '+v.metodo_pago+domTxt+'</div>'
+      +'</div>'
+      +'<div class="ven-right">'
+        +'<div class="ven-total">'+fmt(parseFloat(v.total)||0)+'</div>'
+        +'<div class="ven-pago">ver detalle</div>'
+      +'</div>'
+    +'</div>';
+  }).join('');
+}
+
+async function openVentaDet(id){
+  var v=VENTAS_MES.find(function(x){return x.id===id;});
+  if(!v)return;
+  var PI={efectivo:'💵',transferencia:'🏦',nequi:'📱',daviplata:'🔴'};
+  var num='Venta #'+String(v.numero_venta||'---').padStart(3,'0');
+  var fecha=new Date(v.created_at).toLocaleString('es-CO',{dateStyle:'long',timeStyle:'short'});
+  var cli=v.cliente_nombre||'Cliente';
+  var icono=PI[v.metodo_pago]||'💵';
+  document.getElementById('venDetTitulo').textContent=num;
+  document.getElementById('venDetMeta').innerHTML=
+    fecha+' &nbsp;·&nbsp; '+cli+' &nbsp;·&nbsp; '+icono+' '+v.metodo_pago
+    +(v.direccion_entrega?' &nbsp;·&nbsp; 📍 '+v.direccion_entrega+(v.detalle_entrega?' - '+v.detalle_entrega:''):'');
+  document.getElementById('venDetItems').innerHTML='<div style="text-align:center;padding:20px;color:var(--text3);">Cargando productos...</div>';
+  document.getElementById('venDetTotales').innerHTML='';
+  document.getElementById('modalVentaDet').style.display='flex';
+  try{
+    var r=await fetch(SB+'/rest/v1/detalle_ventas?venta_id=eq.'+id+'&select=*',
+      {headers:{'apikey':SK,'Authorization':'Bearer '+SK}});
+    var items=r.ok?await r.json():[];
+    if(!items.length){
+      document.getElementById('venDetItems').innerHTML='<div style="text-align:center;padding:20px;color:var(--text3);">Sin detalle disponible</div>';
+    } else {
+      document.getElementById('venDetItems').innerHTML=
+        '<table style="width:100%;border-collapse:collapse;">'
+        +'<thead><tr style="background:var(--bg);">'
+        +'<th style="padding:8px 10px;text-align:left;font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;">Producto</th>'
+        +'<th style="padding:8px 10px;text-align:center;font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;">Cant.</th>'
+        +'<th style="padding:8px 10px;text-align:right;font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;">Precio</th>'
+        +'<th style="padding:8px 10px;text-align:right;font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;">Total</th>'
+        +'</tr></thead><tbody>'
+        +items.map(function(it){
+          return '<tr style="border-bottom:1px solid var(--border);">'
+            +'<td style="padding:10px 10px;font-size:13px;font-weight:600;">'+it.producto_nombre+'</td>'
+            +'<td style="padding:10px 10px;text-align:center;font-size:13px;">'+it.cantidad+'</td>'
+            +'<td style="padding:10px 10px;text-align:right;font-size:13px;">'+fmt(it.precio_unitario)+'</td>'
+            +'<td style="padding:10px 10px;text-align:right;font-size:13px;font-weight:700;">'+fmt(it.precio_total)+'</td>'
+          +'</tr>';
+        }).join('')
+        +'</tbody></table>';
+    }
+    var subtotal=parseFloat(v.subtotal)||parseFloat(v.total)||0;
+    var dom=parseFloat(v.domicilio)||0;
+    var total=parseFloat(v.total)||0;
+    document.getElementById('venDetTotales').innerHTML=
+      (dom>0?'<div style="display:flex;justify-content:space-between;margin-bottom:6px;font-size:13px;"><span style="color:var(--text2);">Subtotal</span><span>'+fmt(subtotal)+'</span></div>'
+        +'<div style="display:flex;justify-content:space-between;margin-bottom:6px;font-size:13px;"><span style="color:var(--text2);">Domicilio</span><span>'+fmt(dom)+'</span></div>':'')
+      +'<div style="display:flex;justify-content:space-between;font-size:15px;font-weight:800;"><span>Total</span><span style="color:var(--green);">'+fmt(total)+'</span></div>';
+  }catch(e){
+    document.getElementById('venDetItems').innerHTML='<div style="text-align:center;padding:20px;color:red;">Error al cargar</div>';
+  }
+}
+
+function closeVentaDet(){document.getElementById('modalVentaDet').style.display='none';}
 
 /* Cargar inventario desde Supabase al iniciar */
 async function cargarInventarioSB(){
