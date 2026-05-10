@@ -770,8 +770,8 @@ body{background:var(--bg);color:var(--text);font-family:'Plus Jakarta Sans',sans
       <div class="mod-body">
         <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px;flex-wrap:wrap;">
           <div style="font-size:15px;font-weight:700;">Estado de Resultados</div>
-          <input type="month" id="contMes" style="border:1.5px solid var(--border);border-radius:8px;padding:7px 12px;font-size:13px;font-family:inherit;color:var(--text);outline:none;" onchange="renderEstadoResultados()"/>
-          <div style="margin-left:auto;font-size:11px;color:var(--text3);background:var(--yellow-bg);border:1px solid var(--yellow-b);padding:5px 12px;border-radius:20px;">Ventas: datos demo &mdash; conectar Supabase para datos reales</div>
+          <input type="month" id="contMes" style="border:1.5px solid var(--border);border-radius:8px;padding:7px 12px;font-size:13px;font-family:inherit;color:var(--text);outline:none;" onchange="cambiarMesContabilidad()"/>
+          <div id="contLoadingBadge" style="margin-left:auto;font-size:11px;color:var(--text3);background:var(--bg);border:1px solid var(--border);padding:5px 12px;border-radius:20px;display:none;">Cargando...</div>
         </div>
         <!-- Cards resumen -->
         <div class="cont-cards" id="contCards" style="grid-template-columns:repeat(5,1fr);margin-bottom:24px;"></div>
@@ -2334,53 +2334,84 @@ async function cambiarMesGastos(){
 }
 
 /* ==================== MODULO CONTABILIDAD ==================== */
-function initContabilidad(){
-  renderEstadoResultados();
+async function initContabilidad(){
+  var n=new Date();
+  var mesActual=n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0');
+  var cm=document.getElementById('contMes');
+  if(cm&&!cm.value) cm.value=mesActual;
+  await renderEstadoResultados();
   renderRentabilidad();
 }
 
-function getVentasMes(mes){
-  /* mes = 'YYYY-MM' o vacio para mes actual */
-  var n=new Date();
-  var target=mes||(n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0'));
-  /* En produccion esto viene de Supabase, por ahora usamos datos demo */
-  var ventasDemo=1247500;
-  var costoDemo=748500;
-  return {ventas:ventasDemo,costo:costoDemo};
+async function getVentasMesSB(mes){
+  var parts=mes.split('-');
+  var y=parseInt(parts[0]),m=parseInt(parts[1]);
+  var desde=mes+'-01';
+  var hasta=m===12?(y+1)+'-01-01':y+'-'+String(m+1).padStart(2,'0')+'-01';
+  var totalVentas=0,costo=0,numVentas=0;
+  try{
+    var r1=await fetch(SB+'/rest/v1/ventas?id_cliente=eq.'+CID+'&created_at=gte.'+desde+'&created_at=lt.'+hasta+'&select=id,total',
+      {headers:{'apikey':SK,'Authorization':'Bearer '+SK}});
+    if(r1.ok){
+      var vdata=await r1.json();
+      numVentas=vdata.length;
+      totalVentas=vdata.reduce(function(s,v){return s+(parseFloat(v.total)||0);},0);
+      if(vdata.length>0){
+        var ids=vdata.map(function(v){return v.id;}).join(',');
+        var r2=await fetch(SB+'/rest/v1/detalle_ventas?venta_id=in.('+ids+')&select=producto_nombre,cantidad',
+          {headers:{'apikey':SK,'Authorization':'Bearer '+SK}});
+        if(r2.ok){
+          var items=await r2.json();
+          items.forEach(function(item){
+            var nombre=(item.producto_nombre||'').toLowerCase();
+            var prod=INVENTARIO.find(function(p){
+              var pn=p.nombre.toLowerCase();
+              return pn===nombre||nombre.indexOf(pn.split(' ').slice(0,3).join(' '))===0;
+            });
+            if(prod&&prod.precio_costo>0) costo+=prod.precio_costo*(parseInt(item.cantidad)||1);
+          });
+        }
+      }
+    }
+  }catch(e){console.warn('Error cargando ventas del mes:',e);}
+  return {ventas:totalVentas,costo:costo,numVentas:numVentas};
 }
 
-function renderEstadoResultados(){
+async function renderEstadoResultados(){
+  var erEl=document.getElementById('estadoResultados');
+  if(erEl) erEl.innerHTML='<div style="text-align:center;padding:30px;color:#9CA3AF;font-size:13px;">Cargando datos...</div>';
+  var badge=document.getElementById('contLoadingBadge');
+  if(badge) badge.style.display='block';
   var mes=document.getElementById('contMes')?document.getElementById('contMes').value:'';
   var n=new Date();
   if(!mes) mes=n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0');
-  var vData=getVentasMes(mes);
-  var ventas=vData.ventas;
-  var costo=vData.costo;
-  /* Gastos del mes */
+  /* Cargar gastos del mes si no están en memoria */
   var gastosDelMes=GASTOS.filter(function(g){return g.fecha.substring(0,7)===mes;});
+  if(!gastosDelMes.length){
+    await cargarGastosSB(mes);
+    gastosDelMes=GASTOS.filter(function(g){return g.fecha.substring(0,7)===mes;});
+  }
+  var vData=await getVentasMesSB(mes);
+  var ventas=vData.ventas,costo=vData.costo,numVentas=vData.numVentas;
   var totalGastos=gastosDelMes.reduce(function(s,g){return s+g.valor;},0);
   var utilBruta=ventas-costo;
   var utilOper=utilBruta-totalGastos;
   var margenBruto=ventas>0?Math.round(utilBruta/ventas*100):0;
   var margenOper=ventas>0?Math.round(utilOper/ventas*100):0;
-  var erEl=document.getElementById('estadoResultados');
-  if(!erEl) return;
+  if(!erEl){if(badge)badge.style.display='none';return;}
   var colorOper=utilOper>=0?'var(--green)':'var(--red)';
   erEl.innerHTML='<div class="er-row header"><span>Concepto</span><span>Valor</span><span>%</span></div>'
-    +'<div class="er-row ingresos"><span class="er-label">&#11014; Ingresos por ventas</span><span class="er-val positive">'+fmt(ventas)+'</span><span class="er-pct">100%</span></div>'
-    +'<div class="er-row costo"><span class="er-label">&#11015; Costo de mercancia</span><span class="er-val negative">-'+fmt(costo)+'</span><span class="er-pct">'+Math.round(costo/ventas*100)+'%</span></div>'
+    +'<div class="er-row ingresos"><span class="er-label">&#11014; Ingresos por ventas <span style="font-size:10px;color:var(--text3);">('+numVentas+' ventas)</span></span><span class="er-val positive">'+fmt(ventas)+'</span><span class="er-pct">100%</span></div>'
+    +'<div class="er-row costo"><span class="er-label">&#11015; Costo de mercancia</span><span class="er-val negative">-'+fmt(costo)+'</span><span class="er-pct">'+(ventas>0?Math.round(costo/ventas*100):0)+'%</span></div>'
     +'<div class="er-row subtotal"><span class="er-label"><strong>= Utilidad bruta</strong></span><span class="er-val" style="color:var(--green);"><strong>'+fmt(utilBruta)+'</strong></span><span class="er-pct"><strong>'+margenBruto+'%</strong></span></div>'
     +'<div style="height:1px;background:var(--border);margin:4px 0;"></div>'
-    +gastosDelMes.length?gastosDelMes.reduce(function(acc,g){
-      acc.cats[g.categoria]=(acc.cats[g.categoria]||0)+g.valor;return acc;
-    },{cats:{}}).cats:'',''
     +'<div class="er-row gastos"><span class="er-label">&#11015; Gastos operacionales</span><span class="er-val negative">-'+fmt(totalGastos)+'</span><span class="er-pct">'+(ventas>0?Math.round(totalGastos/ventas*100):0)+'%</span></div>'
     +'<div class="er-row result"><span class="er-label"><strong>= Utilidad operacional</strong></span><span class="er-val" style="color:'+colorOper+';font-size:18px;"><strong>'+fmt(utilOper)+'</strong></span><span class="er-pct" style="color:'+colorOper+';"><strong>'+margenOper+'%</strong></span></div>';
   /* Cards resumen */
   var cards=document.getElementById('contCards');
   if(cards){
     cards.innerHTML=[
-      {label:'Ventas del mes',val:fmt(ventas),color:'var(--blue)',bg:'var(--blue-bg)',icon:'&#11014;'},
+      {label:'Ventas del mes',val:fmt(ventas)+' ('+numVentas+')',color:'var(--blue)',bg:'var(--blue-bg)',icon:'&#11014;'},
       {label:'Costo mercancia',val:fmt(costo),color:'var(--yellow)',bg:'var(--yellow-bg)',icon:'&#128230;'},
       {label:'Utilidad bruta',val:fmt(utilBruta)+' ('+margenBruto+'%)',color:'var(--green)',bg:'var(--green-bg)',icon:'&#128176;'},
       {label:'Gastos operac.',val:fmt(totalGastos),color:'var(--red)',bg:'var(--red-bg)',icon:'&#11015;'},
@@ -2393,6 +2424,28 @@ function renderEstadoResultados(){
       +'</div>';
     }).join('');
   }
+  /* Distribucion gastos sidebar */
+  var gbar2=document.getElementById('gastosCatBars2');
+  if(gbar2&&totalGastos>0){
+    var porCat2={};
+    gastosDelMes.forEach(function(g){porCat2[g.categoria]=(porCat2[g.categoria]||0)+g.valor;});
+    var topCat2=Object.keys(porCat2).sort(function(a,b){return porCat2[b]-porCat2[a];});
+    gbar2.innerHTML=topCat2.slice(0,6).map(function(cat){
+      var pct=Math.round(porCat2[cat]/totalGastos*100);
+      return '<div style="margin-bottom:10px;">'
+        +'<div style="display:flex;justify-content:space-between;margin-bottom:4px;">'
+          +'<span style="font-size:12px;font-weight:600;color:var(--text);">'+cat+'</span>'
+          +'<span style="font-size:12px;font-weight:700;color:var(--text2);">'+fmt(porCat2[cat])+' ('+pct+'%)</span>'
+        +'</div>'
+        +'<div style="height:6px;background:var(--bg);border-radius:4px;overflow:hidden;">'
+          +'<div style="height:100%;width:'+pct+'%;background:var(--accent);border-radius:4px;transition:width .8s;"></div>'
+        +'</div>'
+      +'</div>';
+    }).join('');
+  } else if(gbar2){
+    gbar2.innerHTML='<div style="text-align:center;padding:20px;color:#9CA3AF;font-size:12px;">Sin gastos registrados este mes</div>';
+  }
+  if(badge) badge.style.display='none';
 }
 
 function renderRentabilidad(){
@@ -2436,6 +2489,12 @@ function renderRentabilidad(){
     +'</tbody></table>';
 }
 
+
+async function cambiarMesContabilidad(){
+  var mes=document.getElementById('contMes').value;
+  await cargarGastosSB(mes);
+  await renderEstadoResultados();
+}
 
 var tT;
 function toast(m){var t=document.getElementById('toast');t.textContent=m;t.classList.add('s');clearTimeout(tT);tT=setTimeout(function(){t.classList.remove('s');},2500);}
