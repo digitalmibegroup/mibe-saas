@@ -522,16 +522,16 @@ body{background:var(--bg);color:var(--text);font-family:'Plus Jakarta Sans',sans
           <div style="display:flex;gap:8px;flex-shrink:0;"><button style="padding:7px 14px;border-radius:7px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;border:1px solid var(--border2);background:#fff;color:var(--text2);">Ver mensajes</button><button style="padding:7px 14px;border-radius:7px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;border:none;background:var(--gold-l);color:#fff;">Enviar campana</button></div>
         </div>
         <div class="sh"><div class="st">Resumen del dia</div><div class="sl"></div></div>
-        <div class="kpi-grid">
-          <div class="kc"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;"><div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;">Ventas hoy</div><div style="width:36px;height:36px;border-radius:8px;background:#FFF8E7;display:flex;align-items:center;justify-content:center;font-size:16px;">&#128176;</div></div><div style="font-size:26px;font-weight:700;color:var(--gold);margin-bottom:8px;">$847.000</div><div style="display:flex;align-items:center;gap:6px;"><span class="trend up">+12%</span><span style="font-size:11px;color:var(--text3);">vs ayer</span></div></div>
-          <div class="kc"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;"><div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;">Pedidos hoy</div><div style="width:36px;height:36px;border-radius:8px;background:#EFF6FF;display:flex;align-items:center;justify-content:center;font-size:16px;">&#128230;</div></div><div style="font-size:26px;font-weight:700;margin-bottom:8px;">7</div><div style="display:flex;align-items:center;gap:6px;"><span class="trend up">+3</span><span style="font-size:11px;color:var(--text3);">vs ayer</span></div></div>
-          <div class="kc"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;"><div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;">Clientes activos</div><div style="width:36px;height:36px;border-radius:8px;background:#F0FFF4;display:flex;align-items:center;justify-content:center;font-size:16px;">&#128101;</div></div><div style="font-size:26px;font-weight:700;margin-bottom:8px;">34</div><div style="display:flex;align-items:center;gap:6px;"><span class="trend up">+2</span><span style="font-size:11px;color:var(--text3);">este mes</span></div></div>
-          <div class="kc"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;"><div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;">Utilidad bruta</div><div style="width:36px;height:36px;border-radius:8px;background:#FFF5F5;display:flex;align-items:center;justify-content:center;font-size:16px;">&#128200;</div></div><div style="font-size:26px;font-weight:700;margin-bottom:8px;">38%</div><div style="display:flex;align-items:center;gap:6px;"><span class="trend dn">-2%</span><span style="font-size:11px;color:var(--text3);">vs mes ant.</span></div></div>
+        <div class="kpi-grid" id="kpiGrid">
+          <div class="kc"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;"><div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;">Ventas hoy</div><div style="width:36px;height:36px;border-radius:8px;background:#FFF8E7;display:flex;align-items:center;justify-content:center;font-size:16px;">&#128176;</div></div><div style="font-size:26px;font-weight:700;color:var(--gold);margin-bottom:8px;" id="kpiVentasHoy">--</div><div style="font-size:11px;color:var(--text3);" id="kpiVentasHoySub">cargando...</div></div>
+          <div class="kc"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;"><div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;">Pedidos hoy</div><div style="width:36px;height:36px;border-radius:8px;background:#EFF6FF;display:flex;align-items:center;justify-content:center;font-size:16px;">&#128230;</div></div><div style="font-size:26px;font-weight:700;margin-bottom:8px;" id="kpiPedidosHoy">--</div><div style="font-size:11px;color:var(--text3);" id="kpiPedidosHoySub">cargando...</div></div>
+          <div class="kc"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;"><div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;">Ventas del mes</div><div style="width:36px;height:36px;border-radius:8px;background:#F0FFF4;display:flex;align-items:center;justify-content:center;font-size:16px;">&#128200;</div></div><div style="font-size:22px;font-weight:700;color:var(--green);margin-bottom:8px;" id="kpiVentasMes">--</div><div style="font-size:11px;color:var(--text3);" id="kpiVentasMesSub">cargando...</div></div>
+          <div class="kc"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;"><div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;">Utilidad del mes</div><div style="width:36px;height:36px;border-radius:8px;background:#FFF5F5;display:flex;align-items:center;justify-content:center;font-size:16px;">&#128181;</div></div><div style="font-size:22px;font-weight:700;margin-bottom:8px;" id="kpiUtilidad">--</div><div style="font-size:11px;color:var(--text3);" id="kpiUtilidadSub">cargando...</div></div>
         </div>
         <div class="sh"><div class="st">Ventas de la semana</div><div class="sl"></div></div>
         <div class="mid-grid">
-          <div class="card"><div class="ch"><div><div class="ct">Ventas Ultimos 7 dias</div><div class="cs">Comparativo COP</div></div><span class="ca">Ver reporte</span></div><div class="cb"><div class="chart-area" id="chart"></div><div class="cfoot"><span style="font-size:12px;color:var(--text3);">Total semana</span><span style="font-size:18px;font-weight:700;">$4.230.000</span></div></div></div>
-          <div class="card"><div class="ch"><div><div class="ct">Pedidos recientes</div><div class="cs">Ultimas transacciones</div></div><span class="ca">Ver todos</span></div><div class="ol" id="orderList"></div></div>
+          <div class="card"><div class="ch"><div><div class="ct">Ventas Ultimos 7 dias</div><div class="cs">Comparativo COP</div></div></div><div class="cb"><div class="chart-area" id="chart"></div><div class="cfoot"><span style="font-size:12px;color:var(--text3);">Total semana</span><span style="font-size:18px;font-weight:700;" id="chartTotSemana">--</span></div></div></div>
+          <div class="card"><div class="ch"><div><div class="ct">Pedidos recientes</div><div class="cs">Ultimas transacciones</div></div><span class="ca" onclick="goView('ventas',document.getElementById('niVentas'))">Ver todos</span></div><div class="ol" id="orderList"></div></div>
         </div>
         <div class="sh"><div class="st">Inventario - Productos - Fidelizacion</div><div class="sl"></div></div>
         <div class="bot-grid">
@@ -1253,7 +1253,7 @@ async function init(){
   setupTime();
   /* Load inventory from Supabase first */
   await cargarInventarioSB();
-  loadDash();
+  await loadDash();
   buildCatsPOS();
   loadClis();
 }
@@ -1311,54 +1311,154 @@ function toggleSB(){document.getElementById('sb').classList.toggle('o');document
 function closeSB(){document.getElementById('sb').classList.remove('o');document.getElementById('sov').classList.remove('o');}
 
 /* ==================== DASHBOARD ==================== */
-function loadDash(){
-  var days=['Lun','Mar','Mie','Jue','Vie','Sab','Dom'],sales=[320,480,290,610,540,720,470],max=Math.max.apply(null,sales);
-  var chart=document.getElementById('chart');
-  days.forEach(function(d,i){
-    var pct=(sales[i]/max*100).toFixed(0);
-    var g=document.createElement('div');g.className='cbw';
-    g.innerHTML='<div class="cbt" style="height:130px;"><div class="cbf'+(i===5?' today':'')+'" style="height:0%"></div></div><div class="cbl">'+d+'</div>';
-    chart.appendChild(g);
-    setTimeout(function(){g.querySelector('.cbf').style.height=pct+'%';},100+i*60);
-  });
-  var orders=[
-    {name:'Carolina M.',detail:'Ron Medellin x 2',amount:'$148.000',time:'14 min',bg:'#FFF8E7',col:'#B8860B'},
-    {name:'Santiago R.',detail:'Whisky Old Parr x 1',amount:'$210.000',time:'1h',bg:'#EFF6FF',col:'#3B82F6'},
-    {name:'Valentina G.',detail:'Aguardiente x 3',amount:'$96.000',time:'2h',bg:'#F0FFF4',col:'#10B981'},
-    {name:'Daniela P.',detail:'Ron x 4',amount:'$64.000',time:'3h',bg:'#FFF0F0',col:'#EF4444'},
-    {name:'Andres T.',detail:'Tequila x 1',amount:'$87.000',time:'Ayer',bg:'#F5F3FF',col:'#8B5CF6'}
-  ];
-  var ol=document.getElementById('orderList');
-  orders.forEach(function(o){
-    var ini=o.name.split(' ').map(function(x){return x[0];}).join('').slice(0,2);
-    ol.innerHTML+='<div class="oi"><div class="oav" style="background:'+o.bg+';color:'+o.col+';">'+ini+'</div><div class="on2"><div class="oname">'+o.name+'</div><div class="odet">'+o.detail+'</div></div><div class="or"><div class="oamt">'+o.amount+'</div><div class="otm">Hace '+o.time+'</div></div></div>';
-  });
+async function loadDash(){
+  var H2={headers:{'apikey':SK,'Authorization':'Bearer '+SK}};
+  var hoy=new Date().toISOString().split('T')[0];
+  var hoyDesde=hoy+'T00:00:00';
+  var hoyHasta=hoy+'T23:59:59';
+  var hace7=new Date(Date.now()-6*24*60*60*1000).toISOString().split('T')[0];
+  var mes=new Date().toISOString().slice(0,7);
+  var mesDesde=mes+'-01T00:00:00';
+  var mesHasta=new Date(parseInt(mes.split('-')[0]),parseInt(mes.split('-')[1]),1).toISOString();
+
+  /* --- Render inmediato con INVENTARIO ya cargado --- */
   var invAlert=INVENTARIO.filter(function(p){return p.stock<=p.stock_min;}).length;
   if(invAlert>0){
     var ab=document.getElementById('alertBanner');
     if(ab){ab.style.display='flex';ab.querySelector('.ab-text').textContent=invAlert+' producto'+(invAlert>1?'s':'')+' con stock bajo o agotado';}
   }
-  var invs=[{name:'Ron VdC Esencial',qty:8,max:12,c:'#10B981'},{name:'Aguardiente Azul',qty:4,max:15,c:'#F59E0B'},{name:'Old Parr 750ml',qty:2,max:4,c:'#EF4444'},{name:'Tequila Jimador',qty:5,max:6,c:'#F59E0B'},{name:'Gato Negro Malbec',qty:1,max:8,c:'#EF4444'}];
-  var il=document.getElementById('invList');
-  invs.forEach(function(item){
-    var pct=(item.qty/item.max*100).toFixed(0);
-    il.innerHTML+='<div class="ir"><div class="idot" style="background:'+item.c+'"></div><div class="iname">'+item.name+'</div><div class="ibar"><div class="ibf" data-w="'+pct+'" style="width:0%;background:'+item.c+'"></div></div><div class="iqty" style="color:'+item.c+'">'+item.qty+'u</div></div>';
+  var sorted=[].concat(INVENTARIO).sort(function(a,b){return a.stock-b.stock;}).slice(0,5);
+  var il=document.getElementById('invList');il.innerHTML='';
+  if(!sorted.length){il.innerHTML='<div style="padding:20px;text-align:center;color:var(--text3);font-size:12px;">Sin productos</div>';}
+  sorted.forEach(function(p){
+    var max=Math.max(p.stock_min*3,1);
+    var pct=Math.min(100,Math.round(p.stock/max*100));
+    var c=p.stock===0?'var(--red)':p.stock<=p.stock_min?'var(--yellow)':'var(--green)';
+    il.innerHTML+='<div class="ir"><div class="idot" style="background:'+c+'"></div><div class="iname">'+p.nombre.split(' ').slice(0,3).join(' ')+'</div><div class="ibar"><div class="ibf" data-w="'+pct+'" style="width:0%;background:'+c+'"></div></div><div class="iqty" style="color:'+c+'">'+p.stock+'u</div></div>';
   });
   setTimeout(function(){document.querySelectorAll('.ibf').forEach(function(el){el.style.width=el.dataset.w+'%';});},300);
-  var top=[{rank:1,name:'Ron VdC Esencial',units:'23 und',rev:'$689.000'},{rank:2,name:'Aguardiente Azul',units:'19 und',rev:'$380.000'},{rank:3,name:'Old Parr 12 anos',units:'8 und',rev:'$336.000'},{rank:4,name:'Tequila Jimador',units:'11 und',rev:'$297.000'},{rank:5,name:'Gato Negro',units:'6 und',rev:'$198.000'}];
-  var pl=document.getElementById('prodList');
-  top.forEach(function(p){pl.innerHTML+='<div class="pr"><div class="prank'+(p.rank===1?' t1':'')+'">'+p.rank+'</div><div class="pn2"><div class="pname">'+p.name+'</div><div class="punits">'+p.units+' mes</div></div><div class="prev">'+p.rev+'</div></div>';});
-  var pts=[{name:'Carolina M.',pts:2840,max:3000,bg:'#FFF8E7',c:'#B8860B'},{name:'Daniela P.',pts:1920,max:3000,bg:'#EFF6FF',c:'#3B82F6'},{name:'Santiago R.',pts:1540,max:3000,bg:'#F0FFF4',c:'#10B981'},{name:'Valentina G.',pts:980,max:3000,bg:'#F5F3FF',c:'#8B5CF6'}];
-  var ptEl=document.getElementById('ptsList');
-  pts.forEach(function(c){
-    var ini=c.name.split(' ').map(function(x){return x[0];}).join('').slice(0,2);
-    var pct=(c.pts/c.max*100).toFixed(0);
-    ptEl.innerHTML+='<div class="ptr"><div class="pav" style="background:'+c.bg+';color:'+c.c+';">'+ini+'</div><div class="pinfo"><div class="pnm">'+c.name+'</div><div class="pprog"><div class="pbt"><div class="pbf" data-w="'+pct+'" style="width:0%;background:'+c.c+'"></div></div><span class="pbl">'+c.pts.toLocaleString('es-CO')+'pts</span></div></div><div class="psc"><div class="psn">'+c.pts.toLocaleString('es-CO')+'</div><div class="psl">puntos</div></div></div>';
-  });
-  setTimeout(function(){document.querySelectorAll('.pbf').forEach(function(el){el.style.width=el.dataset.w+'%';});},400);
-  var fin=[{label:'Ingresos del mes',value:'$8.430.000',sub:'Total ventas',trend:'+15%',up:true},{label:'Costo de productos',value:'$5.230.000',sub:'62% ingresos',trend:'+3%',up:false},{label:'Utilidad bruta',value:'$3.200.000',sub:'Margen 38%',trend:'+18%',up:true}];
-  var fg=document.getElementById('finGrid');
-  fin.forEach(function(f){fg.innerHTML+='<div class="fc"><div class="fl">'+f.label+'</div><div class="fv">'+f.value+'</div><div class="fs"><span class="trend '+(f.up?'up':'dn')+'" style="font-size:10px;">'+f.trend+'</span>'+f.sub+'</div></div>';});
+
+  /* --- Fetch paralelo --- */
+  try{
+    var results=await Promise.all([
+      fetch(SB+'/rest/v1/ventas?id_cliente=eq.'+CID+'&created_at=gte.'+hoyDesde+'&created_at=lte.'+hoyHasta+'&select=id,total,cliente_nombre,metodo_pago,created_at&order=created_at.desc',H2),
+      fetch(SB+'/rest/v1/ventas?id_cliente=eq.'+CID+'&created_at=gte.'+hace7+'T00:00:00&select=total,created_at',H2),
+      fetch(SB+'/rest/v1/ventas?id_cliente=eq.'+CID+'&created_at=gte.'+mesDesde+'&created_at=lt.'+mesHasta+'&select=id,total&limit=500',H2),
+      fetch(SB+'/rest/v1/gastos?id_licencia=eq.'+CID+'&fecha=gte.'+mes+'-01&select=valor',H2),
+      fetch(SB+'/rest/v1/clientes_frecuentes?id_licencia=eq.'+CID+'&select=nombre,puntos&order=puntos.desc&limit=4',H2)
+    ]);
+    var ventasHoy=results[0].ok?await results[0].json():[];
+    var ventas7d=results[1].ok?await results[1].json():[];
+    var ventasMes=results[2].ok?await results[2].json():[];
+    var gastosMes=results[3].ok?await results[3].json():[];
+    var topClis=results[4].ok?await results[4].json():[];
+
+    /* KPI CARDS */
+    var totHoy=ventasHoy.reduce(function(s,v){return s+(parseFloat(v.total)||0);},0);
+    var totMes=ventasMes.reduce(function(s,v){return s+(parseFloat(v.total)||0);},0);
+    var totGas=gastosMes.reduce(function(s,g){return s+(parseFloat(g.valor)||0);},0);
+    var utilidad=totMes-totGas;
+    var margen=totMes>0?Math.round(utilidad/totMes*100):0;
+    document.getElementById('kpiVentasHoy').textContent=fmt(totHoy);
+    document.getElementById('kpiVentasHoySub').textContent=ventasHoy.length+' pedido'+(ventasHoy.length!==1?'s':'')+' hoy';
+    document.getElementById('kpiPedidosHoy').textContent=ventasHoy.length;
+    document.getElementById('kpiPedidosHoySub').textContent=totHoy>0?'Total: '+fmt(totHoy):'Sin ventas aun';
+    document.getElementById('kpiVentasMes').textContent=fmt(totMes);
+    document.getElementById('kpiVentasMesSub').textContent=ventasMes.length+' ventas este mes';
+    document.getElementById('kpiUtilidad').textContent=fmt(utilidad);
+    document.getElementById('kpiUtilidadSub').textContent='Margen '+(margen>0?margen+'%':'--')+' (ventas - gastos)';
+    document.getElementById('kpiUtilidad').style.color=utilidad>=0?'var(--green)':'var(--red)';
+
+    /* GRAFICA 7 DIAS */
+    var diasSem=['Dom','Lun','Mar','Mie','Jue','Vie','Sab'];
+    var dias7=[];
+    for(var i=6;i>=0;i--){
+      var d=new Date(Date.now()-i*24*60*60*1000);
+      dias7.push({label:diasSem[d.getDay()],date:d.toISOString().split('T')[0],total:0,esHoy:i===0});
+    }
+    ventas7d.forEach(function(v){
+      var vd=v.created_at.split('T')[0];
+      var dia=dias7.find(function(d){return d.date===vd;});
+      if(dia)dia.total+=(parseFloat(v.total)||0);
+    });
+    var maxV=Math.max.apply(null,dias7.map(function(d){return d.total;}));
+    if(maxV===0)maxV=1;
+    var totSem=dias7.reduce(function(s,d){return s+d.total;},0);
+    document.getElementById('chartTotSemana').textContent=fmt(totSem);
+    var chartEl=document.getElementById('chart');chartEl.innerHTML='';
+    dias7.forEach(function(dia,i){
+      var pct=Math.round(dia.total/maxV*100);
+      var g=document.createElement('div');g.className='cbw';
+      g.innerHTML='<div class="cbt" style="height:130px;"><div class="cbf'+(dia.esHoy?' today':'')+'" style="height:0%"></div></div><div class="cbl">'+dia.label+'</div>';
+      chartEl.appendChild(g);
+      setTimeout(function(){g.querySelector('.cbf').style.height=pct+'%';},100+i*60);
+    });
+
+    /* PEDIDOS RECIENTES */
+    var ol=document.getElementById('orderList');ol.innerHTML='';
+    var colors=['#FFF8E7,#B8860B','#EFF6FF,#3B82F6','#F0FFF4,#10B981','#FFF0F0,#EF4444','#F5F3FF,#8B5CF6'];
+    var PI={efectivo:'💵',transferencia:'🏦',nequi:'📱',daviplata:'🔴'};
+    if(!ventasHoy.length){
+      ol.innerHTML='<div style="padding:24px;text-align:center;color:var(--text3);font-size:12px;">Sin pedidos hoy</div>';
+    } else {
+      ventasHoy.slice(0,5).forEach(function(v,i){
+        var ini=(v.cliente_nombre||'CL').split(' ').map(function(x){return x[0];}).join('').slice(0,2).toUpperCase();
+        var cols=colors[i%5].split(',');
+        var hace=Math.round((Date.now()-new Date(v.created_at).getTime())/60000);
+        var haceStr=hace<60?hace+' min':Math.round(hace/60)+'h';
+        ol.innerHTML+='<div class="oi"><div class="oav" style="background:'+cols[0]+';color:'+cols[1]+';">'+ini+'</div><div class="on2"><div class="oname">'+(v.cliente_nombre||'Cliente')+'</div><div class="odet">'+(PI[v.metodo_pago]||'💵')+' '+v.metodo_pago+'</div></div><div class="or"><div class="oamt">'+fmt(parseFloat(v.total)||0)+'</div><div class="otm">Hace '+haceStr+'</div></div></div>';
+      });
+    }
+
+    /* TOP PRODUCTOS DEL MES */
+    var pl=document.getElementById('prodList');pl.innerHTML='';
+    var ventaIds=ventasMes.map(function(v){return v.id;});
+    if(ventaIds.length>0&&ventaIds.length<=300){
+      try{
+        var r6=await fetch(SB+'/rest/v1/detalle_ventas?venta_id=in.('+ventaIds.join(',')+')'+'&select=producto_nombre,cantidad',H2);
+        if(r6.ok){
+          var dets=await r6.json();
+          var pm={};
+          dets.forEach(function(d){pm[d.producto_nombre]=(pm[d.producto_nombre]||0)+(d.cantidad||1);});
+          var top=Object.keys(pm).map(function(n){return {n:n,q:pm[n]};}).sort(function(a,b){return b.q-a.q;}).slice(0,5);
+          if(!top.length){pl.innerHTML='<div style="padding:20px;text-align:center;color:var(--text3);font-size:12px;">Sin ventas este mes</div>';}
+          top.forEach(function(p,i){
+            pl.innerHTML+='<div class="pr"><div class="prank'+(i===0?' t1':'')+'">'+( i+1)+'</div><div class="pn2"><div class="pname">'+p.n.split(' ').slice(0,4).join(' ')+'</div><div class="punits">'+p.q+' und vendidas</div></div></div>';
+          });
+        }
+      }catch(e){pl.innerHTML='<div style="padding:20px;text-align:center;color:var(--text3);font-size:12px;">Sin datos</div>';}
+    } else if(ventaIds.length===0){
+      pl.innerHTML='<div style="padding:20px;text-align:center;color:var(--text3);font-size:12px;">Sin ventas este mes</div>';
+    }
+
+    /* RANKING PUNTOS */
+    var ptEl=document.getElementById('ptsList');ptEl.innerHTML='';
+    var ptColors=['#FFF8E7,#B8860B','#EFF6FF,#3B82F6','#F0FFF4,#10B981','#F5F3FF,#8B5CF6'];
+    var conPuntos=topClis.filter(function(c){return (c.puntos||0)>0;});
+    if(!conPuntos.length){
+      ptEl.innerHTML='<div style="padding:24px;text-align:center;color:var(--text3);font-size:12px;">Sin clientes con puntos aun</div>';
+    } else {
+      var maxPts=conPuntos[0].puntos||1;
+      conPuntos.forEach(function(c,i){
+        var ini=(c.nombre||'CL').split(' ').map(function(x){return x[0];}).join('').slice(0,2).toUpperCase();
+        var cols=ptColors[i%4].split(',');
+        var pct=Math.round((c.puntos/maxPts)*100);
+        ptEl.innerHTML+='<div class="ptr"><div class="pav" style="background:'+cols[0]+';color:'+cols[1]+';">'+ini+'</div><div class="pinfo"><div class="pnm">'+(c.nombre||'Cliente')+'</div><div class="pprog"><div class="pbt"><div class="pbf" data-w="'+pct+'" style="width:0%;background:'+cols[1]+'"></div></div><span class="pbl">'+c.puntos.toLocaleString('es-CO')+'pts</span></div></div><div class="psc"><div class="psn">'+c.puntos.toLocaleString('es-CO')+'</div><div class="psl">puntos</div></div></div>';
+      });
+      setTimeout(function(){document.querySelectorAll('.pbf').forEach(function(el){el.style.width=el.dataset.w+'%';});},400);
+    }
+
+    /* ESTADO FINANCIERO */
+    var fg=document.getElementById('finGrid');fg.innerHTML='';
+    var finRows=[
+      {label:'Ingresos del mes',value:fmt(totMes),sub:ventasMes.length+' ventas',up:true},
+      {label:'Gastos operacionales',value:fmt(totGas),sub:gastosMes.length+' registros',up:false},
+      {label:'Utilidad operacional',value:fmt(utilidad),sub:'Margen '+(totMes>0?margen+'%':'--'),up:utilidad>=0}
+    ];
+    finRows.forEach(function(f){fg.innerHTML+='<div class="fc"><div class="fl">'+f.label+'</div><div class="fv" style="color:'+(f.up?'var(--green)':'var(--red)')+'">'+f.value+'</div><div class="fs">'+f.sub+'</div></div>';});
+  }catch(e){
+    console.warn('Error cargando dashboard:',e);
+  }
 }
 
 /* ==================== POS ==================== */
