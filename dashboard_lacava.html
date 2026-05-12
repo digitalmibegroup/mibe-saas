@@ -424,6 +424,61 @@ body{background:var(--bg);color:var(--text);font-family:'Plus Jakarta Sans',sans
 .er-pct{font-size:12px;font-weight:700;color:var(--text3);min-width:40px;text-align:right;}
 @media(max-width:900px){.gastos-grid{grid-template-columns:1fr;}.cont-grid{grid-template-columns:1fr;}.g-stat-grid{grid-template-columns:repeat(2,1fr);}.cont-cards{grid-template-columns:1fr;}}
 
+/* REPORTES MODULE */
+#vReportes{flex-direction:column;flex:1;overflow:hidden;}
+.rep-header{background:#fff;border-bottom:1px solid var(--border);padding:0 24px;display:flex;align-items:center;gap:0;flex-shrink:0;}
+.rep-tab{padding:14px 20px;font-size:13px;font-weight:600;color:var(--text3);cursor:pointer;border-bottom:3px solid transparent;transition:all .15s;white-space:nowrap;}
+.rep-tab:hover{color:var(--text);}
+.rep-tab.on{color:var(--gold);border-bottom-color:var(--gold);}
+.rep-body{flex:1;overflow-y:auto;padding:20px 24px;}
+.rep-panel{display:none;}
+.rep-panel.on{display:block;}
+.rep-controls{background:#fff;border:1px solid var(--border);border-radius:var(--r);padding:16px 20px;margin-bottom:20px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;box-shadow:var(--shadow);}
+.rep-lbl{font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;white-space:nowrap;}
+.rep-inp{border:1.5px solid var(--border);border-radius:8px;padding:8px 12px;font-size:13px;font-family:inherit;color:var(--text);outline:none;background:#fff;}
+.rep-inp:focus{border-color:var(--gold-l);}
+.rep-btn{padding:8px 18px;background:var(--gold-l);color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap;}
+.rep-btn:hover{background:var(--gold);}
+.rep-btn.sec{background:#fff;color:var(--text2);border:1.5px solid var(--border);}
+.rep-btn.sec:hover{border-color:var(--gold-b);color:var(--gold);}
+.rep-kpi-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:20px;}
+.rep-kc{background:#fff;border:1px solid var(--border);border-radius:var(--r);padding:18px 20px;box-shadow:var(--shadow);}
+.rep-kl{font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;}
+.rep-kv{font-size:24px;font-weight:800;color:var(--text);}
+.rep-ks{font-size:11px;color:var(--text3);margin-top:4px;}
+.rep-grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px;}
+.rep-section{background:#fff;border:1px solid var(--border);border-radius:var(--r);box-shadow:var(--shadow);overflow:hidden;}
+.rep-sh{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;}
+.rep-st{font-size:14px;font-weight:700;}
+.rep-table{width:100%;border-collapse:collapse;}
+.rep-table th{padding:9px 14px;font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;background:#fff;border-bottom:2px solid var(--border);text-align:left;white-space:nowrap;}
+.rep-table td{padding:10px 14px;border-bottom:1px solid var(--border);font-size:13px;vertical-align:middle;}
+.rep-table tr:last-child td{border-bottom:none;}
+.rep-table tr:hover td{background:#FAFAFA;}
+.rep-bar-row{display:flex;align-items:center;gap:10px;padding:10px 16px;border-bottom:1px solid var(--border);}
+.rep-bar-row:last-child{border-bottom:none;}
+.rep-bar-lbl{font-size:12px;font-weight:500;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.rep-bar-track{flex:1.5;height:6px;background:var(--bg);border-radius:4px;overflow:hidden;}
+.rep-bar-fill{height:100%;border-radius:4px;background:var(--gold-b);transition:width .8s ease;}
+.rep-bar-val{font-size:12px;font-weight:700;text-align:right;min-width:80px;}
+.rep-pm-row{display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid var(--border);}
+.rep-pm-row:last-child{border-bottom:none;}
+.rep-pm-ic{font-size:20px;flex-shrink:0;}
+.rep-pm-info{flex:1;}
+.rep-pm-name{font-size:13px;font-weight:600;}
+.rep-pm-bar{height:5px;background:var(--bg);border-radius:4px;overflow:hidden;margin-top:5px;}
+.rep-pm-fill{height:100%;border-radius:4px;transition:width .8s ease;}
+.rep-pm-pct{font-size:14px;font-weight:800;text-align:right;min-width:60px;}
+.sem{display:inline-flex;align-items:center;justify-content:center;width:62px;height:24px;border-radius:20px;font-size:11px;font-weight:700;}
+.sem.g{background:var(--green-bg);color:var(--green);}
+.sem.y{background:var(--yellow-bg);color:var(--yellow);}
+.sem.r{background:var(--red-bg);color:var(--red);}
+.sem.n{background:var(--bg);color:var(--text3);}
+.rep-empty{text-align:center;padding:60px 20px;color:var(--text3);}
+.rep-loading{text-align:center;padding:40px 20px;color:var(--text3);font-size:14px;}
+@media(max-width:900px){.rep-kpi-grid{grid-template-columns:1fr 1fr;}.rep-grid2{grid-template-columns:1fr;}}
+@media(max-width:600px){.rep-kpi-grid{grid-template-columns:1fr;}.rep-controls{flex-direction:column;align-items:stretch;}}
+
 /* RESPONSIVE */
 @media(max-width:1200px){.pgrid{grid-template-columns:repeat(3,minmax(0,1fr));}}
 @media(max-width:900px){.pgrid{grid-template-columns:repeat(2,minmax(0,1fr));}}
@@ -490,7 +545,7 @@ body{background:var(--bg);color:var(--text);font-family:'Plus Jakarta Sans',sans
         <a class="ni" id="niCompras" onclick="goView('compras',this)"><div class="ni-ic"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg></div>Compras<span class="nbadge" id="comprasBadge" style="display:none;background:var(--accent);">0</span></a>
         <a class="ni" id="niGastos" onclick="goView('gastos',this)"><div class="ni-ic"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></div>Gastos</a>
         <a class="ni" id="niContabilidad" onclick="goView('contabilidad',this)"><div class="ni-ic"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></div>Contabilidad</a>
-        <a class="ni" onclick="toast('Reportes proximamente')"><div class="ni-ic"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div>Reportes</a>
+        <a class="ni" id="niReportes" onclick="goView('reportes',this)"><div class="ni-ic"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg></div>Reportes</a>
       </div>
     </nav>
     <div class="sb-bot">
@@ -846,6 +901,42 @@ body{background:var(--bg);color:var(--text);font-family:'Plus Jakarta Sans',sans
       <div class="ven-stats" id="venStats"></div>
       <div class="ven-list" id="venList"></div>
     </div>
+
+    <!-- REPORTES -->
+    <div id="vReportes" style="display:none;">
+      <div class="rep-header">
+        <div class="rep-tab on" id="repTabVentas" onclick="showRepTab('ventas')">&#128202; Ventas</div>
+        <div class="rep-tab" id="repTabInventario" onclick="showRepTab('inventario')">&#128230; Inventario</div>
+        <div class="rep-tab" id="repTabRentabilidad" onclick="showRepTab('rentabilidad')">&#128201; Rentabilidad</div>
+      </div>
+      <div class="rep-body">
+
+        <!-- Panel Ventas -->
+        <div class="rep-panel on" id="repPanelVentas">
+          <div class="rep-controls">
+            <span class="rep-lbl">Desde</span>
+            <input type="date" class="rep-inp" id="repDesde"/>
+            <span class="rep-lbl">Hasta</span>
+            <input type="date" class="rep-inp" id="repHasta"/>
+            <button class="rep-btn" onclick="generarReporteVentas()">&#128202; Generar reporte</button>
+          </div>
+          <div id="repVentasContent">
+            <div class="rep-empty" style="font-size:40px;">&#128202;<br><span style="font-size:14px;display:block;margin-top:10px;color:var(--text3);">Selecciona un rango de fechas y genera el reporte</span></div>
+          </div>
+        </div>
+
+        <!-- Panel Inventario -->
+        <div class="rep-panel" id="repPanelInventario">
+          <div id="repInvContent"></div>
+        </div>
+
+        <!-- Panel Rentabilidad -->
+        <div class="rep-panel" id="repPanelRentabilidad">
+          <div id="repRentContent"></div>
+        </div>
+
+      </div>
+    </div><!-- /vReportes -->
 
   </main>
 </div>
@@ -1270,7 +1361,7 @@ function goView(v,el){
   document.querySelectorAll('.ni').forEach(function(i){i.classList.remove('on');});
   if(el)el.classList.add('on');
   closeSB();
-  var views=['vInicio','vPOS','vClientes','vInventario','vCompras','vGastos','vContabilidad','vVentas'];
+  var views=['vInicio','vPOS','vClientes','vInventario','vCompras','vGastos','vContabilidad','vVentas','vReportes'];
   views.forEach(function(id){document.getElementById(id).style.display='none';});
 
   if(v==='pos'){
@@ -1302,6 +1393,10 @@ function goView(v,el){
     document.getElementById('vVentas').style.display='flex';
     document.getElementById('tgs').textContent='Historial de ventas';
     initVentas();
+  } else if(v==='reportes'){
+    document.getElementById('vReportes').style.display='flex';
+    document.getElementById('tgs').textContent='Informes y analisis';
+    initReportes();
   } else {
     document.getElementById('vInicio').style.display='block';
     document.getElementById('tgs').textContent='Resumen de tu negocio';
@@ -3621,6 +3716,301 @@ async function eliminarProdSB(prodId){
   }catch(e){
     console.error('Error eliminando producto:', e);
   }
+}
+
+/* ==================== REPORTES ==================== */
+var repTabActual='ventas';
+
+function initReportes(){
+  var hoy=new Date();
+  var mesStr=hoy.toISOString().slice(0,7);
+  var primerDia=mesStr+'-01';
+  var ultimoDia=new Date(hoy.getFullYear(),hoy.getMonth()+1,0).toISOString().split('T')[0];
+  var desde=document.getElementById('repDesde');
+  var hasta=document.getElementById('repHasta');
+  if(desde&&!desde.value){desde.value=primerDia;}
+  if(hasta&&!hasta.value){hasta.value=ultimoDia;}
+  showRepTab(repTabActual);
+}
+
+function showRepTab(tab){
+  repTabActual=tab;
+  var tabs=['Ventas','Inventario','Rentabilidad'];
+  tabs.forEach(function(t){
+    var tEl=document.getElementById('repTab'+t);
+    var pEl=document.getElementById('repPanel'+t);
+    if(tEl) tEl.classList.toggle('on', t.toLowerCase()===tab);
+    if(pEl) pEl.classList.toggle('on', t.toLowerCase()===tab);
+  });
+  if(tab==='inventario') renderRepInventario();
+  if(tab==='rentabilidad') renderRepRentabilidad();
+}
+
+/* --- REPORTE DE VENTAS --- */
+async function generarReporteVentas(){
+  var desde=document.getElementById('repDesde').value;
+  var hasta=document.getElementById('repHasta').value;
+  if(!desde||!hasta){toast('Selecciona un rango de fechas');return;}
+  if(desde>hasta){toast('La fecha inicio debe ser anterior a la fecha fin');return;}
+  var cont=document.getElementById('repVentasContent');
+  cont.innerHTML='<div class="rep-loading">&#9203; Cargando datos del reporte...</div>';
+  try{
+    var H2={headers:{'apikey':SK,'Authorization':'Bearer '+SK}};
+    var desdeISO=desde+'T00:00:00';
+    var hastaISO=hasta+'T23:59:59';
+    var r=await fetch(SB+'/rest/v1/ventas?id_cliente=eq.'+CID+'&created_at=gte.'+desdeISO+'&created_at=lte.'+hastaISO+'&select=id,total,metodo_pago,created_at,cliente_nombre&order=created_at.asc&limit=1000',H2);
+    if(!r.ok) throw new Error('Error al cargar ventas');
+    var ventas=await r.json();
+    if(!ventas.length){
+      cont.innerHTML='<div class="rep-empty" style="font-size:36px;">&#128235;<br><span style="font-size:14px;display:block;margin-top:10px;">No hay ventas en este período</span></div>';
+      return;
+    }
+    var totalPesos=ventas.reduce(function(s,v){return s+(parseFloat(v.total)||0);},0);
+    var numVentas=ventas.length;
+    var ticket=numVentas>0?Math.round(totalPesos/numVentas):0;
+
+    /* Ventas por día */
+    var porDia={};
+    ventas.forEach(function(v){
+      var d=v.created_at.split('T')[0];
+      if(!porDia[d]) porDia[d]={fecha:d,total:0,count:0};
+      porDia[d].total+=(parseFloat(v.total)||0);
+      porDia[d].count++;
+    });
+    var diasArr=Object.values(porDia).sort(function(a,b){return a.fecha>b.fecha?1:-1;});
+    var maxDia=Math.max.apply(null,diasArr.map(function(d){return d.total;}))||1;
+
+    /* Por método de pago */
+    var porMetodo={};
+    ventas.forEach(function(v){
+      var m=v.metodo_pago||'efectivo';
+      porMetodo[m]=(porMetodo[m]||0)+(parseFloat(v.total)||0);
+    });
+    var metInfo={efectivo:{ic:'&#128181;',color:'#10B981'},transferencia:{ic:'&#127974;',color:'#3B82F6'},nequi:{ic:'&#128241;',color:'#8B5CF6'},daviplata:{ic:'&#128308;',color:'#EF4444'}};
+
+    /* Top 10 productos */
+    var topProds=[];
+    var ventaIds=ventas.map(function(v){return v.id;});
+    if(ventaIds.length>0){
+      var idsChunk=ventaIds.slice(0,300).join(',');
+      var rd=await fetch(SB+'/rest/v1/detalle_ventas?venta_id=in.('+idsChunk+')&select=producto_nombre,cantidad,precio_unitario',H2);
+      if(rd.ok){
+        var detalles=await rd.json();
+        var prodMap={};
+        detalles.forEach(function(d){
+          var k=d.producto_nombre||'Desconocido';
+          if(!prodMap[k]) prodMap[k]={nombre:k,uds:0,total:0};
+          prodMap[k].uds+=(parseInt(d.cantidad)||0);
+          prodMap[k].total+=(parseFloat(d.precio_unitario)||0)*(parseInt(d.cantidad)||0);
+        });
+        topProds=Object.values(prodMap).sort(function(a,b){return b.uds-a.uds;}).slice(0,10);
+      }
+    }
+    var maxProd=topProds.length>0?(topProds[0].uds||1):1;
+
+    /* Render */
+    var html='';
+    /* KPI cards */
+    html+='<div class="rep-kpi-grid">';
+    html+='<div class="rep-kc"><div class="rep-kl">Total ventas</div><div class="rep-kv" style="color:var(--gold);">'+fmt(totalPesos)+'</div><div class="rep-ks">'+numVentas+' transacciones en el período</div></div>';
+    html+='<div class="rep-kc"><div class="rep-kl">Número de ventas</div><div class="rep-kv">'+numVentas+'</div><div class="rep-ks">'+desde+' al '+hasta+'</div></div>';
+    html+='<div class="rep-kc"><div class="rep-kl">Ticket promedio</div><div class="rep-kv" style="color:var(--green);">'+fmt(ticket)+'</div><div class="rep-ks">por transacción</div></div>';
+    html+='</div>';
+
+    /* Gráfica días + métodos de pago */
+    html+='<div class="rep-grid2">';
+
+    /* Chart ventas por día */
+    html+='<div class="rep-section">';
+    html+='<div class="rep-sh"><div class="rep-st">Ventas por día</div><span style="font-size:11px;color:var(--text3);">'+diasArr.length+' días con ventas</span></div>';
+    html+='<div style="padding:16px;">';
+    html+='<div style="display:flex;align-items:flex-end;gap:3px;height:130px;margin-bottom:6px;">';
+    diasArr.forEach(function(d){
+      var pct=Math.round(d.total/maxDia*100);
+      var fecha=new Date(d.fecha+'T12:00:00');
+      var lbl=(fecha.getDate())+'/'+(fecha.getMonth()+1);
+      html+='<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;">';
+      html+='<div style="width:100%;background:var(--bg);border-radius:4px 4px 0 0;height:120px;position:relative;overflow:hidden;" title="'+fmt(d.total)+' — '+d.count+' venta'+(d.count!==1?'s':'')+'">';
+      html+='<div data-w="'+pct+'" style="position:absolute;bottom:0;width:100%;background:var(--gold-b);border-radius:4px 4px 0 0;height:0%;transition:height .8s ease;"></div>';
+      html+='</div>';
+      html+='<div style="font-size:9px;color:var(--text3);white-space:nowrap;">'+lbl+'</div>';
+      html+='</div>';
+    });
+    html+='</div>';
+    html+='<div style="font-size:11px;color:var(--text3);text-align:center;">Pasa el cursor sobre cada barra para ver el detalle</div>';
+    html+='</div></div>';
+
+    /* Métodos de pago */
+    html+='<div class="rep-section">';
+    html+='<div class="rep-sh"><div class="rep-st">Distribución por método de pago</div></div>';
+    var metArr=Object.keys(porMetodo).sort(function(a,b){return porMetodo[b]-porMetodo[a];});
+    metArr.forEach(function(m){
+      var pct=totalPesos>0?Math.round(porMetodo[m]/totalPesos*100):0;
+      var info=metInfo[m]||{ic:'&#128176;',color:'#9CA3AF'};
+      html+='<div class="rep-pm-row">';
+      html+='<div class="rep-pm-ic">'+info.ic+'</div>';
+      html+='<div class="rep-pm-info"><div class="rep-pm-name">'+m.charAt(0).toUpperCase()+m.slice(1)+'<span style="font-size:11px;color:var(--text3);font-weight:500;margin-left:6px;">'+fmt(porMetodo[m])+'</span></div><div class="rep-pm-bar"><div class="rep-pm-fill" data-w="'+pct+'" style="width:0%;background:'+info.color+'"></div></div></div>';
+      html+='<div class="rep-pm-pct" style="color:'+info.color+';">'+pct+'%</div>';
+      html+='</div>';
+    });
+    if(!metArr.length) html+='<div style="padding:30px;text-align:center;color:var(--text3);">Sin datos</div>';
+    html+='</div>';
+
+    html+='</div>'; /* /rep-grid2 */
+
+    /* Top 10 productos */
+    html+='<div class="rep-section" style="margin-bottom:24px;">';
+    html+='<div class="rep-sh"><div class="rep-st">Top 10 productos más vendidos</div><span style="font-size:11px;color:var(--text3);">Por unidades en el período</span></div>';
+    if(topProds.length){
+      topProds.forEach(function(p,i){
+        var pct=Math.round(p.uds/maxProd*100);
+        html+='<div class="rep-bar-row">';
+        html+='<span style="font-size:12px;font-weight:700;color:'+(i===0?'var(--gold)':'var(--text3)')+';min-width:22px;text-align:center;">'+(i+1)+'</span>';
+        html+='<span class="rep-bar-lbl">'+p.nombre+'</span>';
+        html+='<div class="rep-bar-track"><div class="rep-bar-fill" data-w="'+pct+'" style="width:0%;background:'+(i===0?'var(--gold-l)':'var(--gold-b)')+'"></div></div>';
+        html+='<span class="rep-bar-val">'+p.uds+' uds<br><span style="font-size:10px;color:var(--text3);font-weight:500;">'+fmt(p.total)+'</span></span>';
+        html+='</div>';
+      });
+    } else {
+      html+='<div style="padding:30px;text-align:center;color:var(--text3);font-size:13px;">Sin detalle de productos disponible</div>';
+    }
+    html+='</div>';
+
+    cont.innerHTML=html;
+    setTimeout(function(){
+      cont.querySelectorAll('[data-w]').forEach(function(el){el.style.width=el.dataset.w+'%';});
+    },80);
+
+  }catch(e){
+    console.error('Error reporte ventas:',e);
+    document.getElementById('repVentasContent').innerHTML='<div class="rep-empty">&#10060;<br><span style="font-size:13px;display:block;margin-top:10px;">Error al cargar el reporte<br><span style="color:var(--red);">'+e.message+'</span></span></div>';
+  }
+}
+
+/* --- REPORTE DE INVENTARIO --- */
+function renderRepInventario(){
+  var cont=document.getElementById('repInvContent');
+  if(!INVENTARIO.length){
+    cont.innerHTML='<div class="rep-empty" style="font-size:36px;">&#128230;<br><span style="font-size:14px;display:block;margin-top:10px;">No hay productos en el inventario</span></div>';
+    return;
+  }
+  var totalCosto=0,totalVenta=0;
+  INVENTARIO.forEach(function(p){
+    totalCosto+=(parseFloat(p.precio_costo)||0)*p.stock;
+    totalVenta+=(parseFloat(p.precio_venta)||0)*p.stock;
+  });
+  var ganPotencial=totalVenta-totalCosto;
+  var prods=[].concat(INVENTARIO).sort(function(a,b){
+    return (b.stock*(parseFloat(b.precio_venta)||0))-(a.stock*(parseFloat(a.precio_venta)||0));
+  });
+  var html='';
+  html+='<div class="rep-kpi-grid">';
+  html+='<div class="rep-kc"><div class="rep-kl">Valor al costo</div><div class="rep-kv" style="color:var(--blue);">'+fmt(totalCosto)+'</div><div class="rep-ks">Lo invertido en el stock actual</div></div>';
+  html+='<div class="rep-kc"><div class="rep-kl">Valor a precio venta</div><div class="rep-kv" style="color:var(--green);">'+fmt(totalVenta)+'</div><div class="rep-ks">Si se vende todo el inventario</div></div>';
+  html+='<div class="rep-kc"><div class="rep-kl">Ganancia potencial</div><div class="rep-kv" style="color:'+(ganPotencial>=0?'var(--gold)':'var(--red)')+';">'+fmt(ganPotencial)+'</div><div class="rep-ks">'+(totalCosto>0?Math.round(ganPotencial/totalCosto*100)+'% retorno sobre costo':'Registra precios de costo')+'</div></div>';
+  html+='</div>';
+  html+='<div class="rep-section" style="margin-bottom:24px;">';
+  html+='<div class="rep-sh"><div class="rep-st">Detalle por producto ('+prods.length+')</div><button class="rep-btn sec" onclick="exportarInvTexto()" style="font-size:11px;padding:5px 12px;">&#128203; Copiar lista</button></div>';
+  html+='<div style="overflow-x:auto;">';
+  html+='<table class="rep-table"><thead><tr><th>Producto</th><th>Categoría</th><th style="text-align:center;">Stock</th><th style="text-align:right;">Precio costo</th><th style="text-align:right;">Precio venta</th><th style="text-align:right;">Val. costo</th><th style="text-align:right;">Val. venta</th><th style="text-align:center;">Margen</th></tr></thead><tbody>';
+  prods.forEach(function(p){
+    var costo=parseFloat(p.precio_costo)||0;
+    var venta=parseFloat(p.precio_venta)||0;
+    var margen=(costo>0&&venta>0)?Math.round((venta-costo)/venta*100):null;
+    var semHtml=margen!==null?'<span class="sem '+(margen>=40?'g':margen>=20?'y':'r')+'">'+margen+'%</span>':'<span class="sem n">--</span>';
+    var sColor=p.stock===0?'var(--red)':p.stock<=p.stock_min?'var(--yellow)':'var(--text)';
+    html+='<tr>';
+    html+='<td><div style="font-weight:600;">'+p.nombre+'</div>'+(p.uds_empaque>1?'<div style="font-size:10px;color:var(--text3);">'+p.uds_empaque+' uds/empaque</div>':'')+'</td>';
+    html+='<td style="color:var(--text3);font-size:12px;">'+(p.categoria||'—')+'</td>';
+    html+='<td style="text-align:center;font-weight:700;color:'+sColor+';">'+p.stock+'</td>';
+    html+='<td style="text-align:right;">'+(costo>0?fmt(costo):'<span style="color:var(--text3);">--</span>')+'</td>';
+    html+='<td style="text-align:right;">'+fmt(venta)+'</td>';
+    html+='<td style="text-align:right;font-weight:600;">'+(costo>0?fmt(costo*p.stock):'<span style="color:var(--text3);">--</span>')+'</td>';
+    html+='<td style="text-align:right;font-weight:600;">'+fmt(venta*p.stock)+'</td>';
+    html+='<td style="text-align:center;">'+semHtml+'</td>';
+    html+='</tr>';
+  });
+  html+='</tbody></table></div></div>';
+  cont.innerHTML=html;
+}
+
+function exportarInvTexto(){
+  var lines=['INVENTARIO — LA CAVA OFICIAL','Generado: '+new Date().toLocaleString('es-CO'),'','PRODUCTO | STOCK | PRECIO COSTO | PRECIO VENTA | MARGEN','—————————————————————————————'];
+  var prods=[].concat(INVENTARIO).sort(function(a,b){return a.nombre.localeCompare(b.nombre);});
+  prods.forEach(function(p){
+    var costo=parseFloat(p.precio_costo)||0;
+    var venta=parseFloat(p.precio_venta)||0;
+    var margen=(costo>0&&venta>0)?Math.round((venta-costo)/venta*100)+'%':'--';
+    lines.push(p.nombre+' | '+p.stock+'u | '+(costo>0?fmt(costo):'--')+' | '+fmt(venta)+' | '+margen);
+  });
+  var texto=lines.join('\n');
+  if(navigator.clipboard){
+    navigator.clipboard.writeText(texto).then(function(){toast('Lista copiada al portapapeles &#128203;');}).catch(function(){prompt('Copia este texto:',texto);});
+  } else {
+    prompt('Copia este texto:',texto);
+  }
+}
+
+/* --- REPORTE DE RENTABILIDAD --- */
+function renderRepRentabilidad(){
+  var cont=document.getElementById('repRentContent');
+  if(!INVENTARIO.length){
+    cont.innerHTML='<div class="rep-empty" style="font-size:36px;">&#128201;<br><span style="font-size:14px;display:block;margin-top:10px;">No hay productos</span></div>';
+    return;
+  }
+  var conCosto=INVENTARIO.filter(function(p){return (parseFloat(p.precio_costo)||0)>0;});
+  var sinCosto=INVENTARIO.filter(function(p){return !((parseFloat(p.precio_costo)||0)>0);});
+  var ordenados=conCosto.map(function(p){
+    var costo=parseFloat(p.precio_costo);
+    var venta=parseFloat(p.precio_venta)||0;
+    var margen=venta>0?Math.round((venta-costo)/venta*100):0;
+    return {p:p,margen:margen,costo:costo,venta:venta};
+  }).sort(function(a,b){return b.margen-a.margen;});
+  var verde=ordenados.filter(function(x){return x.margen>=40;}).length;
+  var amarillo=ordenados.filter(function(x){return x.margen>=20&&x.margen<40;}).length;
+  var rojo=ordenados.filter(function(x){return x.margen<20;}).length;
+  var html='';
+  html+='<div class="rep-kpi-grid" style="grid-template-columns:repeat(4,1fr);">';
+  html+='<div class="rep-kc"><div class="rep-kl">&#128994; Margen alto</div><div class="rep-kv" style="color:var(--green);">'+verde+'</div><div class="rep-ks">&gt;40% de margen</div></div>';
+  html+='<div class="rep-kc"><div class="rep-kl">&#128993; Margen medio</div><div class="rep-kv" style="color:var(--yellow);">'+amarillo+'</div><div class="rep-ks">20% — 40% de margen</div></div>';
+  html+='<div class="rep-kc"><div class="rep-kl">&#128308; Margen bajo</div><div class="rep-kv" style="color:var(--red);">'+rojo+'</div><div class="rep-ks">&lt;20% de margen</div></div>';
+  html+='<div class="rep-kc"><div class="rep-kl">&#9888; Sin costo</div><div class="rep-kv" style="color:var(--text3);">'+sinCosto.length+'</div><div class="rep-ks">Precio de costo no registrado</div></div>';
+  html+='</div>';
+  html+='<div class="rep-section" style="margin-bottom:20px;">';
+  html+='<div class="rep-sh"><div class="rep-st">Rentabilidad por producto</div><span style="font-size:11px;color:var(--text3);">'+ordenados.length+' productos con costo registrado — ordenados por margen</span></div>';
+  html+='<div style="overflow-x:auto;">';
+  html+='<table class="rep-table"><thead><tr><th>#</th><th>Producto</th><th>Categoría</th><th style="text-align:right;">Precio costo</th><th style="text-align:right;">Precio venta</th><th style="text-align:right;">Ganancia u.</th><th style="text-align:center;">Margen</th></tr></thead><tbody>';
+  ordenados.forEach(function(x,i){
+    var ganancia=x.venta-x.costo;
+    var semClass=x.margen>=40?'g':x.margen>=20?'y':'r';
+    html+='<tr>';
+    html+='<td style="color:var(--text3);font-weight:700;">'+(i+1)+'</td>';
+    html+='<td><div style="font-weight:600;">'+x.p.nombre+'</div>'+(x.p.uds_empaque>1?'<div style="font-size:10px;color:var(--text3);">por '+x.p.uds_empaque+' uds</div>':'')+'</td>';
+    html+='<td style="color:var(--text3);font-size:12px;">'+(x.p.categoria||'—')+'</td>';
+    html+='<td style="text-align:right;">'+fmt(x.costo)+'</td>';
+    html+='<td style="text-align:right;">'+fmt(x.venta)+'</td>';
+    html+='<td style="text-align:right;font-weight:700;color:'+(ganancia>=0?'var(--green)':'var(--red)')+';">'+(ganancia>=0?'+':'')+fmt(ganancia)+'</td>';
+    html+='<td style="text-align:center;"><span class="sem '+semClass+'">'+x.margen+'%</span></td>';
+    html+='</tr>';
+  });
+  html+='</tbody></table></div></div>';
+  if(sinCosto.length){
+    html+='<div class="rep-section" style="margin-bottom:24px;">';
+    html+='<div class="rep-sh"><div class="rep-st" style="color:var(--yellow);">&#9888; Productos sin precio de costo</div><span style="font-size:11px;color:var(--text3);">No se puede calcular su rentabilidad</span></div>';
+    html+='<div style="overflow-x:auto;">';
+    html+='<table class="rep-table"><thead><tr><th>Producto</th><th>Categoría</th><th style="text-align:right;">Precio venta</th><th style="text-align:center;">Stock</th><th style="text-align:center;">Acción</th></tr></thead><tbody>';
+    sinCosto.forEach(function(p){
+      html+='<tr>';
+      html+='<td style="font-weight:600;">'+p.nombre+'</td>';
+      html+='<td style="color:var(--text3);font-size:12px;">'+(p.categoria||'—')+'</td>';
+      html+='<td style="text-align:right;">'+fmt(parseFloat(p.precio_venta)||0)+'</td>';
+      html+='<td style="text-align:center;font-weight:700;">'+p.stock+'</td>';
+      html+='<td style="text-align:center;"><button onclick="goView(\'inventario\',document.getElementById(\'niInventario\'))" style="padding:4px 10px;border:1.5px solid var(--gold-b);border-radius:6px;background:var(--gold-s);color:var(--gold);font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;">Registrar costo</button></td>';
+      html+='</tr>';
+    });
+    html+='</tbody></table></div></div>';
+  }
+  cont.innerHTML=html;
 }
 
 </script>
