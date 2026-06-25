@@ -1,0 +1,719 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
+<title>La Cava Licorera — Tienda</title>
+<meta name="description" content="El mejor licor a tu puerta. Pedidos por WhatsApp."/>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700;800&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+:root{
+  --negro:#0A0A0A;--negro2:#111111;--negro3:#1A1A1A;--negro4:#222222;
+  --gold:#C9A84C;--gold-l:#E2C97E;--gold-d:#A07832;--gold-s:rgba(201,168,76,.12);
+  --white:#FFFFFF;--gray1:#F5F5F5;--gray2:#CCCCCC;--gray3:#888888;--gray4:#444444;
+  --green:#25D366;--border:rgba(201,168,76,.2);
+  --shadow:0 4px 24px rgba(0,0,0,.6);--shadow-card:0 2px 12px rgba(0,0,0,.5);
+}
+html{scroll-behavior:smooth;}
+body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--negro);color:var(--white);min-height:100vh;overflow-x:hidden;}
+
+/* ===================== HEADER ===================== */
+.hdr{position:sticky;top:0;z-index:200;background:var(--negro);border-bottom:1px solid var(--border);}
+.hdr-top{display:flex;align-items:center;gap:16px;padding:14px 24px;max-width:1400px;margin:0 auto;}
+.logo{display:flex;align-items:center;gap:12px;text-decoration:none;flex-shrink:0;}
+.logo-ic{width:48px;height:48px;flex-shrink:0;}
+.logo-txt{display:flex;flex-direction:column;}
+.logo-n{font-family:'Playfair Display',serif;font-size:16px;font-weight:700;color:var(--gold-l);letter-spacing:2px;line-height:1;text-transform:uppercase;}
+.logo-s{font-size:9px;font-weight:500;color:var(--gray3);letter-spacing:3px;text-transform:uppercase;margin-top:3px;}
+.hdr-srch{flex:1;max-width:520px;margin:0 auto;position:relative;}
+.hdr-srch input{width:100%;background:var(--negro3);border:1.5px solid var(--negro4);border-radius:8px;padding:10px 16px 10px 42px;font-size:14px;font-family:inherit;color:var(--white);outline:none;transition:border-color .2s;}
+.hdr-srch input::placeholder{color:var(--gray3);}
+.hdr-srch input:focus{border-color:var(--gold-d);}
+.hdr-srch svg{position:absolute;left:14px;top:50%;transform:translateY(-50%);color:var(--gray3);pointer-events:none;}
+.hdr-acts{display:flex;align-items:center;gap:12px;flex-shrink:0;}
+.hdr-wa{display:flex;align-items:center;gap:8px;background:var(--green);color:#fff;border:none;border-radius:8px;padding:9px 16px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;text-decoration:none;transition:opacity .2s;white-space:nowrap;}
+.hdr-wa:hover{opacity:.88;}
+.cart-btn{position:relative;background:var(--negro3);border:1.5px solid var(--negro4);border-radius:8px;padding:9px 14px;cursor:pointer;display:flex;align-items:center;gap:7px;font-size:13px;font-weight:600;color:var(--white);font-family:inherit;transition:border-color .2s;}
+.cart-btn:hover{border-color:var(--gold-d);}
+.cart-btn svg{color:var(--gold);}
+.cart-cnt{background:var(--gold);color:var(--negro);font-size:10px;font-weight:800;border-radius:50%;width:18px;height:18px;display:flex;align-items:center;justify-content:center;position:absolute;top:-7px;right:-7px;}
+.cart-cnt.h{display:none;}
+
+/* ===================== CATBAR ===================== */
+.catbar{background:var(--negro2);border-bottom:1px solid var(--border);overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;}
+.catbar::-webkit-scrollbar{display:none;}
+.catbar-inner{display:flex;padding:0 24px;max-width:1400px;margin:0 auto;white-space:nowrap;}
+.cat-item{padding:14px 20px;font-size:13px;font-weight:600;color:var(--gray3);cursor:pointer;border-bottom:3px solid transparent;transition:all .2s;white-space:nowrap;text-transform:uppercase;letter-spacing:.8px;font-size:11px;}
+.cat-item:hover{color:var(--white);}
+.cat-item.on{color:var(--gold-l);border-bottom-color:var(--gold);}
+
+/* ===================== HERO ===================== */
+.hero{background:linear-gradient(135deg,#0A0A0A 0%,#1a1208 50%,#0A0A0A 100%);padding:60px 24px;text-align:center;position:relative;overflow:hidden;border-bottom:1px solid var(--border);}
+.hero::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse at 50% 50%,rgba(201,168,76,.08) 0%,transparent 70%);}
+.hero-eyebrow{font-size:11px;font-weight:600;letter-spacing:4px;color:var(--gold);text-transform:uppercase;margin-bottom:16px;}
+.hero-t{font-family:'Playfair Display',serif;font-size:clamp(32px,6vw,64px);font-weight:800;color:var(--white);line-height:1.1;margin-bottom:14px;}
+.hero-t span{color:var(--gold-l);}
+.hero-s{font-size:15px;color:var(--gray3);max-width:480px;margin:0 auto 28px;line-height:1.6;}
+.hero-btn{display:inline-flex;align-items:center;gap:10px;background:var(--gold);color:var(--negro);border:none;border-radius:8px;padding:14px 32px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;letter-spacing:.5px;text-transform:uppercase;transition:background .2s;}
+.hero-btn:hover{background:var(--gold-l);}
+.hero-deco{position:absolute;opacity:.04;pointer-events:none;}
+.hero-deco.l{left:-60px;top:50%;transform:translateY(-50%);font-size:320px;}
+.hero-deco.r{right:-60px;top:50%;transform:translateY(-50%);font-size:320px;}
+
+/* ===================== CONTENIDO ===================== */
+.main{max-width:1400px;margin:0 auto;padding:40px 24px 120px;background:#F8F4ED;}
+.sec{margin-bottom:52px;}
+.sec-hdr{display:flex;align-items:center;gap:16px;margin-bottom:24px;}
+.sec-line{flex:1;height:1px;background:linear-gradient(to right,var(--gold-d),transparent);}
+.sec-tit{font-family:'Playfair Display',serif;font-size:20px;font-weight:700;color:var(--gold-l);white-space:nowrap;}
+.sec-line2{flex:1;height:1px;background:linear-gradient(to left,var(--gold-d),transparent);}
+
+/* ===================== PRODUCT GRID ===================== */
+.pgrid{display:grid;grid-template-columns:repeat(2,1fr);gap:16px;}
+@media(min-width:500px){.pgrid{grid-template-columns:repeat(3,1fr);}}
+@media(min-width:720px){.pgrid{grid-template-columns:repeat(4,1fr);}}
+@media(min-width:1100px){.pgrid{grid-template-columns:repeat(5,1fr);}}
+
+/* ===================== CARD ===================== */
+.pcard{background:#FFFFFF;border:1px solid #E8E1D6;border-radius:12px;overflow:hidden;display:flex;flex-direction:column;transition:border-color .25s,transform .25s,box-shadow .25s;cursor:default;}
+.pcard:hover{border-color:var(--gold-d);transform:translateY(-3px);box-shadow:0 8px 32px rgba(201,168,76,.2);}
+.pcard-img-wrap{width:100%;padding-top:100%;position:relative;background:#F0EAE0;overflow:hidden;}
+.pcard-img-wrap img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;transition:transform .4s;}
+.pcard:hover .pcard-img-wrap img{transform:scale(1.05);}
+.pcard-ph{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:52px;opacity:.3;}.pcard-body{padding:12px;flex:1;display:flex;flex-direction:column;}
+.pcard-name{font-size:13px;font-weight:600;color:#1A1A1A;line-height:1.35;margin-bottom:4px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;}
+.pcard-uprice{font-size:10px;color:#888888;margin-bottom:6px;}
+.pcard-price{font-family:'Playfair Display',serif;font-size:17px;font-weight:700;color:var(--gold-l);margin-bottom:10px;}
+.pcard-add{width:100%;background:transparent;border:1.5px solid var(--gold-d);border-radius:7px;padding:8px;font-size:12px;font-weight:700;color:var(--gold-l);cursor:pointer;font-family:inherit;text-transform:uppercase;letter-spacing:.5px;transition:all .2s;}
+.pcard-add:hover{background:var(--gold);color:var(--negro);border-color:var(--gold);}
+.pcard-add:disabled{background:transparent;color:var(--gray4);border-color:var(--negro4);cursor:not-allowed;}
+.pcard-qty{display:flex;align-items:center;justify-content:space-between;margin-top:auto;}
+.pcard-qty-btn{width:32px;height:32px;border-radius:7px;background:#F0EDE6;border:1px solid var(--gold-d);color:var(--gold-d);font-size:16px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .15s;}
+.pcard-qty-btn:hover{background:var(--gold);color:var(--negro);}
+.pcard-qty-n{font-size:15px;font-weight:700;color:#111;}
+
+/* ===================== EMPTY ===================== */
+.empty{text-align:center;padding:80px 20px;color:var(--gray3);}
+.empty-ic{font-size:56px;margin-bottom:16px;opacity:.4;}
+.empty p{font-size:14px;line-height:1.6;}
+
+/* ===================== CART FAB ===================== */
+.cart-fab{position:fixed;bottom:28px;right:24px;background:var(--gold);color:var(--negro);border:none;border-radius:14px;padding:14px 22px;font-size:14px;font-weight:800;cursor:pointer;font-family:inherit;display:flex;align-items:center;gap:10px;box-shadow:0 4px 24px rgba(201,168,76,.4);transition:all .25s;z-index:300;letter-spacing:.3px;}
+.cart-fab:hover{background:var(--gold-l);transform:scale(1.04);}
+.cart-fab.h{transform:translateY(120px);opacity:0;pointer-events:none;}
+.cart-fab-badge{background:var(--negro);color:var(--gold-l);border-radius:20px;padding:2px 9px;font-size:12px;font-weight:800;}
+
+/* ===================== CART PANEL ===================== */
+.cart-ov{position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:400;display:none;opacity:0;transition:opacity .25s;backdrop-filter:blur(4px);}
+.cart-ov.o{display:flex;opacity:1;}
+.cart-panel{position:fixed;bottom:0;left:0;right:0;background:var(--negro2);border-top:1px solid var(--border);border-radius:20px 20px 0 0;max-height:82vh;display:flex;flex-direction:column;transform:translateY(100%);transition:transform .3s cubic-bezier(.34,1.56,.64,1);z-index:401;}
+.cart-panel.o{transform:translateY(0);}
+@media(min-width:640px){.cart-panel{max-width:500px;left:50%;right:auto;transform:translateX(-50%) translateY(100%);border-radius:20px 20px 0 0;}}
+@media(min-width:640px){.cart-panel.o{transform:translateX(-50%) translateY(0);}}
+.cart-hdr{padding:18px 22px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0;}
+.cart-hdr-t{font-family:'Playfair Display',serif;font-size:18px;font-weight:700;color:var(--gold-l);}
+.cart-close{background:var(--negro4);border:none;border-radius:50%;width:34px;height:34px;cursor:pointer;font-size:16px;color:var(--gray2);display:flex;align-items:center;justify-content:center;transition:background .15s;}
+.cart-close:hover{background:var(--negro4);color:var(--white);}
+.cart-items{flex:1;overflow-y:auto;padding:14px 22px;}
+.cart-item{display:flex;align-items:center;gap:14px;padding:12px 0;border-bottom:1px solid rgba(255,255,255,.06);}
+.cart-item:last-child{border-bottom:none;}
+.cart-item-img{width:48px;height:48px;border-radius:8px;background:var(--negro3);overflow:hidden;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:20px;border:1px solid var(--negro4);}
+.cart-item-img img{width:100%;height:100%;object-fit:cover;}
+.cart-item-info{flex:1;min-width:0;}
+.cart-item-name{font-size:13px;font-weight:600;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;color:var(--white);}
+.cart-item-price{font-size:12px;color:var(--gold);}
+.cart-item-qty{display:flex;align-items:center;gap:10px;}
+.cart-item-btn{width:28px;height:28px;border-radius:6px;background:var(--negro4);border:1px solid var(--negro4);cursor:pointer;font-size:14px;font-weight:700;color:var(--gray2);display:flex;align-items:center;justify-content:center;transition:all .15s;}
+.cart-item-btn:hover{background:var(--gold);color:var(--negro);border-color:var(--gold);}
+.cart-item-n{font-size:14px;font-weight:700;color:var(--white);min-width:20px;text-align:center;}
+.cart-footer{padding:18px 22px;border-top:1px solid var(--border);flex-shrink:0;}
+.cart-total{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;}
+.cart-total-l{font-size:14px;color:var(--gray3);text-transform:uppercase;letter-spacing:.8px;}
+.cart-total-v{font-family:'Playfair Display',serif;font-size:22px;font-weight:700;color:var(--gold-l);}
+.cart-send{width:100%;background:var(--green);color:#fff;border:none;border-radius:12px;padding:15px;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:10px;letter-spacing:.3px;transition:opacity .2s;}
+.cart-send:hover{opacity:.9;}
+.cart-empty-msg{text-align:center;padding:48px 20px;color:var(--gray3);}
+.cart-empty-msg p{font-size:13px;margin-top:10px;line-height:1.6;}
+
+/* ===================== FOOTER ===================== */
+.footer{background:var(--negro2);border-top:1px solid var(--border);padding:40px 24px;text-align:center;}
+.footer-logo{font-family:'Playfair Display',serif;font-size:22px;font-weight:700;color:var(--gold-l);letter-spacing:3px;margin-bottom:8px;}
+.footer-s{font-size:12px;color:var(--gray3);letter-spacing:2px;margin-bottom:20px;}
+.footer-wa{display:inline-flex;align-items:center;gap:8px;background:var(--green);color:#fff;border:none;border-radius:8px;padding:11px 24px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;text-decoration:none;margin-bottom:24px;}
+.footer-disc{font-size:11px;color:var(--gray4);max-width:500px;margin:0 auto;line-height:1.6;}
+
+/* ===================== LOADING ===================== */
+.loading{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:100px 20px;gap:16px;}
+.loading-ring{width:44px;height:44px;border:3px solid var(--negro3);border-top-color:var(--gold);border-radius:50%;animation:spin .8s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg);}}
+.loading p{font-size:13px;color:var(--gray3);letter-spacing:1px;}
+
+/* ===================== TOAST ===================== */
+.toast-w{position:fixed;bottom:100px;left:50%;transform:translateX(-50%);z-index:600;pointer-events:none;}
+.toast{background:var(--negro3);border:1px solid var(--gold-d);color:var(--gold-l);padding:11px 22px;border-radius:30px;font-size:13px;font-weight:600;white-space:nowrap;animation:toastIn .2s ease;box-shadow:0 4px 20px rgba(0,0,0,.6);}
+@keyframes toastIn{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:translateY(0);}}
+
+/* ===================== RESPONSIVE ===================== */
+@media(max-width:600px){
+  .hdr-top{padding:12px 16px;gap:10px;}
+  .logo-txt{display:none;}
+  .hdr-srch{max-width:none;}
+  .hdr-wa span{display:none;}
+  .main{padding:24px 14px 110px;}
+  .hero{padding:40px 16px;}
+  .catbar-inner{padding:0 14px;}
+}
+
+/* ===================== CATEGORIAS VISUALES ===================== */
+.cats-vis-sec{background:#FFFFFF;padding:48px 24px 44px;border-bottom:3px solid #111;}
+.cats-vis-inner{max-width:1200px;margin:0 auto;text-align:center;}
+.cats-vis-eyebrow{font-size:10px;font-weight:700;letter-spacing:4px;color:var(--gold);text-transform:uppercase;margin-bottom:12px;}
+.cats-vis-tit{font-family:'Playfair Display',serif;font-size:clamp(20px,3.5vw,30px);font-weight:800;color:#111;letter-spacing:2px;text-transform:uppercase;margin-bottom:8px;}
+.cats-vis-sub{font-size:13px;color:#888;letter-spacing:.5px;margin-bottom:40px;}
+.cats-vis-grid{display:flex;flex-wrap:wrap;justify-content:center;gap:24px;}
+.cat-vis-item{display:flex;flex-direction:column;align-items:center;gap:10px;cursor:pointer;transition:transform .2s;min-width:80px;}
+.cat-vis-item:hover{transform:translateY(-5px);}
+.cat-vis-ic{width:76px;height:76px;border-radius:50%;background:#111;border:2.5px solid var(--gold-d);display:flex;align-items:center;justify-content:center;font-size:32px;transition:all .25s;box-shadow:0 4px 18px rgba(0,0,0,.15);overflow:hidden;}
+.cat-vis-ic img{width:100%;height:100%;object-fit:contain;display:block;}
+.cat-vis-item:hover .cat-vis-ic{background:var(--gold);border-color:var(--gold);box-shadow:0 6px 24px rgba(201,168,76,.35);}
+.cat-vis-nm{font-size:11px;font-weight:700;color:#333;letter-spacing:1.2px;text-transform:uppercase;}
+@media(max-width:600px){.cats-vis-grid{gap:16px;}.cat-vis-ic{width:62px;height:62px;font-size:26px;}.cat-vis-nm{font-size:10px;}}
+
+/* ===================== BENEFICIOS ===================== */
+.ben-sec{background:#0A0A0A;padding:72px 24px 80px;border-top:1px solid rgba(201,168,76,.15);}
+.ben-inner{max-width:1100px;margin:0 auto;text-align:center;}
+.ben-eyebrow{font-size:10px;font-weight:700;letter-spacing:4px;color:var(--gold);text-transform:uppercase;margin-bottom:14px;}
+.ben-tit{font-family:'Playfair Display',serif;font-size:clamp(24px,4vw,38px);font-weight:800;color:var(--white);letter-spacing:3px;text-transform:uppercase;margin-bottom:10px;}
+.ben-sub{font-size:14px;color:var(--gray3);margin-bottom:52px;letter-spacing:.5px;}
+.ben-divider{width:60px;height:2px;background:linear-gradient(to right,var(--gold-d),var(--gold-l));margin:0 auto 48px;border-radius:2px;}
+.ben-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:24px;}
+@media(min-width:720px){.ben-grid{grid-template-columns:repeat(4,1fr);}}
+.ben-card{background:var(--negro2);border:1px solid var(--border);border-radius:16px;padding:36px 20px 30px;text-align:center;transition:border-color .25s,transform .25s,box-shadow .25s;}
+.ben-card:hover{border-color:var(--gold-d);transform:translateY(-5px);box-shadow:0 8px 32px rgba(201,168,76,.12);}
+.ben-ic-wrap{width:68px;height:68px;border-radius:50%;background:rgba(201,168,76,.1);border:1.5px solid var(--border);margin:0 auto 18px;display:flex;align-items:center;justify-content:center;font-size:30px;transition:all .25s;}
+.ben-card:hover .ben-ic-wrap{background:rgba(201,168,76,.2);border-color:var(--gold-d);}
+.ben-card-t{font-family:'Playfair Display',serif;font-size:16px;font-weight:700;color:var(--gold-l);margin-bottom:10px;}
+.ben-card-s{font-size:13px;color:var(--gray3);line-height:1.65;}
+@media(max-width:520px){.ben-grid{grid-template-columns:1fr 1fr;gap:16px;}.ben-card{padding:28px 14px 24px;}.ben-ic-wrap{width:54px;height:54px;font-size:24px;}}
+
+/* ===================== VARIANTS (SIXPACK/UNIT) ===================== */
+.pcard-variants{display:flex;gap:5px;margin-top:6px;flex:1;align-items:flex-start;}
+.pcard-variant{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;background:#F5F0E8;border-radius:8px;padding:7px 4px;border:1px solid #E8E1D6;}
+.pcard-variant-label{font-size:9px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.8px;}
+.pcard-variant-price{font-family:'Playfair Display',serif;font-size:12px;font-weight:700;color:var(--gold-d);margin-bottom:3px;}
+.pcard-add-sm{width:100%;background:transparent;border:1.5px solid var(--gold-d);border-radius:6px;padding:5px 2px;font-size:10px;font-weight:700;color:var(--gold-d);cursor:pointer;font-family:inherit;text-transform:uppercase;letter-spacing:.3px;transition:all .2s;}
+.pcard-add-sm:hover{background:var(--gold);color:var(--negro);border-color:var(--gold);}
+
+/* ===================== AGE GATE ===================== */
+#ageGate{position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.92);display:flex;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(6px);}
+#ageGate.h{display:none;}
+.ag-box{background:#fff;border-radius:20px;padding:40px 32px;max-width:360px;width:100%;text-align:center;animation:agIn .4s cubic-bezier(.34,1.56,.64,1);}
+@keyframes agIn{from{opacity:0;transform:scale(.9);}to{opacity:1;transform:scale(1);}}
+.ag-logo{margin:0 auto 20px;}
+.ag-brand{font-family:'Playfair Display',serif;font-size:18px;font-weight:800;color:#111;letter-spacing:3px;text-transform:uppercase;margin-bottom:4px;}
+.ag-dot{font-size:10px;font-weight:600;letter-spacing:3px;color:#888;text-transform:uppercase;margin-bottom:24px;}
+.ag-title{font-size:22px;font-weight:800;color:#111;margin-bottom:16px;}
+.ag-text{font-size:14px;color:#555;line-height:1.6;margin-bottom:30px;}
+.ag-btn-yes{width:100%;padding:15px;background:#B8860B;color:#fff;border:none;border-radius:50px;font-size:13px;font-weight:800;cursor:pointer;font-family:inherit;letter-spacing:1px;text-transform:uppercase;margin-bottom:12px;transition:background .2s;}
+.ag-btn-yes:hover{background:#DAA520;}
+.ag-btn-no{width:100%;padding:14px;background:transparent;color:#333;border:2px solid #ddd;border-radius:50px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;letter-spacing:.8px;text-transform:uppercase;transition:all .2s;}
+.ag-btn-no:hover{border-color:#999;color:#111;}
+.ag-legal{font-size:10px;color:#aaa;margin-top:16px;line-height:1.5;}
+/* Pantalla menor de edad */
+#ageMenor{position:fixed;inset:0;z-index:9999;background:#111;display:none;align-items:center;justify-content:center;padding:20px;}
+.ag-men-box{text-align:center;max-width:320px;}
+.ag-men-ic{font-size:56px;margin-bottom:20px;}
+.ag-men-t{font-family:'Playfair Display',serif;font-size:22px;color:#E2C97E;margin-bottom:12px;}
+.ag-men-s{font-size:14px;color:#888;line-height:1.6;}
+</style>
+</head>
+<body>
+
+<!-- AGE GATE -->
+<div id="ageGate">
+  <div class="ag-box">
+    <!-- Logo La Cava Oficial -->
+    <div class="ag-logo">
+      <svg viewBox="0 0 64 64" width="72" height="72" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect width="64" height="64" rx="14" fill="#111111"/>
+        <path d="M11 12 L11 52 L30 52" stroke="url(#agg1)" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M53 22 A21 21 0 0 0 32 12 A21 21 0 0 0 32 52 A21 21 0 0 0 53 42" stroke="url(#agg2)" stroke-width="4" stroke-linecap="round" fill="none"/>
+        <defs>
+          <linearGradient id="agg1" x1="11" y1="12" x2="30" y2="52" gradientUnits="userSpaceOnUse">
+            <stop stop-color="#E2C97E"/><stop offset="1" stop-color="#B8860B"/>
+          </linearGradient>
+          <linearGradient id="agg2" x1="32" y1="12" x2="53" y2="52" gradientUnits="userSpaceOnUse">
+            <stop stop-color="#E2C97E"/><stop offset="1" stop-color="#B8860B"/>
+          </linearGradient>
+        </defs>
+      </svg>
+    </div>
+    <div class="ag-brand">La Cava Licorera</div>
+    <div class="ag-dot">· Licores Premium ·</div>
+    <div class="ag-title">¿Eres mayor de edad?</div>
+    <p class="ag-text">Debemos validar que eres <strong>mayor de edad</strong> para que puedas descubrir y disfrutar lo que tenemos para ti.</p>
+    <button class="ag-btn-yes" onclick="confirmarEdad(true)">SÍ, SOY MAYOR DE EDAD</button>
+    <button class="ag-btn-no" onclick="confirmarEdad(false)">NO, SOY MENOR DE 18 AÑOS</button>
+    <div class="ag-legal">Al ingresar confirmas que tienes 18 años o más y aceptas las condiciones legales de venta de bebidas alcohólicas.</div>
+  </div>
+</div>
+
+<!-- PANTALLA MENOR DE EDAD -->
+<div id="ageMenor">
+  <div class="ag-men-box">
+    <div class="ag-men-ic">🔞</div>
+    <div class="ag-men-t">Acceso restringido</div>
+    <p class="ag-men-s">Lo sentimos, debes ser mayor de 18 años para acceder a este sitio. La venta de alcohol a menores de edad está prohibida por ley.</p>
+  </div>
+</div>
+
+<!-- HEADER -->
+<header class="hdr">
+  <div class="hdr-top">
+    <a class="logo" href="#">
+      <!-- LC Monogram SVG -->
+      <svg class="logo-ic" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect width="48" height="48" rx="8" fill="#111111"/>
+        <path d="M10 10 L10 38 L24 38" stroke="url(#gold1)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M38 16 A14 14 0 0 0 24 10 A14 14 0 0 0 24 38 A14 14 0 0 0 38 32" stroke="url(#gold2)" stroke-width="3" stroke-linecap="round" fill="none"/>
+        <defs>
+          <linearGradient id="gold1" x1="10" y1="10" x2="24" y2="38" gradientUnits="userSpaceOnUse">
+            <stop offset="0%" stop-color="#E2C97E"/>
+            <stop offset="100%" stop-color="#A07832"/>
+          </linearGradient>
+          <linearGradient id="gold2" x1="24" y1="10" x2="38" y2="38" gradientUnits="userSpaceOnUse">
+            <stop offset="0%" stop-color="#E2C97E"/>
+            <stop offset="100%" stop-color="#A07832"/>
+          </linearGradient>
+        </defs>
+      </svg>
+      <div class="logo-txt">
+        <div class="logo-n">La Cava</div>
+        <div class="logo-s">Licorera &nbsp;·&nbsp; Premium</div>
+      </div>
+    </a>
+
+    <div class="hdr-srch">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <input type="text" id="srchIn" placeholder="Buscar producto..." oninput="filtrar()"/>
+    </div>
+
+    <div class="hdr-acts">
+      <a class="hdr-wa" href="#" onclick="contactarWA();return false;">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+        <span>Contactar</span>
+      </a>
+      <button class="cart-btn" onclick="abrirCarrito()">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>
+        Pedido
+        <span class="cart-cnt h" id="cartCnt">0</span>
+      </button>
+    </div>
+  </div>
+</header>
+
+<!-- BARRA DE CATEGORIAS -->
+<nav class="catbar">
+  <div class="catbar-inner" id="catBar">
+    <div class="cat-item on" data-cat="all" onclick="setCat('all',this)">&#127870; Todos</div>
+  </div>
+</nav>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="hero-deco l">&#127870;</div>
+  <div class="hero-deco r">&#127870;</div>
+  <div style="position:relative;">
+    <div class="hero-eyebrow">&#10022; Boutique de Licores Premium &#10022;</div>
+    <h1 class="hero-t">El mejor licor<br/><span>a tu puerta</span></h1>
+    <p class="hero-s">Seleccion exclusiva de licores premium. Haz tu pedido y lo recibiras donde estes.</p>
+    <button class="hero-btn" onclick="document.querySelector('.main').scrollIntoView({behavior:'smooth'})">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
+      Ver catalogo
+    </button>
+  </div>
+</section>
+
+<!-- CATEGORIAS VISUALES -->
+<section class="cats-vis-sec" id="catsVisSec" style="display:none;">
+  <div class="cats-vis-inner">
+    <div class="cats-vis-eyebrow">&#10022; Explora por categoría &#10022;</div>
+    <div class="cats-vis-tit">Nuestros Vinos &amp; Licores</div>
+    <div class="cats-vis-sub">Selecciona una categoría y descubre nuestra colección premium</div>
+    <div class="cats-vis-grid" id="catsVisGrid"></div>
+  </div>
+</section>
+
+<!-- PRODUCTOS -->
+<main class="main" id="mainCont">
+  <div class="loading">
+    <div class="loading-ring"></div>
+    <p>Cargando productos...</p>
+  </div>
+</main>
+
+<!-- BENEFICIOS -->
+<section class="ben-sec">
+  <div class="ben-inner">
+    <div class="ben-eyebrow">&#10022; Por qué elegirnos &#10022;</div>
+    <div class="ben-tit">Nuestros Beneficios</div>
+    <div class="ben-sub">Todo lo que necesitas en un solo lugar</div>
+    <div class="ben-divider"></div>
+    <div class="ben-grid">
+
+      <div class="ben-card">
+        <div class="ben-ic-wrap">&#128663;</div>
+        <div class="ben-card-t">Envío Express</div>
+        <div class="ben-card-s">Entrega rápida a domicilio donde te encuentres en nuestra zona de cobertura.</div>
+      </div>
+
+      <div class="ben-card">
+        <div class="ben-ic-wrap">&#11088;</div>
+        <div class="ben-card-t">Programa de Puntos</div>
+        <div class="ben-card-s">Acumula puntos en cada compra y canjéalos como descuento en tu próximo pedido.</div>
+      </div>
+
+      <div class="ben-card">
+        <div class="ben-ic-wrap">&#10003;</div>
+        <div class="ben-card-t">Estampilla Oficial</div>
+        <div class="ben-card-s">Todos nuestros licores cuentan con estampilla oficial de Colombia. Productos 100% garantizados.</div>
+      </div>
+
+      <div class="ben-card">
+        <div class="ben-ic-wrap">&#128172;</div>
+        <div class="ben-card-t">Asesoría en Línea</div>
+        <div class="ben-card-s">Nuestro equipo te ayuda a elegir el licor perfecto para cada ocasión especial.</div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer class="footer">
+  <div class="footer-logo">LA CAVA LICORERA</div>
+  <div class="footer-s">Boutique de Licores Premium</div>
+  <a class="footer-wa" href="#" onclick="contactarWA();return false;">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.761-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+    Hacer un pedido
+  </a>
+  <div class="footer-disc">El expendio de bebidas embriagantes a menores de edad, Ley 124 de 1994, est&aacute; prohibido en Colombia. La Cava Licorera promueve el consumo responsable.</div>
+</footer>
+
+<!-- CART FAB -->
+<button class="cart-fab h" id="cartFab" onclick="abrirCarrito()">
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>
+  Ver pedido
+  <span class="cart-fab-badge" id="cartFabN">0</span>
+</button>
+
+<!-- OVERLAY CARRITO -->
+<div class="cart-ov" id="cartOv" onclick="cerrarCarrito()"></div>
+<div class="cart-panel" id="cartPanel">
+  <div class="cart-hdr">
+    <div class="cart-hdr-t">Tu Pedido</div>
+    <button class="cart-close" onclick="cerrarCarrito()">&#10005;</button>
+  </div>
+  <div class="cart-items" id="cartItems"></div>
+  <div class="cart-footer">
+    <div class="cart-total">
+      <span class="cart-total-l">Total</span>
+      <span class="cart-total-v" id="cartTotal">$0</span>
+    </div>
+    <button class="cart-send" onclick="enviarWA()">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.761-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+      Enviar pedido por WhatsApp
+    </button>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div class="toast-w" id="toastW" style="display:none;"></div>
+
+<script>
+/* ==================== AGE GATE ==================== */
+var AGE_KEY='lacava_mayor_edad';
+function confirmarEdad(esMayor){
+  if(esMayor){
+    sessionStorage.setItem(AGE_KEY,'1');
+    document.getElementById('ageGate').classList.add('h');
+  } else {
+    document.getElementById('ageGate').classList.add('h');
+    var men=document.getElementById('ageMenor');
+    if(men)men.style.display='flex';
+  }
+}
+/* Verificar al cargar */
+(function(){
+  if(sessionStorage.getItem(AGE_KEY)==='1'){
+    var gate=document.getElementById('ageGate');
+    if(gate)gate.classList.add('h');
+  }
+})();
+
+/* ============================================================
+   CONFIGURACION
+   ============================================================ */
+var SB  = 'https://egjlrcokerffuoqwbxlh.supabase.co';
+var SK  = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVnamxyY29rZXJmZnVvcXdieGxoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY3OTMzMjcsImV4cCI6MjA5MjM2OTMyN30.XpOcqMBKFSv3-mYmM-uvQSU12VZppqNfmShEhihwD9c';
+var CID = 'lacava';
+var WA_TIENDA = '3001785744';
+/* ============================================================ */
+
+var productos=[],catActual='all',busqueda='',carrito={};
+
+function fmt(n){return '$'+Math.round(n).toLocaleString('es-CO');}
+
+async function cargarProductos(){
+  try{
+    var r=await fetch(SB+'/rest/v1/inventario?id_licencia=eq.'+CID+'&select=*&order=categoria.asc,nombre.asc',{headers:{'apikey':SK,'Authorization':'Bearer '+SK}});
+    if(!r.ok)throw new Error();
+    var data=await r.json();
+    var _catHidden=JSON.parse(localStorage.getItem('lacava_cat_hidden')||'[]');
+    productos=data.filter(function(p){return _catHidden.indexOf(p.id)===-1&&_catHidden.indexOf(String(p.id))===-1;});
+    construirCats();
+    renderGrid();
+  }catch(e){
+    document.getElementById('mainCont').innerHTML='<div class="empty"><div class="empty-ic">&#128546;</div><p>No se pudo cargar el catalogo.<br>Intenta de nuevo en un momento.</p></div>';
+  }
+}
+
+function construirCats(){
+  var cats=[];
+  productos.forEach(function(p){var c=p.categoria||'General';if(cats.indexOf(c)===-1)cats.push(c);});
+  var bar=document.getElementById('catBar');
+  bar.innerHTML='<div class="cat-item on" data-cat="all" onclick="setCat(\'all\',this)">&#127870; Todos</div>'+
+    cats.map(function(c){
+      return '<div class="cat-item" data-cat="'+c+'" onclick="setCat(\''+c+'\',this)">'+catEmoji(c)+' '+c+'</div>';
+    }).join('');
+  renderCatsVisual(cats);
+}
+
+function renderCatsVisual(cats){
+  var sec=document.getElementById('catsVisSec');
+  var grid=document.getElementById('catsVisGrid');
+  if(!sec||!grid||!cats||!cats.length){if(sec)sec.style.display='none';return;}
+  grid.innerHTML=cats.map(function(c){
+    var cSafe=c.replace(/'/g,"\\'");
+    var firstProd=productos.find(function(p){return (p.categoria||'General')===c&&p.imagen;});
+    var icContent=firstProd?
+      '<img src="'+firstProd.imagen+'" alt="'+escHtml(c)+'">':
+      catEmoji(c);
+    var icStyle=firstProd?'background:#fff;padding:6px;':'';
+    return '<div class="cat-vis-item" onclick="setCatByName(\''+cSafe+'\')">'+
+      '<div class="cat-vis-ic" style="'+icStyle+'">'+icContent+'</div>'+
+      '<div class="cat-vis-nm">'+c+'</div>'+
+    '</div>';
+  }).join('');
+  sec.style.display='block';
+}
+
+function setCatByName(name){
+  var el=document.querySelector('.cat-item[data-cat="'+name+'"]');
+  if(el){setCat(name,el);}
+  document.querySelector('.main').scrollIntoView({behavior:'smooth',block:'start'});
+}
+
+function catEmoji(c){
+  if(!c||c==='all')return'&#127870;';
+  var m={'whisky':'&#129347;','whiskey':'&#129347;','bourbon':'&#129347;','ron':'&#129347;','rum':'&#129347;','vodka':'&#127862;','tequila':'&#127822;','mezcal':'&#127822;','ginebra':'&#127823;','gin':'&#127823;','cerveza':'&#127866;','beer':'&#127866;','vino':'&#127863;','wine':'&#127863;','champan':'&#127870;','espumante':'&#127870;','aguardiente':'&#127861;','brandy':'&#127861;','cognac':'&#127861;'};
+  var k=c.toLowerCase().trim();
+  for(var key in m){if(k.indexOf(key)>-1)return m[key];}
+  return'&#127870;';
+}
+
+function setCat(c,el){
+  catActual=c;
+  document.querySelectorAll('.cat-item').forEach(function(i){i.classList.remove('on');});
+  el.classList.add('on');
+  if(c!=='all')document.querySelector('.main').scrollIntoView({behavior:'smooth',block:'start'});
+  renderGrid();
+}
+
+function filtrar(){
+  busqueda=document.getElementById('srchIn').value.toLowerCase().trim();
+  catActual='all';
+  document.querySelectorAll('.cat-item').forEach(function(i){i.classList.remove('on');});
+  var a=document.querySelector('.cat-item[data-cat="all"]');if(a)a.classList.add('on');
+  renderGrid();
+}
+
+function renderGrid(){
+  var filtered=productos.filter(function(p){
+    var mc=catActual==='all'||(p.categoria||'General')===catActual;
+    var mq=!busqueda||(p.nombre||'').toLowerCase().indexOf(busqueda)>-1;
+    return mc&&mq;
+  });
+  var cont=document.getElementById('mainCont');
+  if(!filtered.length){cont.innerHTML='<div class="empty"><div class="empty-ic">&#128269;</div><p>Sin productos para esta busqueda.</p></div>';return;}
+
+  var groups={};
+  filtered.forEach(function(p){var c=p.categoria||'General';if(!groups[c])groups[c]=[];groups[c].push(p);});
+
+  var html='';
+  Object.keys(groups).forEach(function(cat){
+    html+='<div class="sec"><div class="sec-hdr"><div class="sec-line"></div><div class="sec-tit">'+catEmoji(cat)+' '+cat+'</div><div class="sec-line2"></div></div><div class="pgrid">';
+    groups[cat].forEach(function(p){html+=cardHTML(p);});
+    html+='</div></div>';
+  });
+  cont.innerHTML=html;
+}
+
+function cardHTML(p){
+  var udsEmp=parseInt(p.uds_empaque)||1;
+  var precio=parseFloat(p.precio_venta)||0;
+  var tieneEmp=udsEmp>1;
+  var precioUnd=tieneEmp?Math.round(precio/udsEmp):precio;
+  var imgH=p.imagen?'<img src="'+p.imagen+'" alt="'+escHtml(p.nombre||'')+'" loading="lazy"/>':'<div class="pcard-ph">'+catEmoji(p.categoria||'')+'</div>';
+  var empLabel=udsEmp===6?'Sixpack':udsEmp===12?'Caja x12':udsEmp===24?'Caja x24':'Pack x'+udsEmp;
+  var bodyHtml='<div class="pcard-body"><div class="pcard-name">'+(p.nombre||'Producto')+'</div>';
+  if(tieneEmp){
+    var keyUnd=p.id+'_und';
+    var keyEmp=p.id+'_emp';
+    var qtyUnd=carrito[keyUnd]?carrito[keyUnd].qty:0;
+    var qtyEmp=carrito[keyEmp]?carrito[keyEmp].qty:0;
+    bodyHtml+='<div class="pcard-variants">'+
+      '<div class="pcard-variant">'+
+        '<div class="pcard-variant-label">Unidad</div>'+
+        '<div class="pcard-variant-price">'+fmt(precioUnd)+'</div>'+
+        (qtyUnd>0?
+          '<div class="pcard-qty" style="justify-content:center;gap:5px;">'+
+            '<button class="pcard-qty-btn" style="width:24px;height:24px;font-size:14px;" onclick="cambiarQty(\''+keyUnd+'\',-1)">&#8722;</button>'+
+            '<span class="pcard-qty-n" style="font-size:13px;">'+qtyUnd+'</span>'+
+            '<button class="pcard-qty-btn" style="width:24px;height:24px;font-size:14px;" onclick="cambiarQty(\''+keyUnd+'\',1)">&#43;</button>'+
+          '</div>':
+          '<button class="pcard-add-sm" onclick="agregarCarrito(\''+p.id+'\',\'und\')">+ Und</button>'
+        )+
+      '</div>'+
+      '<div class="pcard-variant">'+
+        '<div class="pcard-variant-label">'+empLabel+'</div>'+
+        '<div class="pcard-variant-price">'+fmt(precio)+'</div>'+
+        (qtyEmp>0?
+          '<div class="pcard-qty" style="justify-content:center;gap:5px;">'+
+            '<button class="pcard-qty-btn" style="width:24px;height:24px;font-size:14px;" onclick="cambiarQty(\''+keyEmp+'\',-1)">&#8722;</button>'+
+            '<span class="pcard-qty-n" style="font-size:13px;">'+qtyEmp+'</span>'+
+            '<button class="pcard-qty-btn" style="width:24px;height:24px;font-size:14px;" onclick="cambiarQty(\''+keyEmp+'\',1)">&#43;</button>'+
+          '</div>':
+          '<button class="pcard-add-sm" onclick="agregarCarrito(\''+p.id+'\',\'emp\')">+ '+empLabel+'</button>'
+        )+
+      '</div>'+
+    '</div>';
+  } else {
+    var qty=carrito[p.id]?carrito[p.id].qty:0;
+    bodyHtml+='<div class="pcard-price">'+fmt(precio)+'</div>'+
+      (qty>0?
+        '<div class="pcard-qty">'+
+          '<button class="pcard-qty-btn" onclick="cambiarQty(\''+p.id+'\',-1)">&#8722;</button>'+
+          '<span class="pcard-qty-n">'+qty+'</span>'+
+          '<button class="pcard-qty-btn" onclick="cambiarQty(\''+p.id+'\',1)">&#43;</button>'+
+        '</div>':
+        '<button class="pcard-add" onclick="agregarCarrito(\''+p.id+'\',\'und\')">+ Agregar</button>'
+      );
+  }
+  bodyHtml+='</div>';
+  return '<div class="pcard">'+
+    '<div class="pcard-img-wrap">'+imgH+
+    '</div>'+
+    bodyHtml+
+  '</div>';
+}
+
+function escHtml(s){return s.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');}
+
+function agregarCarrito(id,tipo){
+  var p=productos.find(function(x){return x.id===id||x.id==id;});
+  if(!p)return;
+  var udsEmp=parseInt(p.uds_empaque)||1;
+  var precio=parseFloat(p.precio_venta)||0;
+  var precioUnd=udsEmp>1?Math.round(precio/udsEmp):precio;
+  tipo=tipo||'und';
+  var empLabel=udsEmp===6?'Sixpack':udsEmp===12?'Caja x12':udsEmp===24?'Caja x24':'Pack x'+udsEmp;
+  var cartKey=(udsEmp>1&&tipo==='emp')?id+'_emp':(udsEmp>1?id+'_und':id);
+  var itemPrecio=(tipo==='emp'&&udsEmp>1)?precio:precioUnd;
+  var itemNombre=(tipo==='emp'&&udsEmp>1)?(p.nombre||'Producto')+' ('+empLabel+')':(p.nombre||'Producto');
+  carrito[cartKey]={id:id,cartKey:cartKey,nombre:itemNombre,precio:itemPrecio,qty:1,img:p.imagen,cat:p.categoria,tipo:tipo};
+  renderGrid();actualizarUI();
+  toast('&#10003; '+((p.nombre||'').split(' ').slice(0,3).join(' '))+' agregado');
+}
+
+function cambiarQty(id,d){
+  if(!carrito[id])return;
+  var q=carrito[id].qty+d;
+  if(q<=0)delete carrito[id]; else carrito[id].qty=q;
+  actualizarUI();renderGrid();
+  if(document.getElementById('cartPanel').classList.contains('o'))renderCarrito();
+}
+
+function actualizarUI(){
+  var total=Object.values(carrito).reduce(function(s,i){return s+i.qty;},0);
+  document.getElementById('cartFabN').textContent=total;
+  document.getElementById('cartCnt').textContent=total;
+  var fab=document.getElementById('cartFab');
+  var cnt=document.getElementById('cartCnt');
+  if(total>0){fab.classList.remove('h');cnt.classList.remove('h');}
+  else{fab.classList.add('h');cnt.classList.add('h');}
+}
+
+function abrirCarrito(){
+  renderCarrito();
+  document.getElementById('cartOv').classList.add('o');
+  setTimeout(function(){document.getElementById('cartPanel').classList.add('o');},10);
+  document.body.style.overflow='hidden';
+}
+
+function cerrarCarrito(){
+  document.getElementById('cartPanel').classList.remove('o');
+  document.getElementById('cartOv').classList.remove('o');
+  document.body.style.overflow='';
+}
+
+function renderCarrito(){
+  var items=Object.values(carrito);
+  var el=document.getElementById('cartItems');
+  if(!items.length){
+    el.innerHTML='<div class="cart-empty-msg"><div style="font-size:44px;opacity:.3;">&#127870;</div><p>Tu pedido esta vacio.<br>Agrega productos del catalogo.</p></div>';
+    document.getElementById('cartTotal').textContent='$0';return;
+  }
+  el.innerHTML=items.map(function(it){
+    var imgH=it.img?'<img src="'+it.img+'" alt="'+escHtml(it.nombre||'')+'" />':(catEmoji(it.cat||''));
+    var ck=it.cartKey||it.id;
+    return '<div class="cart-item">'+
+      '<div class="cart-item-img">'+imgH+'</div>'+
+      '<div class="cart-item-info"><div class="cart-item-name">'+(it.nombre||'Producto')+'</div><div class="cart-item-price">'+fmt(it.precio)+' c/u</div></div>'+
+      '<div class="cart-item-qty">'+
+        '<button class="cart-item-btn" onclick="cambiarQty(\''+ck+'\',-1)">&#8722;</button>'+
+        '<span class="cart-item-n">'+it.qty+'</span>'+
+        '<button class="cart-item-btn" onclick="cambiarQty(\''+ck+'\',1)">&#43;</button>'+
+      '</div></div>';
+  }).join('');
+  var t=items.reduce(function(s,i){return s+i.precio*i.qty;},0);
+  document.getElementById('cartTotal').textContent=fmt(t);
+}
+
+function enviarWA(){
+  var items=Object.values(carrito);
+  if(!items.length){toast('Agrega productos primero');return;}
+  var lineas=items.map(function(it){return encodeURIComponent('• '+it.qty+'x '+it.nombre+' — '+fmt(it.precio*it.qty));});
+  var total=items.reduce(function(s,i){return s+i.precio*i.qty;},0);
+  var msg='*Hola%20La%20Cava%20Licorera!*%20%F0%9F%8D%B7%0A%0AQuiero%20hacer%20este%20pedido%3A%0A%0A'+lineas.join('%0A')+'%0A%0A*Total%3A%20'+encodeURIComponent(fmt(total))+'*%0A%0A%C2%A1Gracias!';
+  window.open('https://wa.me/57'+WA_TIENDA+'?text='+msg,'_blank');
+}
+
+function contactarWA(){
+  window.open('https://wa.me/57'+WA_TIENDA+'?text='+encodeURIComponent('Hola La Cava Licorera! 🍷 Quiero hacer un pedido.'),'_blank');
+}
+
+var _tt;
+function toast(msg){
+  var w=document.getElementById('toastW');
+  w.innerHTML='<div class="toast">'+msg+'</div>';
+  w.style.display='block';
+  clearTimeout(_tt);
+  _tt=setTimeout(function(){w.style.display='none';},2200);
+}
+
+cargarProductos();
+</script>
+</body>
+</html>

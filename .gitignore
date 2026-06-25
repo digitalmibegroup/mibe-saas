@@ -1,0 +1,5 @@
+.backups/
+.claude/
+BACKUP_PRE_FIX_DETALLE_VENTAS_*/
+*.log
+Thumbs.db
