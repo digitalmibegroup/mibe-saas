@@ -5595,12 +5595,45 @@ async function eliminarCliente(id, nombreEnc, waEnc){
 
 async function eliminarCompra(id){
   if(!confirm('¿Eliminar esta orden de compra?\nEsta acción no se puede deshacer.'))return;
+  var compra=COMPRAS.find(function(c){return c.id===id;});
+  var qtyPorProducto=null;
+  if(compra&&compra.estado==='recibida'&&compra.items){
+    /* Agrupar unidades a revertir por producto (defensivo ante items repetidos) */
+    qtyPorProducto={};
+    compra.items.forEach(function(item){
+      qtyPorProducto[item.prod_id]=(qtyPorProducto[item.prod_id]||0)+item.qty;
+    });
+    /* Bloquear ANTES de mutar nada si el inventario ya fue consumido por ventas/ajustes */
+    var insuficientes=[];
+    Object.keys(qtyPorProducto).forEach(function(prodId){
+      var prod=INVENTARIO.find(function(p){return p.id===prodId;});
+      if(prod&&prod.stock<qtyPorProducto[prodId]){
+        insuficientes.push(prod.nombre+' (disponible: '+prod.stock+', requerido: '+qtyPorProducto[prodId]+')');
+      }
+    });
+    if(insuficientes.length){
+      toast('No se puede eliminar: el inventario de esta compra ya fue utilizado — '+insuficientes.join('; '));
+      return;
+    }
+  }
   try{
+    if(qtyPorProducto){
+      /* Validado arriba: stock-qty nunca puede ser negativo aqui */
+      Object.keys(qtyPorProducto).forEach(function(prodId){
+        var prod=INVENTARIO.find(function(p){return p.id===prodId;});
+        if(prod){
+          prod.stock-=qtyPorProducto[prodId];
+          actualizarStockSB(prod.id,prod.stock,prod.precio_costo,prod.uds_sueltas||0);
+        }
+      });
+    }
     await fetch(SB+'/rest/v1/compras_items?compra_id=eq.'+id,{method:'DELETE',headers:H});
     await fetch(SB+'/rest/v1/compras?id=eq.'+id,{method:'DELETE',headers:H});
     COMPRAS=COMPRAS.filter(function(c){return c.id!==id;});
     renderComprasList();
-    toast('Compra eliminada');
+    if(document.getElementById('vInventario').style.display==='flex'){renderInvTable();renderInvStats();renderInvAlerts();}
+    if(document.getElementById('vPOS').style.display==='flex')renderPOS();
+    toast('Compra eliminada'+(compra&&compra.estado==='recibida'?' - stock revertido':''));
   }catch(e){console.error(e);toast('Error al eliminar compra');}
 }
 
