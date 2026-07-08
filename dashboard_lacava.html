@@ -1455,6 +1455,17 @@ body.pos-sb-off .pos-sb-btn{background:var(--gold-s);border-color:var(--gold-b);
   </div>
 </div>
 
+<!-- MODAL RECORDATORIO ESTADO DE CAJA (al iniciar sesion, una sola vez) -->
+<div id="modalRecordatorioCaja" style="position:fixed;inset:0;z-index:10000;display:none;align-items:center;justify-content:center;padding:20px;background:rgba(0,0,0,.55);">
+  <div style="background:#fff;border-radius:18px;max-width:400px;width:100%;padding:32px 28px;text-align:center;position:relative;animation:popIn .3s cubic-bezier(.34,1.56,.64,1);">
+    <div onclick="cerrarModalRecordatorioCaja()" style="position:absolute;top:14px;right:16px;cursor:pointer;font-size:22px;color:var(--text3);line-height:1;">&#215;</div>
+    <div id="rcIcono" style="width:64px;height:64px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:30px;margin:0 auto 16px;"></div>
+    <div id="rcTitulo" style="font-size:18px;font-weight:800;color:var(--text);margin-bottom:8px;"></div>
+    <div id="rcMensaje" style="font-size:13px;color:var(--text3);line-height:1.6;margin-bottom:24px;"></div>
+    <button id="rcBoton" style="width:100%;padding:12px 20px;border:none;border-radius:9px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;color:#fff;"></button>
+  </div>
+</div>
+
 <!-- MODAL EDITAR CLIENTE -->
 <div id="editCliModal" style="position:fixed;inset:0;z-index:650;display:none;align-items:center;justify-content:center;padding:20px;background:rgba(0,0,0,.5);">
   <div style="background:#fff;border-radius:18px;max-width:480px;width:100%;padding:28px;animation:popIn .3s cubic-bezier(.34,1.56,.64,1);max-height:90vh;overflow-y:auto;">
@@ -2037,16 +2048,58 @@ function setupCajaAutoSync(){
   });
 }
 
-/* Fase 5 · Req 3: advertencia de caja abierta hace demasiado tiempo (solo avisa, no cierra) */
-var _cajaAntiguaAvisada=false;
-function validarCajaAntigua(){
-  if(_cajaAntiguaAvisada) return;
-  if(!CAJA_ACTUAL||!CAJA_ACTUAL.fecha_apertura) return;
-  var horas=(Date.now()-new Date(CAJA_ACTUAL.fecha_apertura).getTime())/3600000;
-  if(horas>18){
-    _cajaAntiguaAvisada=true;
-    toast('Existe una caja abierta desde hace más de 18 horas. Verifica si debe cerrarse.');
+/* Recordatorio de estado de caja al iniciar sesion (una sola vez por sesion).
+   Unica fuente de verdad para avisos de estado de caja al arrancar la app
+   (sustituye la antigua validarCajaAntigua(), ahora integrada aqui como el
+   caso "anterior": una caja de un dia distinto a hoy siempre se bloquea,
+   sin importar cuantas horas lleve abierta).
+   Capa de asistencia visual unicamente: no modifica syncCajaDesdeSupabase, ni
+   mostrarAperturaCaja/mostrarCierreCaja, solo los invoca. */
+var _recordatorioCajaMostrado=false;
+function verificarEstadoCajaInicio(){
+  if(_recordatorioCajaMostrado) return;
+  _recordatorioCajaMostrado=true;
+  var abierta=CAJA_ACTUAL&&CAJA_ACTUAL.estado==='abierta';
+  if(!abierta){
+    mostrarModalRecordatorioCaja('faltante');
+    return;
   }
+  var hoy=fechaBogotaYMD();
+  var diaCaja=fechaBogotaYMD(new Date(CAJA_ACTUAL.fecha_apertura));
+  if(diaCaja!==hoy){
+    mostrarModalRecordatorioCaja('anterior');
+  }
+  /* diaCaja===hoy: Estado 3, caja del dia ya abierta, no se muestra nada */
+}
+
+function mostrarModalRecordatorioCaja(tipo){
+  var ov=document.getElementById('modalRecordatorioCaja');
+  if(!ov)return;
+  var icono=document.getElementById('rcIcono');
+  var titulo=document.getElementById('rcTitulo');
+  var mensaje=document.getElementById('rcMensaje');
+  var boton=document.getElementById('rcBoton');
+  if(tipo==='anterior'){
+    icono.style.background='var(--red-bg)';icono.innerHTML='&#128308;';
+    titulo.textContent='Debes cerrar la caja anterior';
+    mensaje.textContent='La caja del día anterior continúa abierta. Debes cerrarla antes de iniciar un nuevo día de trabajo.';
+    boton.style.background='var(--red)';
+    boton.textContent='Cerrar caja anterior';
+    boton.onclick=function(){cerrarModalRecordatorioCaja();goView('caja',document.getElementById('niCaja'));mostrarCierreCaja();};
+  } else {
+    icono.style.background='var(--yellow-bg)';icono.innerHTML='&#128993;';
+    titulo.textContent='Aún no has abierto la caja de hoy';
+    mensaje.textContent='Antes de comenzar a registrar ventas abre la caja del día. Podrás seguir navegando por el sistema, pero no podrás registrar ventas hasta abrir la caja.';
+    boton.style.background='var(--gold-l)';
+    boton.textContent='Abrir caja del día';
+    boton.onclick=function(){cerrarModalRecordatorioCaja();goView('caja',document.getElementById('niCaja'));mostrarAperturaCaja();};
+  }
+  ov.style.display='flex';
+}
+
+function cerrarModalRecordatorioCaja(){
+  var ov=document.getElementById('modalRecordatorioCaja');
+  if(ov)ov.style.display='none';
 }
 
 /* Fase 5 · Req 5: punto único de integración para Supabase Realtime (pendiente) */
@@ -2127,7 +2180,7 @@ async function iniciarApp(){
   buildCatsPOS();
   loadClis();
   await syncCajaDesdeSupabase();
-  validarCajaAntigua();
+  verificarEstadoCajaInicio();
   renderCajaBtn();
   renderEspera();
   initExpandCart();
