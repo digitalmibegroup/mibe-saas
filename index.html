@@ -2232,7 +2232,17 @@ async function ejecutarImportGS(){
       var body={id_licencia:CID,nombre:p.nombre,categoria:p.categoria,precio_venta:p.precio_venta,stock:0,uds_empaque:1,uds_sueltas:0,minimo_stock:2};
       if(p.imagen)body.imagen=p.imagen;
       var r=await fetch(SB+'/rest/v1/inventario',{method:'POST',headers:H,body:JSON.stringify(body)});
-      if(r.ok)ok++; else err++;
+      if(r.ok){
+        ok++;
+        /* Shadow write (best-effort, fire-and-forget): presentacion PRIMARIA del producto importado.
+           costo_vigente NULL (el importador no trae costos) => Grupo C; origen 'import'.
+           Un fallo aqui JAMAS detiene el lote ni altera el conteo ok/err. */
+        try{
+          var gsCreado=await r.json();
+          var gsNewId=gsCreado&&gsCreado[0]&&gsCreado[0].id;
+          if(gsNewId) shadowWritePresentacion(gsNewId,'unidad',1,0,'import',true);
+        }catch(eGS){}
+      } else err++;
     }catch(e){err++;}
   }
   cerrarImportGS();
@@ -3557,35 +3567,70 @@ var PROVEEDORES = [];
 var COMPRAS = [];
 var comprasView = 'lista'; // 'lista' | 'nueva' | 'proveedores'
 
-/* ---- CAMBIO 5: Memoria de último costo ---- */
-function autoFillCosto(prodId) {
-  if(!prodId) return;
+/* ==================== READ PATH — FASE (canario #1: Compras/autoFillCosto) ====================
+   Lectura desde producto_presentaciones con FALLBACK TOTAL a la logica legacy (HITO 3).
+   Rollback instantaneo por flag: READ_PATH_COMPRAS=false => comportamiento identico a hoy.
+   Regla de confianza: solo se usa el costo nuevo si origen es compra/manual (dato fresco del
+   shadow write) o si el backfill lo clasifico grupo=A. Grupo B/C => fallback legacy.
+   ACTIVACION (ETAPA 1): flag en false hasta que Shadow Write quede validado + Backfill
+   Completo ejecutado y verificado + integridad global correcta. Activar = cambiar a true.
+   ETAPA 2 (RP2 Inventario / RP3 Reportes / RP4 POS): se integraran en un unico cambio
+   cuando RP1 quede estable — misma infraestructura (cache + costoLectura + flags). */
+var READ_PATH_COMPRAS=false;     /* RP1: Compras/autoFillCosto */
+
+/* Aplica un costo al formulario de compra (logica de presentacion identica al legacy/HITO 3) */
+function aplicarCostoCompra(prodId, ultimoCosto){
   var costoInput = document.getElementById('compraAddCosto');
   var margenInput = document.getElementById('compraMargen');
   var pvInput = document.getElementById('compraAddPV');
   if(!costoInput) return;
-  // Buscar último costo en historial de compras
+  if(ultimoCosto > 0) {
+    costoInput.value = ultimoCosto;
+    var inv2 = INVENTARIO.find(function(p){ return p.id === prodId; });
+    if(margenInput && inv2 && inv2.precio_venta > ultimoCosto) {
+      margenInput.value = Math.round((1 - ultimoCosto/inv2.precio_venta)*100);
+      calcPrecioVenta('compraAddCosto','compraMargen','compraAddPV');
+    } else {
+      if(margenInput) margenInput.value = '';
+      if(pvInput) pvInput.value = '';
+    }
+  } else {
+    costoInput.value = '';
+    if(margenInput) margenInput.value = '';
+    if(pvInput) pvInput.value = '';
+  }
+}
+
+/* ---- CAMBIO 5 (legacy, intacto): Memoria de último costo por presentacion exacta ---- */
+function autoFillCostoLegacy(prodId, tipoActual) {
   var ultimoCosto = 0;
   for(var i = COMPRAS.length - 1; i >= 0; i--) {
     var comp = COMPRAS[i];
     if(comp.items) {
-      var item = comp.items.find(function(it){ return it.prod_id === prodId; });
+      var item = comp.items.find(function(it){ return it.prod_id === prodId && it.tipo === tipoActual; });
       if(item && item.costo > 0) { ultimoCosto = item.costo; break; }
     }
   }
-  // Si no hay historial, usar precio_costo del inventario
-  if(!ultimoCosto) {
-    var inv = INVENTARIO.find(function(p){ return p.id === prodId; });
-    if(inv && inv.precio_costo > 0) ultimoCosto = inv.precio_costo;
-  }
-  if(ultimoCosto > 0) {
-    costoInput.value = ultimoCosto;
-    var inv2 = INVENTARIO.find(function(p){ return p.id === prodId; });
-    if(inv2 && inv2.precio_venta > ultimoCosto && margenInput) {
-      margenInput.value = Math.round((1 - ultimoCosto/inv2.precio_venta)*100);
-      if(pvInput) pvInput.value = inv2.precio_venta;
-    }
-  }
+  aplicarCostoCompra(prodId, ultimoCosto);
+}
+
+function autoFillCosto(prodId) {
+  if(!prodId) return;
+  var tipoActual = tipoCompraActual||'unidad';
+  if(!READ_PATH_COMPRAS){ autoFillCostoLegacy(prodId, tipoActual); return; }
+  /* Lectura del modelo nuevo (best-effort). Cualquier fallo o dato no confiable => fallback legacy. */
+  fetch(SB+'/rest/v1/producto_presentaciones?id_producto=eq.'+encodeURIComponent(prodId)+'&tipo_presentacion=eq.'+encodeURIComponent(tipoActual)+'&select=costo_vigente,origen_costo,observaciones&limit=1',{headers:{'apikey':SK,'Authorization':'Bearer '+SK}})
+    .then(function(r){ if(!r.ok) throw 0; return r.json(); })
+    .then(function(rows){
+      var sel=document.getElementById('compraAddProd');
+      if(sel && sel.value !== prodId) return; /* el usuario ya cambio de producto: descartar respuesta */
+      var f=rows&&rows[0];
+      var confiable = f && parseFloat(f.costo_vigente)>0 &&
+        (f.origen_costo==='compra' || f.origen_costo==='manual' || (f.observaciones||'').indexOf('grupo=A')===0);
+      if(confiable) aplicarCostoCompra(prodId, parseFloat(f.costo_vigente));
+      else autoFillCostoLegacy(prodId, tipoActual);
+    })
+    .catch(function(){ autoFillCostoLegacy(prodId, tipoActual); });
 }
 
 /* ---- CAMBIO 6: Tipo de ingreso con botones ---- */
@@ -3609,6 +3654,9 @@ function setTipoCompra(tipo) {
     if(udsInp && tipo==='caja') udsInp.value=24;
     if(udsInp && tipo==='empaque') udsInp.value=12;
   }
+  // Refrescar costo/PV al cambiar de presentacion, si ya hay un producto seleccionado
+  var prodSel = document.getElementById('compraAddProd');
+  if(prodSel && prodSel.value) autoFillCosto(prodSel.value);
 }
 
 /* ---- CAMBIO 7: Buscador + categorías en selección de productos ---- */
@@ -4521,7 +4569,11 @@ function guardarNuevoProd(){
   }
   /* Save to Supabase */
   var newProd=INVENTARIO[INVENTARIO.length-1];
-  guardarProdSB(newProd);
+  guardarProdSB(newProd).then(function(){
+    /* Shadow write (best-effort, fire-and-forget): crear presentacion PRIMARIA del producto nuevo.
+       La FK a inventario garantiza que la sombra solo puede existir si legacy quedo OK. */
+    shadowWritePresentacion(newProd.id,newProd.empaque||'unidad',newProd.uds_empaque||1,newProd.precio_costo||0,'manual',true);
+  }).catch(function(){});
   closeNuevoProd();renderInvTable();renderInvStats();renderInvAlerts();
   if(document.getElementById('vPOS').style.display==='flex')renderPOS();
   toast('Producto guardado: '+nombre.split(' ').slice(0,3).join(' '));
@@ -4553,12 +4605,15 @@ function guardarEditProd(){
     d2.onclick=function(){invCatA=cat;invBar.querySelectorAll('.cf').forEach(function(x){x.classList.remove('on');});d2.classList.add('on');renderInvTable();};
     invBar.appendChild(d2);
   }
+  var pcAnterior=parseFloat(prod.precio_costo)||0;
   prod.nombre=nombre;prod.categoria=cat;prod.precio_venta=pv;prod.precio_costo=pc;prod.stock_min=sm;prod.stock=st;
   prod.empaque=empaque;prod.uds_empaque=udsEmpaque;
   if(editImagenChanged) prod.imagen=editImagenB64;
   /* Update Supabase */
   var editedProd=INVENTARIO.find(function(p){return p.id===editProdId;});
   if(editedProd) actualizarProdSB(editedProd);
+  /* Shadow write (best-effort, fire-and-forget): costo de la presentacion PRIMARIA, solo si cambio */
+  if(editedProd&&pc>0&&pc!==pcAnterior) shadowWritePrimaria(editedProd,pc,'manual');
   closeEditProd();renderInvTable();renderInvStats();renderInvAlerts();
   if(document.getElementById('vPOS').style.display==='flex')renderPOS();
   toast('Producto actualizado: '+nombre.split(' ').slice(0,3).join(' '));
@@ -4670,6 +4725,86 @@ function addItemCompra(){
   renderItemsCompra();
 }
 
+/* ==================== SHADOW WRITE — Presentaciones (SPRINT 1 / HITO 9.1) ====================
+   Legacy (inventario.precio_costo) sigue siendo la UNICA fuente oficial.
+   producto_presentaciones recibe escritura sombra best-effort: si falla, NUNCA
+   afecta la operacion, NUNCA muestra error, solo registra el fallo.
+   Tenant canonico de La Cava (GATE 1). Mapeo oficial: id_licencia='lacava' <-> TENANT_LACAVA */
+var TENANT_LACAVA='3c349480-fef4-49c1-b9b1-b27c97f986c0';
+
+/* Auditoria best-effort: nunca lanza, nunca bloquea */
+function shadowAudit(modulo,entidad,entidadId,accion,resultado,motivo,diffObj){
+  try{
+    fetch(SB+'/rest/v1/auditoria_eventos',{method:'POST',headers:H,body:JSON.stringify({
+      tenant_id:TENANT_LACAVA,id_licencia:CID,actor_id:'sistema:shadow-write',actor_tipo:'sistema',
+      modulo:modulo,entidad:entidad,entidad_id:entidadId,accion:accion,origen_canal:'web',
+      resultado:resultado,motivo:motivo||null,diff:diffObj?[diffObj]:null
+    })}).catch(function(){});
+  }catch(e){}
+}
+
+/* Upsert sombra por (id_producto, tipo_presentacion). NUNCA lanza. */
+async function shadowWritePresentacion(prodId,tipo,udsEmp,costo,origen,esPredeterminada){
+  try{
+    if(!prodId)return;
+    var costoN=(costo>0)?costo:null; /* costo 0 => costo_vigente NULL (pendiente de captura) */
+    var tipoN=tipo||'unidad';
+    var udsN=(udsEmp&&udsEmp>=1)?udsEmp:1;
+    var rGet=await fetch(SB+'/rest/v1/producto_presentaciones?id_producto=eq.'+encodeURIComponent(prodId)+'&tipo_presentacion=eq.'+encodeURIComponent(tipoN)+'&select=id&limit=1',{headers:{'apikey':SK,'Authorization':'Bearer '+SK}});
+    if(!rGet.ok)throw new Error('lookup HTTP '+rGet.status);
+    var rows=await rGet.json();
+    var w;
+    if(rows&&rows.length){
+      /* Existe: actualizar SOLO costo_vigente, origen_costo, fecha y usuario (nunca anular un costo existente) */
+      if(costoN===null)return;
+      w=await fetch(SB+'/rest/v1/producto_presentaciones?id=eq.'+rows[0].id,{method:'PATCH',headers:H,body:JSON.stringify({
+        costo_vigente:costoN,origen_costo:origen||'compra',
+        fecha_actualizacion:new Date().toISOString(),usuario_actualizacion:'sistema:shadow-write'
+      })});
+    } else {
+      /* No existe: crearla (nace de una compra real o de la creacion del producto — regla HITO 7A.1) */
+      w=await fetch(SB+'/rest/v1/producto_presentaciones',{method:'POST',headers:H,body:JSON.stringify({
+        tenant_id:TENANT_LACAVA,id_licencia:CID,id_producto:prodId,tipo_presentacion:tipoN,
+        uds_empaque:udsN,es_predeterminada:!!esPredeterminada,activo:true,
+        costo_vigente:costoN,origen_costo:origen||'compra',usuario_creacion:'sistema:shadow-write'
+      })});
+    }
+    if(!w.ok)throw new Error('write HTTP '+w.status);
+    shadowAudit('compras','producto_presentaciones',prodId,'update','exito',null,{campo:'costo_vigente',tipo:tipoN,valor_nuevo:costoN});
+  }catch(e){
+    console.warn('[shadow-write] fallo silencioso (no afecta la operacion):',e&&e.message);
+    shadowAudit('compras','producto_presentaciones',prodId,'update','fallo',String(e&&e.message||e),null);
+    /* TODO: Future Sync Queue — punto de extension para reconciliacion (no implementar aun) */
+  }
+}
+
+/* Upsert sombra de la presentacion PRIMARIA (Editar Producto — SPRINT 2 / HITO 9.2).
+   Localiza por es_predeterminada=true (diseno HITO 8B). NUNCA lanza. */
+async function shadowWritePrimaria(prod,costo,origen){
+  try{
+    if(!prod||!prod.id||!(costo>0))return;
+    var rGet=await fetch(SB+'/rest/v1/producto_presentaciones?id_producto=eq.'+encodeURIComponent(prod.id)+'&es_predeterminada=is.true&select=id&limit=1',{headers:{'apikey':SK,'Authorization':'Bearer '+SK}});
+    if(!rGet.ok)throw new Error('lookup HTTP '+rGet.status);
+    var rows=await rGet.json();
+    if(rows&&rows.length){
+      /* Existe la primaria: actualizar SOLO costo_vigente, origen_costo, fecha y usuario */
+      var w=await fetch(SB+'/rest/v1/producto_presentaciones?id=eq.'+rows[0].id,{method:'PATCH',headers:H,body:JSON.stringify({
+        costo_vigente:costo,origen_costo:origen||'manual',
+        fecha_actualizacion:new Date().toISOString(),usuario_actualizacion:'sistema:shadow-write'
+      })});
+      if(!w.ok)throw new Error('write HTTP '+w.status);
+      shadowAudit('inventario','producto_presentaciones',prod.id,'update','exito',null,{campo:'costo_vigente',tipo:'primaria',valor_nuevo:costo});
+    } else {
+      /* No existe primaria aun (producto previo al backfill): crearla desde los datos del producto */
+      await shadowWritePresentacion(prod.id,prod.empaque||'unidad',prod.uds_empaque||1,costo,origen||'manual',true);
+    }
+  }catch(e){
+    console.warn('[shadow-write] fallo silencioso (no afecta la operacion):',e&&e.message);
+    shadowAudit('inventario','producto_presentaciones',prod&&prod.id,'update','fallo',String(e&&e.message||e),null);
+    /* TODO: Future Sync Queue — punto de extension para reconciliacion (no implementar aun) */
+  }
+}
+
 /* aplicarCompraInventario -- version con empaque */
 function aplicarCompraInventario(compra){
   compra.items.forEach(function(item){
@@ -4679,6 +4814,11 @@ function aplicarCompraInventario(compra){
       if(item.costo>0)prod.precio_costo=item.costo;
       /* Sync to Supabase */
       actualizarStockSB(prod.id, prod.stock, prod.precio_costo, prod.uds_sueltas||0);
+      /* Shadow write (best-effort, fire-and-forget): NUNCA bloquea ni altera el flujo */
+      if(item.costo>0){
+        var swTipo=item.tipo||'unidad';
+        shadowWritePresentacion(prod.id,swTipo,item.uds_empaque||prod.uds_empaque||1,item.costo,'compra',swTipo===(prod.empaque||'unidad'));
+      }
     }
   });
   if(document.getElementById('vInventario').style.display==='flex'){
@@ -5001,6 +5141,7 @@ function guardarInvAjuste(){
   var precio = parseFloat(document.getElementById('invModalPrecio').value)||0;
   var prod = INVENTARIO.find(function(p){return p.id===id;});
   if(!prod){toast('Producto no encontrado');return;}
+  var pcAnteriorAj=parseFloat(prod.precio_costo)||0;
   var udsEmp = prod.uds_empaque||1;
   var empNombre = prod.empaque||'und';
 
@@ -5046,6 +5187,9 @@ function guardarInvAjuste(){
   /* Sync stock to Supabase */
   var ajusteProd=INVENTARIO.find(function(p){return p.id===id;});
   if(ajusteProd) actualizarStockSB(ajusteProd.id, ajusteProd.stock, ajusteProd.precio_costo, ajusteProd.uds_sueltas||0);
+  /* Shadow write (best-effort, fire-and-forget): costo de la presentacion PRIMARIA, solo si cambio */
+  var pcNuevoAj=ajusteProd?(parseFloat(ajusteProd.precio_costo)||0):0;
+  if(ajusteProd&&pcNuevoAj>0&&pcNuevoAj!==pcAnteriorAj) shadowWritePrimaria(ajusteProd,pcNuevoAj,'manual');
   closeInvModal();
   renderInvTable();
   renderInvStats();
