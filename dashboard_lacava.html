@@ -233,7 +233,7 @@ body{background:var(--bg);color:var(--text);font-family:'Plus Jakarta Sans',sans
 .pos-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:8px;color:var(--text3);}
 .vi{display:flex;align-items:center;gap:8px;padding:9px 12px;border-bottom:1px solid var(--border);}
 .vi:last-child{border-bottom:none;}.vi:hover{background:var(--bg);}
-.vi-info{flex:1;min-width:0;}.vi-name{font-size:11px;font-weight:600;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;margin-bottom:2px;}
+.vi-info{flex:1;min-width:130px;}.vi-name{font-size:11px;font-weight:600;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;margin-bottom:2px;}
 .vi-price{font-size:10px;color:var(--text3);}
 .qc{display:flex;align-items:center;gap:4px;flex-shrink:0;}
 .qb{width:24px;height:24px;border:1.5px solid var(--border);border-radius:6px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:15px;font-weight:700;color:var(--text2);background:#fff;}
@@ -534,6 +534,7 @@ body.pos-sb-off .pos-sb-btn{background:var(--gold-s);border-color:var(--gold-b);
 .sem.g{background:var(--green-bg);color:var(--green);}
 .sem.y{background:var(--yellow-bg);color:var(--yellow);}
 .sem.r{background:var(--red-bg);color:var(--red);}
+.sem.k{background:rgba(26,29,35,.08);color:var(--text);}
 .sem.n{background:var(--bg);color:var(--text3);}
 .rep-empty{text-align:center;padding:60px 20px;color:var(--text3);}
 .rep-loading{text-align:center;padding:40px 20px;color:var(--text3);font-size:14px;}
@@ -952,7 +953,7 @@ body.pos-sb-off .pos-sb-btn{background:var(--gold-s);border-color:var(--gold-b);
       </div>
       <div class="inv-table-wrap">
         <table class="inv-table">
-          <thead><tr><th style="width:28%;">Producto</th><th style="text-align:right;">Precio venta</th><th style="text-align:right;">Precio costo</th><th style="text-align:center;">Margen</th><th style="text-align:center;">Min.</th><th style="text-align:center;">Stock</th><th style="width:100px;">Nivel</th><th style="text-align:center;">Acciones</th></tr></thead>
+          <thead><tr><th style="width:28%;">Producto</th><th style="text-align:right;">Precio venta</th><th style="text-align:right;">Costo actual</th><th style="text-align:center;">Margen</th><th style="text-align:center;">Min.</th><th style="text-align:center;">Stock</th><th style="width:100px;">Nivel</th><th style="text-align:center;">Acciones</th></tr></thead>
           <tbody id="invTableBody"></tbody>
         </table>
       </div>
@@ -1463,6 +1464,14 @@ body.pos-sb-off .pos-sb-btn{background:var(--gold-s);border-color:var(--gold-b);
     <div id="rcTitulo" style="font-size:18px;font-weight:800;color:var(--text);margin-bottom:8px;"></div>
     <div id="rcMensaje" style="font-size:13px;color:var(--text3);line-height:1.6;margin-bottom:24px;"></div>
     <button id="rcBoton" style="width:100%;padding:12px 20px;border:none;border-radius:9px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;color:#fff;"></button>
+  </div>
+</div>
+
+<!-- MODAL DETALLE DE COSTO EQUIVALENTE (Inventario) -->
+<div id="modalCostoDetalle" style="display:none;position:fixed;inset:0;z-index:10001;align-items:center;justify-content:center;padding:20px;background:rgba(0,0,0,.5);" onclick="if(event.target===this)cerrarDetalleCosto()">
+  <div style="background:#fff;border-radius:16px;max-width:320px;width:100%;padding:24px;position:relative;animation:popIn .3s cubic-bezier(.34,1.56,.64,1);">
+    <div onclick="cerrarDetalleCosto()" style="position:absolute;top:14px;right:16px;cursor:pointer;font-size:22px;color:var(--text3);line-height:1;">&#215;</div>
+    <div id="dcContent"></div>
   </div>
 </div>
 
@@ -3358,6 +3367,90 @@ function toggleInvFilter(f){
   renderInvTable();
 }
 
+/* ==================== COSTO EQUIVALENTE (lectura desde producto_presentaciones) ====================
+   Unica fuente de calculo de costo/margen/valorizacion para Inventario y Reportes.
+   Solo SELECT sobre producto_presentaciones — nunca INSERT/UPDATE/DELETE. No modifica
+   Shadow Write, Read Path, Backfill, producto_presentaciones, compras ni inventario:
+   solo cambia como se LEE y MUESTRA la informacion ya existente. */
+var PRESENTACIONES_CACHE=null;
+var PRESENTACIONES_CACHE_LOADING=null;
+async function cargarPresentacionesCache(){
+  if(PRESENTACIONES_CACHE) return PRESENTACIONES_CACHE;
+  if(PRESENTACIONES_CACHE_LOADING) return PRESENTACIONES_CACHE_LOADING;
+  PRESENTACIONES_CACHE_LOADING=(async function(){
+    var map={};
+    try{
+      var r=await fetch(SB+'/rest/v1/producto_presentaciones?id_licencia=eq.'+CID+'&activo=is.true&select=id_producto,tipo_presentacion,uds_empaque,es_predeterminada,costo_vigente,fecha_actualizacion',{headers:{'apikey':SK,'Authorization':'Bearer '+SK}});
+      if(r.ok){
+        var data=await r.json();
+        data.forEach(function(f){
+          if(!map[f.id_producto])map[f.id_producto]=[];
+          map[f.id_producto].push(f);
+        });
+      }
+    }catch(e){}
+    PRESENTACIONES_CACHE=map;
+    return map;
+  })();
+  return PRESENTACIONES_CACHE_LOADING;
+}
+/* Costo equivalente a la presentacion de VENTA del producto (nunca modifica el dato almacenado) */
+function costoEquivalente(prod){
+  var filas=(PRESENTACIONES_CACHE&&PRESENTACIONES_CACHE[prod.id])||[];
+  var ventaUds=parseFloat(prod.uds_empaque)||1;
+  var primaria=filas.find(function(f){return f.es_predeterminada;});
+  if(primaria&&parseFloat(primaria.costo_vigente)>0){
+    return {costo:parseFloat(primaria.costo_vigente),estado:'directo',tipo:primaria.tipo_presentacion,udsOrigen:parseFloat(primaria.uds_empaque)||1,costoOrigen:parseFloat(primaria.costo_vigente),fecha:primaria.fecha_actualizacion};
+  }
+  var candidata=filas.find(function(f){return parseFloat(f.costo_vigente)>0;});
+  if(candidata){
+    var udsOrigen=parseFloat(candidata.uds_empaque)||1;
+    var costoOrigen=parseFloat(candidata.costo_vigente);
+    var costoEquiv=Math.round((costoOrigen/udsOrigen)*ventaUds);
+    return {costo:costoEquiv,estado:'convertido',tipo:candidata.tipo_presentacion,udsOrigen:udsOrigen,costoOrigen:costoOrigen,fecha:candidata.fecha_actualizacion};
+  }
+  return {costo:parseFloat(prod.precio_costo)||0,estado:'pendiente',tipo:null,udsOrigen:null,costoOrigen:null,fecha:null};
+}
+function chipCostoEstado(estado){
+  if(estado==='directo')return '<span style="font-size:9px;font-weight:700;background:var(--green-bg);color:#166534;border-radius:8px;padding:2px 6px;white-space:nowrap;">&#128994; Directo</span>';
+  if(estado==='convertido')return '<span style="font-size:9px;font-weight:700;background:var(--gold-s);color:var(--gold);border-radius:8px;padding:2px 6px;white-space:nowrap;">&#128993; Calculado</span>';
+  return '<span style="font-size:9px;font-weight:700;background:var(--bg);color:var(--text3);border-radius:8px;padding:2px 6px;white-space:nowrap;">&#9898; Pendiente</span>';
+}
+/* Semaforo de margen (4 niveles): verde alto / amarillo medio / rojo bajo / negro negativo */
+function colorMargenSem(margen){
+  if(margen===null)return 'var(--text3)';
+  if(margen<0)return 'var(--text)';
+  if(margen>=40)return 'var(--green)';
+  if(margen>=20)return 'var(--yellow)';
+  return 'var(--red)';
+}
+function etiquetaTipoPresentacion(tipo){
+  var map={unidad:'Unidad',sixpack:'Six Pack',caja:'Caja',empaque:'Empaque',combo:'Combo'};
+  return map[tipo]||tipo||'—';
+}
+function mostrarDetalleCosto(prodId){
+  var prod=INVENTARIO.find(function(p){return p.id===prodId;});
+  if(!prod)return;
+  var r=costoEquivalente(prod);
+  var html='<div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;">Costo actual</div>';
+  html+='<div style="font-size:24px;font-weight:800;color:var(--text);margin-bottom:14px;">'+fmt(r.costo)+'</div>';
+  html+='<div style="border-top:1px solid var(--border);padding-top:14px;">';
+  if(r.estado==='directo'){
+    html+='<div style="display:flex;justify-content:space-between;font-size:12px;padding:4px 0;"><span style="color:var(--text3);">Origen</span><span style="font-weight:600;">'+etiquetaTipoPresentacion(r.tipo)+' (directo)</span></div>';
+  } else if(r.estado==='convertido'){
+    html+='<div style="display:flex;justify-content:space-between;font-size:12px;padding:4px 0;"><span style="color:var(--text3);">Origen</span><span style="font-weight:600;">'+etiquetaTipoPresentacion(r.tipo)+'</span></div>';
+    html+='<div style="display:flex;justify-content:space-between;font-size:12px;padding:4px 0;"><span style="color:var(--text3);">Costo original</span><span style="font-weight:600;">'+fmt(r.costoOrigen)+'</span></div>';
+    html+='<div style="display:flex;justify-content:space-between;font-size:12px;padding:4px 0;"><span style="color:var(--text3);">Conversión</span><span style="font-weight:600;">'+fmt(r.costoOrigen)+' / '+r.udsOrigen+' = '+fmt(r.costo)+'</span></div>';
+  } else {
+    html+='<div style="font-size:12px;color:var(--text2);line-height:1.5;">Sin historial de compras registrado todavía para ninguna presentación de este producto. Mostrando el costo legacy tal cual.</div>';
+  }
+  if(r.fecha)html+='<div style="font-size:11px;color:var(--text3);margin-top:10px;">Última actualización: '+new Date(r.fecha).toLocaleDateString('es-CO',{day:'2-digit',month:'short',year:'numeric'})+'</div>';
+  html+='</div>';
+  document.getElementById('dcContent').innerHTML=html;
+  document.getElementById('modalCostoDetalle').style.display='flex';
+}
+function cerrarDetalleCosto(){document.getElementById('modalCostoDetalle').style.display='none';}
+
 function renderInvStats(){
   var sinStock=INVENTARIO.filter(function(p){return p.stock===0;}).length;
   var stockBajo=INVENTARIO.filter(function(p){return p.stock>0&&p.stock<=p.stock_min;}).length;
@@ -3378,7 +3471,7 @@ function renderInvAlerts(){
   zone.innerHTML=html;
 }
 
-function renderInvTable(){
+async function renderInvTable(){
   var q=document.getElementById('invSearch').value.toLowerCase();
   var data=INVENTARIO.filter(function(p){
     var matchCat=invCatA==='Todas'||p.categoria===invCatA;
@@ -3388,14 +3481,16 @@ function renderInvTable(){
   });
   var tbody=document.getElementById('invTableBody');
   if(!data.length){tbody.innerHTML='<tr><td colspan="7" style="text-align:center;padding:40px;color:#9CA3AF;">Sin resultados</td></tr>';return;}
+  await cargarPresentacionesCache();
   tbody.innerHTML=data.map(function(p){
     var estado=p.stock===0?'out':p.stock<=p.stock_min?'low':'ok';
     var label=estado==='out'?'Agotado':estado==='low'?'Stock bajo':'OK';
     var pct=Math.min(100,Math.round((p.stock/((p.stock_min*3)||1))*100));
     var barColor=estado==='out'?'var(--red)':estado==='low'?'var(--yellow)':'var(--green)';
-    var hasCosto=p.precio_costo>0&&p.precio_venta>0;
-    var margen=hasCosto?Math.round((p.precio_venta-p.precio_costo)/p.precio_venta*100):null;
-    var mColor=margen===null?'var(--text3)':margen>=40?'var(--green)':margen>=20?'var(--yellow)':'var(--red)';
+    var costoEq=costoEquivalente(p);
+    var hasCosto=costoEq.costo>0&&p.precio_venta>0;
+    var margen=hasCosto?Math.round((p.precio_venta-costoEq.costo)/p.precio_venta*100):null;
+    var mColor=colorMargenSem(margen);
     var mLabel=margen!==null?margen+'%':'--';
     var pid=p.id;
     var row='<tr>';
@@ -3412,13 +3507,12 @@ function renderInvTable(){
         ?'<span style="font-weight:700;">'+fmt(pvPack)+'</span><br><span style="font-size:10px;color:var(--text3);">'+fmt(pvUnd)+'/und</span>'
         :fmt(pvPack))
       :'<span style="color:#9CA3AF;font-size:11px;">Sin precio</span>';
-    // CAMBIO 8: Precio costo discriminado por empaque/unidad
-    var pcPack=p.precio_costo||0;
-    var pcUnd=udsEmpInv>1?Math.round(pcPack/udsEmpInv):0;
-    var pcCell=pcPack>0
-      ?(udsEmpInv>1
-        ?'<span style="font-weight:700;">'+fmt(pcPack)+'</span><br><span style="font-size:10px;color:var(--text3);">'+fmt(pcUnd)+'/und</span>'
-        :fmt(pcPack))
+    // Costo actual: costo equivalente a la presentacion de venta + chip de estado (clic = detalle)
+    var pcCell=costoEq.costo>0
+      ?'<div onclick="mostrarDetalleCosto(\''+pid+'\')" style="cursor:pointer;display:inline-block;">'
+        +'<div style="font-weight:700;">'+fmt(costoEq.costo)+'</div>'
+        +chipCostoEstado(costoEq.estado)
+      +'</div>'
       :'<span style="color:#9CA3AF;font-size:11px;">Sin costo</span>';
     row+='<td style="text-align:right;">'+pvCell+'</td>';
     row+='<td style="text-align:right;">'+pcCell+'</td>';
@@ -6088,21 +6182,22 @@ async function generarReporteVentas(){
 }
 
 /* --- REPORTE DE INVENTARIO --- */
-function renderRepInventario(){
+async function renderRepInventario(){
   var cont=document.getElementById('repInvContent');
   if(!INVENTARIO.length){
     cont.innerHTML='<div class="rep-empty" style="font-size:36px;">&#128230;<br><span style="font-size:14px;display:block;margin-top:10px;">No hay productos en el inventario</span></div>';
     return;
   }
+  await cargarPresentacionesCache();
   var totalCosto=0,totalVenta=0;
   INVENTARIO.forEach(function(p){
-    totalCosto+=(parseFloat(p.precio_costo)||0)*p.stock;
+    totalCosto+=costoEquivalente(p).costo*p.stock;
     totalVenta+=(parseFloat(p.precio_venta)||0)*p.stock;
   });
   var ganPotencial=totalVenta-totalCosto;
   var agotados=INVENTARIO.filter(function(p){return p.stock===0;});
   var stockBajo=INVENTARIO.filter(function(p){return p.stock>0&&p.stock<=(p.stock_min||2);});
-  var sinCosto=INVENTARIO.filter(function(p){return !(parseFloat(p.precio_costo)||0);});
+  var sinCosto=INVENTARIO.filter(function(p){return !(costoEquivalente(p).costo>0);});
   var numProds=INVENTARIO.length;
   var numOk=numProds-agotados.length-stockBajo.length;
 
@@ -6111,7 +6206,7 @@ function renderRepInventario(){
   INVENTARIO.forEach(function(p){
     var c=p.categoria||'General';
     if(!porCat[c]) porCat[c]={cat:c,totalCosto:0,totalVenta:0,prods:0,agotados:0};
-    porCat[c].totalCosto+=(parseFloat(p.precio_costo)||0)*p.stock;
+    porCat[c].totalCosto+=costoEquivalente(p).costo*p.stock;
     porCat[c].totalVenta+=(parseFloat(p.precio_venta)||0)*p.stock;
     porCat[c].prods++;
     if(p.stock===0) porCat[c].agotados++;
@@ -6165,13 +6260,13 @@ function renderRepInventario(){
   html+='<div class="rep-section" style="margin-bottom:24px;">';
   html+='<div class="rep-sh"><div class="rep-st">Detalle por producto ('+prods.length+')</div><button class="rep-btn sec" onclick="exportarInvTexto()" style="font-size:11px;padding:5px 12px;">&#128203; Copiar lista</button></div>';
   html+='<div style="overflow-x:auto;">';
-  html+='<table class="rep-table"><thead><tr><th>Producto</th><th>Categoría</th><th style="text-align:center;">Stock</th>'+(INVENTARIO.some(function(p){return p.uds_empaque>1;})? '<th style="text-align:center;">Uds totales</th>':'')+'<th style="text-align:right;">P. costo</th><th style="text-align:right;">P. venta</th><th style="text-align:right;">Margen</th><th style="text-align:right;">Val. inventario</th></tr></thead><tbody>';
+  html+='<table class="rep-table"><thead><tr><th>Producto</th><th>Categoría</th><th style="text-align:center;">Stock</th>'+(INVENTARIO.some(function(p){return p.uds_empaque>1;})? '<th style="text-align:center;">Uds totales</th>':'')+'<th style="text-align:right;">Costo actual</th><th style="text-align:right;">P. venta</th><th style="text-align:right;">Margen</th><th style="text-align:right;">Val. inventario</th></tr></thead><tbody>';
   var hayEmp=INVENTARIO.some(function(p){return p.uds_empaque>1;});
   prods.forEach(function(p){
-    var costo=parseFloat(p.precio_costo)||0;
+    var costo=costoEquivalente(p).costo;
     var venta=parseFloat(p.precio_venta)||0;
     var margen=(costo>0&&venta>0)?Math.round((venta-costo)/venta*100):null;
-    var semHtml=margen!==null?'<span class="sem '+(margen>=40?'g':margen>=20?'y':'r')+'">'+margen+'%</span>':'<span class="sem n">--</span>';
+    var semHtml=margen!==null?'<span class="sem '+(margen<0?'k':margen>=40?'g':margen>=20?'y':'r')+'">'+margen+'%</span>':'<span class="sem n">--</span>';
     var sColor=p.stock===0?'var(--red)':p.stock<=(p.stock_min||2)?'var(--yellow)':'var(--text)';
     var udsEmp=parseInt(p.uds_empaque)||1;
     var totalUds=udsEmp>1?(p.stock*udsEmp+(parseInt(p.uds_sueltas)||0)):null;
@@ -6192,11 +6287,12 @@ function renderRepInventario(){
   cont.innerHTML=html;
 }
 
-function exportarInvTexto(){
-  var lines=['INVENTARIO — LA CAVA LICORERA','Generado: '+new Date().toLocaleString('es-CO'),'','PRODUCTO | STOCK | PRECIO COSTO | PRECIO VENTA | MARGEN','—————————————————————————————'];
+async function exportarInvTexto(){
+  await cargarPresentacionesCache();
+  var lines=['INVENTARIO — LA CAVA LICORERA','Generado: '+new Date().toLocaleString('es-CO'),'','PRODUCTO | STOCK | COSTO ACTUAL | PRECIO VENTA | MARGEN','—————————————————————————————'];
   var prods=[].concat(INVENTARIO).sort(function(a,b){return a.nombre.localeCompare(b.nombre);});
   prods.forEach(function(p){
-    var costo=parseFloat(p.precio_costo)||0;
+    var costo=costoEquivalente(p).costo;
     var venta=parseFloat(p.precio_venta)||0;
     var margen=(costo>0&&venta>0)?Math.round((venta-costo)/venta*100)+'%':'--';
     lines.push(p.nombre+' | '+p.stock+'u | '+(costo>0?fmt(costo):'--')+' | '+fmt(venta)+' | '+margen);
@@ -6210,19 +6306,20 @@ function exportarInvTexto(){
 }
 
 /* --- REPORTE DE RENTABILIDAD --- */
-function renderRepRentabilidad(){
+async function renderRepRentabilidad(){
   var cont=document.getElementById('repRentContent');
   if(!INVENTARIO.length){
     cont.innerHTML='<div class="rep-empty" style="font-size:36px;">&#128201;<br><span style="font-size:14px;display:block;margin-top:10px;">No hay productos</span></div>';
     return;
   }
-  var conCosto=INVENTARIO.filter(function(p){return (parseFloat(p.precio_costo)||0)>0;});
-  var sinCosto=INVENTARIO.filter(function(p){return !((parseFloat(p.precio_costo)||0)>0);});
+  await cargarPresentacionesCache();
+  var conCosto=INVENTARIO.filter(function(p){return costoEquivalente(p).costo>0;});
+  var sinCosto=INVENTARIO.filter(function(p){return !(costoEquivalente(p).costo>0);});
   var ordenados=conCosto.map(function(p){
-    var costo=parseFloat(p.precio_costo);
+    var costo=costoEquivalente(p).costo;
     var venta=parseFloat(p.precio_venta)||0;
     var udsEmp=parseInt(p.uds_empaque)||1;
-    /* precio_costo siempre está en nivel empaque, ajustar si es necesario */
+    /* costo ya viene equivalente a la presentacion de venta (misma base que p.precio_venta) */
     var costoUnd=udsEmp>1?Math.round(costo/udsEmp):costo;
     var ventaUnd=udsEmp>1?Math.round(venta/udsEmp):venta;
     var margen=venta>0?Math.round((venta-costo)/venta*100):0;
@@ -6241,7 +6338,7 @@ function renderRepRentabilidad(){
   conCosto.forEach(function(p){
     var c=p.categoria||'General';
     if(!porCatR[c]) porCatR[c]={cat:c,items:0,costoTotal:0,ventaTotal:0,ganancia:0};
-    var costo=parseFloat(p.precio_costo);
+    var costo=costoEquivalente(p).costo;
     var venta=parseFloat(p.precio_venta)||0;
     porCatR[c].items++;
     porCatR[c].costoTotal+=costo;
@@ -6284,9 +6381,9 @@ function renderRepRentabilidad(){
   html+='<div class="rep-section" style="margin-bottom:20px;">';
   html+='<div class="rep-sh"><div class="rep-st">Rentabilidad por producto</div><span style="font-size:11px;color:var(--text3);">'+ordenados.length+' productos con costo registrado · ordenados por margen</span></div>';
   html+='<div style="overflow-x:auto;">';
-  html+='<table class="rep-table"><thead><tr><th>#</th><th>Producto</th><th>Cat.</th><th style="text-align:right;">P. costo</th><th style="text-align:right;">P. venta</th><th style="text-align:right;">Ganancia/u</th><th style="text-align:center;">Margen</th></tr></thead><tbody>';
+  html+='<table class="rep-table"><thead><tr><th>#</th><th>Producto</th><th>Cat.</th><th style="text-align:right;">Costo actual</th><th style="text-align:right;">P. venta</th><th style="text-align:right;">Ganancia/u</th><th style="text-align:center;">Margen</th></tr></thead><tbody>';
   ordenados.forEach(function(x,i){
-    var semClass=x.margen>=40?'g':x.margen>=20?'y':x.margen>=0?'r':'r';
+    var semClass=x.margen<0?'k':x.margen>=40?'g':x.margen>=20?'y':'r';
     html+='<tr>';
     html+='<td style="color:var(--text3);font-size:12px;">'+(i+1)+'</td>';
     html+='<td style="font-size:12px;"><div style="font-weight:600;">'+x.p.nombre+'</div>'+(x.udsEmp>1?'<div style="font-size:10px;color:var(--text3);">Pack x'+x.udsEmp+'</div>':'')+'</td>';
@@ -8064,7 +8161,7 @@ function cotAddItem(prodId, tipo){
   var exKey=prodId+'_'+tipo;
   var ex=cotItems.find(function(it){return it._key===exKey;});
   if(ex){ex.cantidad++;ex.precio_total=ex.cantidad*ex.precio_unitario;}
-  else cotItems.push({_key:exKey,prod_id:prodId,nombre:itemNombre,cantidad:1,precio_unitario:itemPrecio,precio_total:itemPrecio,tipo:tipo});
+  else cotItems.push({_key:exKey,prod_id:prodId,nombre:itemNombre,cantidad:1,precio_unitario:itemPrecio,precio_total:itemPrecio,tipo:tipo,_precioBase:itemPrecio,descItem:0});
   renderCotItems();
   toast('&#10003; '+((prod.nombre||'').split(' ').slice(0,3).join(' '))+' agregado');
 }
@@ -8091,21 +8188,71 @@ function cotElimItem(idx){cotItems.splice(idx,1);renderCotItems();}
 function renderCotItems(){
   var total=cotItems.reduce(function(s,it){return s+it.precio_total;},0);
   document.getElementById('cotItemsList').innerHTML=cotItems.length?
-    '<table style="width:100%;border-collapse:collapse;font-size:13px;">'
-    +cotItems.map(function(it,i){
-      return '<tr style="border-bottom:1px solid var(--border);">'
-        +'<td style="padding:7px 6px;">'+it.nombre+'</td>'
-        +'<td style="padding:7px 6px;text-align:center;"><div style="display:flex;align-items:center;justify-content:center;gap:4px;">'
-          +'<button onclick="cotChgQty('+i+',-1)" style="width:20px;height:20px;border:1px solid var(--border);border-radius:4px;background:#fff;cursor:pointer;font-size:13px;">−</button>'
-          +'<span style="min-width:22px;text-align:center;">'+it.cantidad+'</span>'
-          +'<button onclick="cotChgQty('+i+',1)" style="width:20px;height:20px;border:1px solid var(--border);border-radius:4px;background:#fff;cursor:pointer;font-size:13px;">+</button>'
-        +'</div></td>'
-        +'<td style="padding:7px 6px;text-align:right;font-weight:700;">'+fmt(it.precio_total)+'</td>'
-        +'<td style="padding:7px 6px;text-align:center;"><button onclick="cotElimItem('+i+')" style="border:1px solid var(--red-b);border-radius:5px;background:var(--red-bg,#fef2f2);color:var(--red);padding:2px 5px;cursor:pointer;font-size:11px;">✕</button></td>'
-      +'</tr>';
-    }).join('')+'</table>'
+    cotItems.map(function(it,i){
+      var precioBase=it._precioBase||(it.precio_unitario+(it.descItem||0));
+      if(!it._precioBase)it._precioBase=precioBase;
+      var descActivo=(it.descItem||0)>0;
+      var row='<div style="border-bottom:1px solid var(--border);padding:7px 0;display:flex;align-items:center;gap:6px;flex-wrap:wrap;">';
+      row+='<div style="flex:1;min-width:130px;">';
+      row+='<div style="font-size:12px;font-weight:600;">'+it.nombre+'</div>';
+      row+='<div style="font-size:10px;color:var(--text3);">'+fmt(it.precio_unitario)+' c/u'+(descActivo?' <span style="color:var(--green);">(desc -'+fmt(it.descItem*it.cantidad)+')</span>':'')+'</div>';
+      row+='</div>';
+      row+='<button onclick="cotToggleDesc('+i+')" style="font-size:9px;padding:2px 6px;border:1px solid var(--border);border-radius:4px;background:'+(descActivo?'var(--gold-s)':'#fff')+';cursor:pointer;font-family:inherit;color:'+(descActivo?'var(--gold)':'var(--text3)')+';">%</button>';
+      row+='<div style="display:flex;align-items:center;gap:4px;">';
+      row+='<button onclick="cotChgQty('+i+',-1)" style="width:20px;height:20px;border:1px solid var(--border);border-radius:4px;background:#fff;cursor:pointer;font-size:13px;">−</button>';
+      row+='<span style="min-width:22px;text-align:center;font-size:13px;font-weight:700;">'+it.cantidad+'</span>';
+      row+='<button onclick="cotChgQty('+i+',1)" style="width:20px;height:20px;border:1px solid var(--border);border-radius:4px;background:#fff;cursor:pointer;font-size:13px;">+</button>';
+      row+='</div>';
+      row+='<div style="font-size:12px;font-weight:700;min-width:60px;text-align:right;">'+fmt(it.precio_total)+'</div>';
+      row+='<button onclick="cotElimItem('+i+')" style="border:1px solid var(--red-b);border-radius:5px;background:var(--red-bg,#fef2f2);color:var(--red);padding:2px 5px;cursor:pointer;font-size:11px;">✕</button>';
+      row+='<div id="cotDesc_'+i+'" style="display:none;width:100%;padding:4px 0 4px 4px;flex-basis:100%;">';
+      row+='<div style="display:flex;gap:4px;align-items:center;flex-wrap:wrap;">';
+      row+='<span style="font-size:10px;color:var(--text3);">Desc. item:</span>';
+      row+='<button onclick="cotSetDescTipo('+i+',\'pct\')" id="cotDT_pct_'+i+'" style="font-size:9px;padding:1px 5px;border:1px solid var(--gold-b);border-radius:10px;cursor:pointer;font-family:inherit;background:var(--gold-s);color:var(--gold);">%</button>';
+      row+='<button onclick="cotSetDescTipo('+i+',\'val\')" id="cotDT_val_'+i+'" style="font-size:9px;padding:1px 5px;border:1px solid var(--border);border-radius:10px;cursor:pointer;font-family:inherit;background:#fff;color:var(--text2);">$</button>';
+      row+='<input type="number" id="cotDescInp_'+i+'" min="0" placeholder="0" onkeydown="if(event.key===\'Enter\'){cotConfirmarDesc('+i+');}" value="'+(it._descVal||'')+'" style="width:60px;border:1px solid var(--gold-b);border-radius:6px;padding:3px 6px;font-size:11px;font-family:inherit;outline:none;"/>';
+      row+='<span style="font-size:9px;color:var(--text3);">base: '+fmt(precioBase)+'</span>';
+      row+='<button onclick="cotConfirmarDesc('+i+')" style="font-size:9px;padding:1px 7px;border:1px solid var(--gold-b);border-radius:10px;cursor:pointer;font-family:inherit;background:var(--gold);color:#fff;">✓</button>';
+      row+='</div></div></div>';
+      return row;
+    }).join('')
     :'<div style="color:var(--text3);font-size:12px;padding:8px 0;">Sin productos agregados</div>';
   document.getElementById('cotTotal').textContent=total>0?'Total: '+fmt(total):'';
+}
+function cotToggleDesc(i){
+  var el=document.getElementById('cotDesc_'+i);
+  if(!el)return;
+  var isHidden=el.style.display==='none'||el.style.display==='';
+  el.style.display=isHidden?'block':'none';
+  if(isHidden){
+    var inp=document.getElementById('cotDescInp_'+i);
+    if(inp) setTimeout(function(){inp.focus();inp.select();},30);
+  }
+}
+function cotSetDescTipo(i,tipo){
+  var it=cotItems[i];
+  if(it)it._descTipo=tipo;
+  var pctBtn=document.getElementById('cotDT_pct_'+i);
+  var valBtn=document.getElementById('cotDT_val_'+i);
+  if(pctBtn){pctBtn.style.background=tipo==='pct'?'var(--gold-s)':'#fff';pctBtn.style.color=tipo==='pct'?'var(--gold)':'var(--text2)';pctBtn.style.borderColor=tipo==='pct'?'var(--gold-b)':'var(--border)';}
+  if(valBtn){valBtn.style.background=tipo==='val'?'var(--gold-s)':'#fff';valBtn.style.color=tipo==='val'?'var(--gold)':'var(--text2)';valBtn.style.borderColor=tipo==='val'?'var(--gold-b)':'var(--border)';}
+  var inp=document.getElementById('cotDescInp_'+i);
+  if(inp) inp.focus();
+}
+function cotConfirmarDesc(i){
+  var it=cotItems[i];
+  if(!it)return;
+  var precioBase=it._precioBase||(it.precio_unitario+(it.descItem||0));
+  if(!it._precioBase)it._precioBase=precioBase;
+  var tipo=it._descTipo||'pct';
+  var inpEl=document.getElementById('cotDescInp_'+i);
+  var val=inpEl?parseFloat(inpEl.value)||0:0;
+  it._descVal=val;
+  var descUnd=tipo==='pct'?Math.round(precioBase*val/100):Math.min(val,precioBase);
+  it.descItem=descUnd;
+  it.precio_unitario=Math.max(0,precioBase-descUnd);
+  it.precio_total=it.cantidad*it.precio_unitario;
+  renderCotItems();
 }
 
 function guardarCotizacion(){
@@ -8208,6 +8355,7 @@ function enviarCotizacionWA(){
   var msg='*LA CAVA LICORERA*%0A*Cotización*%0A%0A*Cliente:* '+encodeURIComponent(cliente)+'%0A%0A';
   cotItems.forEach(function(it){
     msg+='%E2%80%A2 '+encodeURIComponent(it.nombre)+' x'+it.cantidad+' %3D *'+encodeURIComponent(fmt(it.precio_total))+'*%0A';
+    if(it.descItem&&it.descItem>0)msg+='  _%F0%9F%8F%B7 Desc. item%3A -'+encodeURIComponent(fmt(it.descItem*it.cantidad))+'_%0A';
   });
   msg+='%0A*Total: '+encodeURIComponent(fmt(total))+'*%0A';
   msg+='_%E2%9A%A0 Cotización válida hasta: '+encodeURIComponent(vence.toLocaleDateString('es-CO',{day:'2-digit',month:'long',year:'numeric'}))+'_%0A';
