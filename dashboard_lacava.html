@@ -879,10 +879,9 @@ body.pos-sb-off .pos-sb-btn{background:var(--gold-s);border-color:var(--gold-b);
           <div class="dom-badge" id="domLabel"></div>
           <div class="pago-g">
             <div class="po on" onclick="setPago(this,'efectivo')"><span class="po-ic">&#128181;</span><span class="po-lbl">Efectivo</span></div>
-            <div class="po" onclick="setPago(this,'transferencia')"><span class="po-ic">&#127974;</span><span class="po-lbl">Transfer</span></div>
-            <div class="po" onclick="setPago(this,'nequi')"><span class="po-ic">&#128241;</span><span class="po-lbl">Nequi</span></div>
-            <div class="po" onclick="setPago(this,'daviplata')"><span class="po-ic">&#128308;</span><span class="po-lbl">Daviplata</span></div>
+            <div class="po" id="poTransferencia" onclick="setPago(this,'transferencia')"><span class="po-ic">&#127974;</span><span class="po-lbl">Transfer</span></div>
           </div>
+          <div id="pagoOrigenBadge" style="display:none;font-size:11px;font-weight:600;color:var(--text2);background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:4px 8px;margin:-4px 0 10px;"></div>
           <!-- CAMBIO -->
           <div id="cambioWrap" style="display:none;margin:6px 0;padding:8px 10px;background:#f0fdf4;border:1.5px solid #86efac;border-radius:8px;">
             <div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;">Efectivo recibido</div>
@@ -1449,6 +1448,22 @@ body.pos-sb-off .pos-sb-btn{background:var(--gold-s);border-color:var(--gold-b);
   </main>
 </div>
 
+<!-- MODAL ORIGEN TRANSFERENCIA -->
+<div id="modalOrigenTransferencia" style="position:fixed;inset:0;z-index:9996;display:none;align-items:center;justify-content:center;padding:20px;background:rgba(0,0,0,.5);">
+  <div style="background:#fff;border-radius:18px;max-width:340px;width:100%;padding:24px;animation:popIn .3s cubic-bezier(.34,1.56,.64,1);">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+      <div style="font-size:16px;font-weight:800;">&#127974; Origen de la transferencia</div>
+      <div onclick="cerrarSelectorTransferencia()" style="cursor:pointer;font-size:22px;color:var(--text3);line-height:1;">&#215;</div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:8px;">
+      <button onclick="elegirOrigenTransferencia('Ahorros Bancolombia')" style="text-align:left;padding:12px 14px;border:1.5px solid var(--border);border-radius:10px;background:#fff;font-size:13px;font-weight:600;color:var(--text);cursor:pointer;font-family:inherit;">Ahorros Bancolombia</button>
+      <button onclick="elegirOrigenTransferencia('Llave Bancolombia')" style="text-align:left;padding:12px 14px;border:1.5px solid var(--border);border-radius:10px;background:#fff;font-size:13px;font-weight:600;color:var(--text);cursor:pointer;font-family:inherit;">Llave Bancolombia</button>
+      <button onclick="elegirOrigenTransferencia('Nequi')" style="text-align:left;padding:12px 14px;border:1.5px solid var(--border);border-radius:10px;background:#fff;font-size:13px;font-weight:600;color:var(--text);cursor:pointer;font-family:inherit;">Nequi</button>
+      <button onclick="elegirOrigenTransferencia('Otro banco')" style="text-align:left;padding:12px 14px;border:1.5px solid var(--border);border-radius:10px;background:#fff;font-size:13px;font-weight:600;color:var(--text);cursor:pointer;font-family:inherit;">Otro banco</button>
+    </div>
+  </div>
+</div>
+
 <!-- MODAL AGOTADO -->
 <div id="agotadoOverlay" style="position:fixed;inset:0;z-index:700;display:none;align-items:center;justify-content:center;padding:20px;background:rgba(0,0,0,.55);">
   <div style="background:#fff;border-radius:18px;max-width:420px;width:100%;padding:32px 28px;text-align:center;animation:popIn .3s cubic-bezier(.34,1.56,.64,1);">
@@ -1986,7 +2001,7 @@ var PUNTOS_VENCIMIENTO=180; /* Dias de inactividad antes de que venzan los punto
 function fmt(n){return '$'+Math.round(n).toLocaleString('es-CO');}
 
 /* ---- ESTADO GLOBAL ---- */
-var cart=[],pago='efectivo',cliActivo=null,lastVenta=null,clisDB=[];
+var cart=[],pago='efectivo',pagoOrigen=null,cliActivo=null,lastVenta=null,clisDB=[];
 var domicilio=0;
 var descFacturaTipo='pct'; // 'pct' | 'val'
 var descFactura=0; // monto calculado de descuento factura
@@ -2967,9 +2982,11 @@ async function toggleMayorista(){
 }
 document.addEventListener('click',function(e){if(!e.target.closest('.cli-sw'))document.getElementById('cliDrop').style.display='none';});
 function setPago(el,m){
-  pago=m;
+  if(m==='transferencia'){abrirSelectorTransferencia();return;}
+  pago=m;pagoOrigen=null;
   document.querySelectorAll('.po').forEach(function(o){o.classList.remove('on');});
   el.classList.add('on');
+  var badge=document.getElementById('pagoOrigenBadge');if(badge)badge.style.display='none';
   var cw=document.getElementById('cambioWrap');
   if(cw){
     cw.style.display=m==='efectivo'?'block':'none';
@@ -2978,6 +2995,26 @@ function setPago(el,m){
       var cr=document.getElementById('cambioResult');if(cr)cr.style.display='none';
     }
   }
+}
+function abrirSelectorTransferencia(){
+  document.getElementById('modalOrigenTransferencia').style.display='flex';
+}
+function cerrarSelectorTransferencia(){
+  document.getElementById('modalOrigenTransferencia').style.display='none';
+}
+function elegirOrigenTransferencia(origen){
+  pago='transferencia';pagoOrigen=origen;
+  document.querySelectorAll('.po').forEach(function(o){o.classList.remove('on');});
+  var btnT=document.getElementById('poTransferencia');if(btnT)btnT.classList.add('on');
+  var cw=document.getElementById('cambioWrap');
+  if(cw){
+    cw.style.display='none';
+    var ef=document.getElementById('efectivoRecibido');if(ef)ef.value='';
+    var cr=document.getElementById('cambioResult');if(cr)cr.style.display='none';
+  }
+  var badge=document.getElementById('pagoOrigenBadge');
+  if(badge){badge.textContent='🏦 Transferencia · '+origen;badge.style.display='block';}
+  cerrarSelectorTransferencia();
 }
 
 /* ==================== CONFIRMACION PREVIA VENTA ==================== */
@@ -3000,7 +3037,7 @@ function abrirConfirmacionVenta(){
   /* Cliente + método */
   html+='<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--bg);border-radius:10px;margin-bottom:12px;">'
     +'<div style="flex:1;"><div style="font-size:13px;font-weight:700;">'+cn+'</div>'+(cw?'<div style="font-size:11px;color:var(--text3);">📱 '+cw+'</div>':'')+'</div>'
-    +'<div style="text-align:right;font-size:13px;font-weight:700;">'+(PI[pago]||'💵')+' '+pago+'</div>'
+    +'<div style="text-align:right;font-size:13px;font-weight:700;">'+(PI[pago]||'💵')+' '+pago+(pago==='transferencia'&&pagoOrigen?'<div style="font-size:10px;font-weight:600;color:var(--text3);">'+pagoOrigen+'</div>':'')+'</div>'
     +'</div>';
 
   /* Items */
@@ -3070,6 +3107,7 @@ async function doVenta(){
   if(esMayorista)console.log('Cliente mayorista: no aplica acumulación de puntos');
   try{
     var ventaBody={id_cliente:CID,cliente_nombre:cn,total:total,subtotal:subtotal,descuento:descFactura,metodo_pago:pago,estado:esCartera?'credito':'completada',puntos_ganados:pts,domicilio:domicilio,direccion_entrega:cdir,detalle_entrega:cdet};
+    if(pago==='transferencia'&&pagoOrigen)ventaBody.notas=pagoOrigen;
     if(esCartera){try{ventaBody.abono=abonoVal;ventaBody.saldo_pendiente=saldoVal;ventaBody.fecha_vencimiento_cartera=fechaVence;}catch(e){}}
     var vr=await fetch(SB+'/rest/v1/ventas',{method:'POST',headers:H,body:JSON.stringify(ventaBody)});
     if(!vr.ok)throw new Error(await vr.text());
