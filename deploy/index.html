@@ -264,6 +264,12 @@ body{background:var(--bg);color:var(--text);font-family:'Plus Jakarta Sans',sans
 .hist-lnk{padding:8px 12px;border-top:1px solid var(--border);text-align:center;font-size:11px;color:var(--blue);font-weight:600;cursor:pointer;}
 .hist-lnk:hover{background:var(--bg);}
 
+/* === POS — ESCRITORIO: garantizar controles inferiores del carrito siempre visibles (HITO 3) === */
+@media(min-width:901px){
+  .pos-items{min-height:0;}
+  .hist-lnk{flex-shrink:0;}
+}
+
 /* === POS — SIDEBAR TOGGLE (DESKTOP) === */
 .sb{transition:transform .3s cubic-bezier(.4,0,.2,1);}
 body.pos-sb-off .sb{transform:translateX(-100%);}
