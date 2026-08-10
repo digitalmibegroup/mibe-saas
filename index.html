@@ -564,6 +564,14 @@ body.pos-sb-off .pos-sb-btn{background:var(--gold-s);border-color:var(--gold-b);
   .cli-stats{gap:10px;}
 }
 
+/* === POS — TELEFONO MOVIL (HITO 4): carrito debajo de productos, ancho completo === */
+@media(max-width:600px){
+  #vPOS{flex-direction:column;height:auto;overflow-y:visible;}
+  .pos-l{flex:none;width:100%;max-height:48vh;border-right:none;border-bottom:1px solid var(--border);}
+  .pos-r{width:100%;flex:none;height:auto;overflow:visible;}
+  .pos-items{flex:0 1 auto;max-height:38vh;}
+}
+
 /* PROGRAMA DE PUNTOS */
 #vPuntos{flex-direction:column;flex:1;overflow:hidden;}
 .pts-hdr{background:#fff;border-bottom:1px solid var(--border);padding:0 12px;display:flex;align-items:center;flex-shrink:0;overflow-x:auto;scrollbar-width:none;}
