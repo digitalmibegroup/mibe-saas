@@ -8588,27 +8588,27 @@ function renderCarteraList(){
     var fv=c.fecha_vencimiento?new Date(c.fecha_vencimiento).toLocaleDateString('es-CO',{day:'2-digit',month:'short',year:'numeric'}):'Sin vencimiento';
     var fc=new Date(c.fecha_creacion).toLocaleDateString('es-CO',{day:'2-digit',month:'short',year:'numeric'});
     var pctPagado=c.total>0?Math.round((c.total-c.saldo_pendiente)/c.total*100):100;
-    return '<div style="background:#fff;border:1.5px solid '+(vencida?'var(--red-b)':'var(--border)')+';border-radius:12px;padding:14px 16px;margin-bottom:10px;">'
-      +'<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:8px;">'
+    return '<div style="background:#fff;border:2px solid '+(vencida?'var(--red-b)':'var(--border)')+';border-radius:14px;padding:18px 20px;margin-bottom:20px;box-shadow:var(--shadow);">'
+      +'<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:12px;">'
         +'<div>'
-          +'<div style="font-size:14px;font-weight:800;">'+c.cliente+'</div>'
-          +'<div style="font-size:11px;color:var(--text3);">Venta #'+String(c.numero||'').padStart(3,'0')+' · Creada: '+fc+'</div>'
+          +'<div style="font-size:15px;font-weight:800;">'+c.cliente+'</div>'
+          +'<div style="font-size:11px;color:var(--text3);margin-top:2px;">Venta #'+String(c.numero||'').padStart(3,'0')+' · Creada: '+fc+'</div>'
         +'</div>'
         +'<div style="text-align:right;">'
-          +'<div style="font-size:16px;font-weight:800;color:'+(c.saldo_pendiente<=0?'var(--green)':'var(--red)')+';">'+fmt(c.saldo_pendiente)+' pendiente</div>'
+          +'<div style="font-size:17px;font-weight:800;color:'+(c.saldo_pendiente<=0?'var(--green)':'var(--red)')+';">'+fmt(c.saldo_pendiente)+' pendiente</div>'
           +(vencida?'<div style="font-size:11px;font-weight:700;color:var(--red);">⚠ '+diasMora+' día'+(diasMora!==1?'s':'')+' de mora</div>':'')
         +'</div>'
       +'</div>'
-      +'<div style="background:var(--bg);border-radius:6px;height:6px;margin-bottom:8px;overflow:hidden;"><div style="height:6px;background:var(--green);border-radius:6px;width:'+pctPagado+'%;transition:width .3s;"></div></div>'
-      +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;font-size:12px;margin-bottom:10px;">'
+      +'<div style="background:var(--bg);border-radius:6px;height:6px;margin-bottom:12px;overflow:hidden;"><div style="height:6px;background:var(--green);border-radius:6px;width:'+pctPagado+'%;transition:width .3s;"></div></div>'
+      +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;font-size:12px;margin-bottom:14px;">'
         +'<div><div style="color:var(--text3);">Total venta</div><div style="font-weight:700;">'+fmt(c.total)+'</div></div>'
         +'<div><div style="color:var(--text3);">Abonado</div><div style="font-weight:700;color:var(--green);">'+fmt(c.total-c.saldo_pendiente)+'</div></div>'
         +'<div><div style="color:var(--text3);">Vence</div><div style="font-weight:700;color:'+(vencida?'var(--red)':'var(--text2)')+';">'+fv+'</div></div>'
       +'</div>'
-      +(c.saldo_pendiente>0?'<div style="display:flex;gap:8px;align-items:center;">'
+      +(c.saldo_pendiente>0?'<div style="display:flex;gap:8px;align-items:center;border-top:1px solid var(--border);padding-top:12px;">'
         +'<input id="abonoInp_'+c.id+'" type="number" min="0" max="'+c.saldo_pendiente+'" placeholder="Abono $" style="flex:1;border:1.5px solid var(--border);border-radius:8px;padding:6px 10px;font-size:13px;font-family:inherit;min-width:0;"/>'
         +'<button onclick="registrarAbono(\''+c.id+'\')" style="background:var(--green);color:#fff;border:none;border-radius:8px;padding:6px 14px;font-size:13px;font-family:inherit;cursor:pointer;font-weight:700;">+ Abono</button>'
-      +'</div>':'<div style="font-size:12px;font-weight:700;color:var(--green);">✅ Pagado completamente</div>')
+      +'</div>':'<div style="font-size:12px;font-weight:700;color:var(--green);border-top:1px solid var(--border);padding-top:12px;">✅ Pagado completamente</div>')
     +'</div>';
   }).join('');
 }
