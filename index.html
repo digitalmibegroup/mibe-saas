@@ -922,6 +922,7 @@ body.pos-sb-off .pos-sb-btn{background:var(--gold-s);border-color:var(--gold-b);
       <div class="mod-header">
         <div class="mod-title">&#128101; Clientes</div>
         <div class="mod-count" id="cliCount">0 clientes</div>
+        <button onclick="abrirNuevoCliente()" style="padding:7px 14px;background:var(--gold);color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;">+ Nuevo cliente</button>
         <button style="padding:7px 14px;background:var(--accent);color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;" onclick="loadClientesView()">Actualizar</button>
       </div>
       <div class="mod-search" style="position:relative;">
@@ -1494,6 +1495,28 @@ body.pos-sb-off .pos-sb-btn{background:var(--gold-s);border-color:var(--gold-b);
     <div style="display:flex;gap:10px;">
       <button id="btnGuardarEditCli" onclick="guardarEditarCliente()" style="flex:1;padding:12px;background:var(--gold-l);color:#fff;border:none;border-radius:9px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;">Guardar cambios</button>
       <button onclick="cerrarEditarCliente()" style="padding:12px 20px;background:var(--bg);color:var(--text2);border:1.5px solid var(--border);border-radius:9px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL NUEVO CLIENTE -->
+<div id="newCliModal" style="position:fixed;inset:0;z-index:650;display:none;align-items:center;justify-content:center;padding:20px;background:rgba(0,0,0,.5);">
+  <div style="background:#fff;border-radius:18px;max-width:480px;width:100%;padding:28px;animation:popIn .3s cubic-bezier(.34,1.56,.64,1);max-height:90vh;overflow-y:auto;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
+      <div style="font-size:17px;font-weight:700;">&#10133; Nuevo Cliente</div>
+      <div onclick="cerrarNuevoCliente()" style="cursor:pointer;font-size:22px;color:var(--text3);line-height:1;">&#215;</div>
+    </div>
+    <div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;margin-bottom:4px;">Nombre *</div>
+    <input id="newCliNombre" type="text" placeholder="Nombre completo" style="width:100%;border:1.5px solid var(--border);border-radius:8px;padding:10px 12px;font-size:13px;font-family:inherit;color:var(--text);outline:none;margin-bottom:12px;box-sizing:border-box;"/>
+    <div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;margin-bottom:4px;">WhatsApp</div>
+    <input id="newCliWa" type="text" placeholder="Ej: 3001234567" style="width:100%;border:1.5px solid var(--border);border-radius:8px;padding:10px 12px;font-size:13px;font-family:inherit;color:var(--text);outline:none;margin-bottom:12px;box-sizing:border-box;"/>
+    <div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;margin-bottom:4px;">Dirección</div>
+    <input id="newCliDir" type="text" placeholder="Dirección de entrega" style="width:100%;border:1.5px solid var(--border);border-radius:8px;padding:10px 12px;font-size:13px;font-family:inherit;color:var(--text);outline:none;margin-bottom:12px;box-sizing:border-box;"/>
+    <div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;margin-bottom:4px;">Detalle / Apto / Torre</div>
+    <input id="newCliDet" type="text" placeholder="Apto 301, Torre A..." style="width:100%;border:1.5px solid var(--border);border-radius:8px;padding:10px 12px;font-size:13px;font-family:inherit;color:var(--text);outline:none;margin-bottom:20px;box-sizing:border-box;"/>
+    <div style="display:flex;gap:10px;">
+      <button id="btnGuardarNewCli" onclick="guardarNuevoCliente()" style="flex:1;padding:12px;background:var(--gold-l);color:#fff;border:none;border-radius:9px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;">Crear cliente</button>
+      <button onclick="cerrarNuevoCliente()" style="padding:12px 20px;background:var(--bg);color:var(--text2);border:1.5px solid var(--border);border-radius:9px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;">Cancelar</button>
     </div>
   </div>
 </div>
@@ -3111,6 +3134,28 @@ async function upsertCli(n,w,dir,det,t,pts,eid){
   }catch(e){console.warn(e);}
 }
 
+async function crearClienteNuevo(nombre,whatsapp,direccion,detalle){
+  nombre=(nombre||'').trim();whatsapp=(whatsapp||'').trim();direccion=(direccion||'').trim();detalle=(detalle||'').trim();
+  if(!nombre)return{ok:false,motivo:'nombre'};
+  try{
+    var q=SB+'/rest/v1/clientes_frecuentes?id_licencia=eq.'+CID;
+    q+=whatsapp?'&whatsapp=eq.'+encodeURIComponent(whatsapp):'&nombre=ilike.'+encodeURIComponent(nombre);
+    var rDup=await fetch(q+'&select=*&limit=1',{headers:{'apikey':SK,'Authorization':'Bearer '+SK}});
+    var dDup=rDup.ok?await rDup.json():[];
+    if(dDup&&dDup.length)return{ok:false,motivo:'duplicado',cliente:dDup[0]};
+    var body={id_licencia:CID,nombre:nombre,puntos:0,total_compras:0,num_pedidos:0,es_mayorista:false};
+    if(whatsapp)body.whatsapp=whatsapp;
+    if(direccion)body.direccion=direccion;
+    if(detalle)body.detalle=detalle;
+    var r=await fetch(SB+'/rest/v1/clientes_frecuentes',{method:'POST',headers:H,body:JSON.stringify(body)});
+    if(!r.ok)return{ok:false,motivo:'error'};
+    var d=await r.json();
+    var nuevo=Array.isArray(d)?d[0]:d;
+    clisDB.push(nuevo);
+    return{ok:true,cliente:nuevo};
+  }catch(e){console.warn(e);return{ok:false,motivo:'error'};}
+}
+
 function sendWA(){
   var v=lastVenta;if(!v)return;
   var num=v.wa?v.wa.replace(/[^0-9]/g,''):'';
@@ -3287,6 +3332,37 @@ async function guardarEditarCliente(){
     toast('Cliente actualizado');
   }catch(e){toast('Error al guardar');}
   if(btn){btn.disabled=false;btn.textContent='Guardar cambios';}
+}
+
+function abrirNuevoCliente(){
+  document.getElementById('newCliNombre').value='';
+  document.getElementById('newCliWa').value='';
+  document.getElementById('newCliDir').value='';
+  document.getElementById('newCliDet').value='';
+  document.getElementById('newCliModal').style.display='flex';
+}
+function cerrarNuevoCliente(){document.getElementById('newCliModal').style.display='none';}
+
+async function guardarNuevoCliente(){
+  var nombre=document.getElementById('newCliNombre').value.trim();
+  var wa=document.getElementById('newCliWa').value.trim();
+  var dir=document.getElementById('newCliDir').value.trim();
+  var det=document.getElementById('newCliDet').value.trim();
+  if(!nombre){toast('Escribe el nombre');return;}
+  var btn=document.getElementById('btnGuardarNewCli');
+  if(btn){btn.disabled=true;btn.textContent='Creando...';}
+  var res=await crearClienteNuevo(nombre,wa,dir,det);
+  if(btn){btn.disabled=false;btn.textContent='Crear cliente';}
+  if(res.ok){
+    renderClientesView(clisDB);
+    var cc=document.getElementById('cliCount');if(cc)cc.textContent=clisDB.length+' clientes';
+    cerrarNuevoCliente();
+    toast('&#10003; Cliente creado');
+  } else if(res.motivo==='duplicado'){
+    toast('Ya existe un cliente similar: '+(res.cliente&&res.cliente.nombre||''));
+  } else {
+    toast('Error al crear cliente');
+  }
 }
 
 async function verHistorialCliente(id, nombreEnc){
@@ -7388,6 +7464,7 @@ async function verificarVencimientoPuntos(wa){
           </select>
         </div>
       </div>
+      <div style="margin:-6px 0 14px;"><button type="button" id="btnCrearCliCot" onclick="crearClienteDesdeCotizacion()" style="padding:6px 12px;background:var(--gold-s);color:var(--gold);border:1.5px solid var(--gold-b);border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;">+ Crear cliente</button></div>
       <div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">Productos agregados:</div>
       <div id="cotItemsList" style="margin-bottom:10px;min-height:32px;"></div>
       <div style="background:var(--bg);border-radius:10px;padding:10px;margin-bottom:10px;border:1px solid var(--border);">
@@ -8095,6 +8172,7 @@ function abrirNuevaCotizacion(){
   document.getElementById('cotDiasVence').value='3';
   document.getElementById('cotEstado').value='pendiente';
   var srch=document.getElementById('cotProdSearch');if(srch)srch.value='';
+  var bcc=document.getElementById('btnCrearCliCot');if(bcc){bcc.disabled=false;bcc.textContent='+ Crear cliente';}
   renderCotItems();
   renderCotCatTabs();
   renderCotProdGrid();
@@ -8255,6 +8333,29 @@ function cotConfirmarDesc(i){
   renderCotItems();
 }
 
+async function crearClienteDesdeCotizacion(){
+  var nombre=document.getElementById('cotCliente').value.trim();
+  var wa=document.getElementById('cotWA').value.trim();
+  if(!nombre){toast('Escribe el nombre del cliente primero');return;}
+  var btn=document.getElementById('btnCrearCliCot');
+  if(btn){btn.disabled=true;btn.textContent='Creando...';}
+  var res=await crearClienteNuevo(nombre,wa,'','');
+  if(res.ok){
+    document.getElementById('cotCliente').value=res.cliente.nombre;
+    document.getElementById('cotWA').value=res.cliente.whatsapp||wa;
+    if(btn)btn.textContent='&#10003; Cliente creado';
+    toast('&#10003; Cliente creado y seleccionado');
+  } else if(res.motivo==='duplicado'){
+    document.getElementById('cotCliente').value=res.cliente.nombre;
+    document.getElementById('cotWA').value=res.cliente.whatsapp||wa;
+    if(btn){btn.disabled=false;btn.textContent='+ Crear cliente';}
+    toast('Ya existe: '+res.cliente.nombre+' — seleccionado');
+  } else {
+    if(btn){btn.disabled=false;btn.textContent='+ Crear cliente';}
+    toast(res.motivo==='nombre'?'Escribe el nombre':'Error al crear cliente');
+  }
+}
+
 function guardarCotizacion(){
   var cliente=document.getElementById('cotCliente').value.trim()||'Cliente';
   var wa=document.getElementById('cotWA').value.trim()||'';
@@ -8288,6 +8389,7 @@ function editarCotizacion(id){
   document.getElementById('cotModalTitulo').textContent='Editar Cotización #'+String(cot.numero||'').padStart(3,'0');
   document.getElementById('cotCliente').value=cot.cliente||'';
   document.getElementById('cotWA').value=cot.wa||'';
+  var bcc2=document.getElementById('btnCrearCliCot');if(bcc2){bcc2.disabled=false;bcc2.textContent='+ Crear cliente';}
   var diasRest=cot.fecha_vencimiento?Math.max(1,Math.ceil((new Date(cot.fecha_vencimiento)-new Date())/86400000)):3;
   document.getElementById('cotDiasVence').value=diasRest;
   document.getElementById('cotEstado').value=cot.estado||'pendiente';
