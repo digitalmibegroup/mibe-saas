@@ -885,6 +885,7 @@ body.pos-sb-off .pos-sb-btn{background:var(--gold-s);border-color:var(--gold-b);
         <div class="pos-foot">
           <div class="dom-row"><span class="dom-lbl">&#128666; Domicilio</span><input class="dom-inp" type="number" id="domInput" placeholder="$0" min="0" step="500" oninput="setDomicilio(this.value)"/><button onclick="toggleDescFactura()" style="font-size:11px;padding:4px 10px;border:1.5px solid var(--border);border-radius:6px;background:#fff;cursor:pointer;font-family:inherit;color:var(--text2);">% Desc.</button></div>
           <div class="dom-badge" id="domLabel"></div>
+          <div class="dom-row"><span class="dom-lbl">&#128717; Bolsa</span><input type="checkbox" id="chkBolsa" onchange="toggleBolsa()" style="width:16px;height:16px;cursor:pointer;margin:0;flex-shrink:0;"/><input class="dom-inp" type="number" id="bolsaInput" placeholder="$0" min="0" step="100" oninput="setBolsa(this.value)" style="display:none;"/></div>
           <div class="pago-g">
             <div class="po on" onclick="setPago(this,'efectivo')"><span class="po-ic">&#128181;</span><span class="po-lbl">Efectivo</span></div>
             <div class="po" id="poTransferencia" onclick="setPago(this,'transferencia')"><span class="po-ic">&#127974;</span><span class="po-lbl">Transfer</span></div>
@@ -2013,6 +2014,7 @@ var cart=[],pago='efectivo',pagoOrigen=null,cliActivo=null,lastVenta=null,clisDB
 var domicilio=0;
 var descFacturaTipo='pct'; // 'pct' | 'val'
 var descFactura=0; // monto calculado de descuento factura
+var bolsaActiva=false, bolsa=0; // bolsa: cargo manual opcional, no es producto
 
 /* ---- INVENTARIO LOCAL (se sincroniza con Supabase) ---- */
 var INVENTARIO=[];
@@ -2855,7 +2857,7 @@ function updateTot(){
     var prev2=document.getElementById('descPreview');
     if(prev2)prev2.textContent='';
   }
-  var total=subtotal+domicilio-descFactura;
+  var total=subtotal+domicilio+(bolsaActiva?bolsa:0)-descFactura;
   document.getElementById('totVal').textContent=fmt(Math.max(0,total));
   var ptsW=cliActivo?cliActivo.whatsapp:document.getElementById('cliW').value.trim();
   var chkMayUT=document.getElementById('chkMayorista');
@@ -2885,12 +2887,34 @@ function setDescTipo(tipo){
   updateTot();
 }
 function setDomicilio(val){domicilio=parseInt(val)||0;updateTot();}
+function toggleBolsa(){
+  var chk=document.getElementById('chkBolsa');
+  var inp=document.getElementById('bolsaInput');
+  bolsaActiva=!!(chk&&chk.checked);
+  if(inp){
+    inp.style.display=bolsaActiva?'block':'none';
+    if(!bolsaActiva)inp.value='';
+    else inp.focus();
+  }
+  if(!bolsaActiva)bolsa=0;
+  updateTot();
+}
+function setBolsa(val){
+  var n=parseFloat(val);
+  if(isNaN(n)||n<0)n=0;
+  bolsa=n;
+  var inp=document.getElementById('bolsaInput');
+  if(inp&&parseFloat(inp.value)<0)inp.value=0;
+  updateTot();
+}
 function clearVenta(){
-  cart=[];domicilio=0;descFactura=0;
+  cart=[];domicilio=0;descFactura=0;bolsa=0;bolsaActiva=false;
   document.getElementById('domInput').value='';
   var descInp=document.getElementById('descInput');if(descInp)descInp.value='';
   var descEl=document.getElementById('descFactura');if(descEl)descEl.style.display='none';
   var descPrev=document.getElementById('descPreview');if(descPrev)descPrev.textContent='';
+  var chkBolsaClr2=document.getElementById('chkBolsa');if(chkBolsaClr2)chkBolsaClr2.checked=false;
+  var bolsaInpClr2=document.getElementById('bolsaInput');if(bolsaInpClr2){bolsaInpClr2.value='';bolsaInpClr2.style.display='none';}
   var cambioWrapClr=document.getElementById('cambioWrap');if(cambioWrapClr)cambioWrapClr.style.display='none';
   var efClr=document.getElementById('efectivoRecibido');if(efClr)efClr.value='';
   var crClr=document.getElementById('cambioResult');if(crClr)crClr.style.display='none';
@@ -3028,8 +3052,9 @@ function elegirOrigenTransferencia(origen){
 /* ==================== CONFIRMACION PREVIA VENTA ==================== */
 function abrirConfirmacionVenta(){
   if(!cart.length)return;
+  if(bolsaActiva&&!(bolsa>0)){toast('Ingresa un valor válido para la bolsa');return;}
   var subtotal=cart.reduce(function(s,c){return s+c.total;},0);
-  var total=Math.max(0,subtotal+domicilio-descFactura);
+  var total=Math.max(0,subtotal+domicilio+(bolsaActiva?bolsa:0)-descFactura);
   var cn=cliActivo?cliActivo.nombre:(document.getElementById('cliN').value.trim()||'Cliente');
   var cw=cliActivo?cliActivo.whatsapp:(document.getElementById('cliW').value.trim()||null);
   var esCartera=document.getElementById('chkCartera')&&document.getElementById('chkCartera').checked;
@@ -3058,6 +3083,7 @@ function abrirConfirmacionVenta(){
     +'</div>';
   });
   if(domicilio>0) html+='<div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text3);margin-bottom:5px;"><span>🚴 Domicilio</span><span>'+fmt(domicilio)+'</span></div>';
+  if(bolsaActiva&&bolsa>0) html+='<div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text3);margin-bottom:5px;"><span>🛍️ Bolsa</span><span>'+fmt(bolsa)+'</span></div>';
   if(descFactura>0) html+='<div style="display:flex;justify-content:space-between;font-size:12px;color:var(--red);margin-bottom:5px;"><span>% Descuento</span><span>-'+fmt(descFactura)+'</span></div>';
   html+='</div>';
 
@@ -3093,9 +3119,10 @@ function cerrarConfirmacionVenta(){
 /* ==================== PROCESAR VENTA ==================== */
 async function doVenta(){
   if(!cart.length)return;
+  if(bolsaActiva&&!(bolsa>0)){toast('Ingresa un valor válido para la bolsa');return;}
   var btn=document.getElementById('btnReg');btn.disabled=true;btn.textContent='Guardando...';
   var subtotal=cart.reduce(function(s,c){return s+c.total;},0);
-  var total=Math.max(0,subtotal+domicilio-descFactura);
+  var total=Math.max(0,subtotal+domicilio+(bolsaActiva?bolsa:0)-descFactura);
   var cn=document.getElementById('cliN').value.trim()||'Cliente';
   var cw=document.getElementById('cliW').value.trim()||null;
   var cdir=document.getElementById('cliDir').value.trim()||null;
@@ -3115,7 +3142,10 @@ async function doVenta(){
   if(esMayorista)console.log('Cliente mayorista: no aplica acumulación de puntos');
   try{
     var ventaBody={id_cliente:CID,cliente_nombre:cn,total:total,subtotal:subtotal,descuento:descFactura,metodo_pago:pago,estado:esCartera?'credito':'completada',puntos_ganados:pts,domicilio:domicilio,direccion_entrega:cdir,detalle_entrega:cdet};
-    if(pago==='transferencia'&&pagoOrigen)ventaBody.notas=pagoOrigen;
+    var notasParts=[];
+    if(pago==='transferencia'&&pagoOrigen)notasParts.push('Origen: '+pagoOrigen);
+    if(bolsaActiva&&bolsa>0)notasParts.push('Bolsa: '+fmt(bolsa));
+    if(notasParts.length)ventaBody.notas=notasParts.join(' | ');
     if(esCartera){try{ventaBody.abono=abonoVal;ventaBody.saldo_pendiente=saldoVal;ventaBody.fecha_vencimiento_cartera=fechaVence;}catch(e){}}
     var vr=await fetch(SB+'/rest/v1/ventas',{method:'POST',headers:H,body:JSON.stringify(ventaBody)});
     if(!vr.ok)throw new Error(await vr.text());
@@ -3146,11 +3176,13 @@ async function doVenta(){
     document.getElementById('mSub').textContent=cn+(cdir?' | '+cdir:'');
     document.getElementById('mNum').textContent='#'+String(v.numero_venta||'---').padStart(3,'0')+' | '+fmt(total)+(domicilio?' (dom: '+fmt(domicilio)+')':'')+' | +'+pts+' pts'+(esCartera?' 💳 CRÉDITO':'');
     document.getElementById('modal').classList.add('o');
-    cart=[];domicilio=0;descFactura=0;
+    cart=[];domicilio=0;descFactura=0;bolsa=0;bolsaActiva=false;
     document.getElementById('domInput').value='';
     var dInpEl=document.getElementById('descInput');if(dInpEl)dInpEl.value='';
     var dFacEl=document.getElementById('descFactura');if(dFacEl)dFacEl.style.display='none';
     var dPrevEl=document.getElementById('descPreview');if(dPrevEl)dPrevEl.textContent='';
+    var chkBolsaClr=document.getElementById('chkBolsa');if(chkBolsaClr)chkBolsaClr.checked=false;
+    var bolsaInpClr=document.getElementById('bolsaInput');if(bolsaInpClr){bolsaInpClr.value='';bolsaInpClr.style.display='none';}
     var chkC=document.getElementById('chkCartera');if(chkC){chkC.checked=false;document.getElementById('carteraInputs').style.display='none';}
     var cwClr2=document.getElementById('cambioWrap');if(cwClr2)cwClr2.style.display='none';
     var efClr2=document.getElementById('efectivoRecibido');if(efClr2)efClr2.value='';
@@ -7545,14 +7577,18 @@ function guardarEnEspera(){
     cart: JSON.parse(JSON.stringify(cart)),
     domicilio: domicilio,
     descFactura: descFactura,
+    bolsaActiva: bolsaActiva,
+    bolsa: bolsa,
     ts: new Date().toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'})
   });
   localStorage.setItem('lc_ventas_espera', JSON.stringify(VENTAS_ESPERA));
-  cart=[]; domicilio=0; descFactura=0;
+  cart=[]; domicilio=0; descFactura=0; bolsa=0; bolsaActiva=false;
   document.getElementById('cliN').value='';
   document.getElementById('cliW').value='';
   document.getElementById('domInput').value='';
   var dEl=document.getElementById('descInput'); if(dEl)dEl.value='';
+  var chkBolsaEsp=document.getElementById('chkBolsa'); if(chkBolsaEsp)chkBolsaEsp.checked=false;
+  var bolsaInpEsp=document.getElementById('bolsaInput'); if(bolsaInpEsp){bolsaInpEsp.value='';bolsaInpEsp.style.display='none';}
   renderItems(); updateTot(); renderEspera();
   toast('⏸ Pedido guardado en espera');
 }
@@ -7563,7 +7599,12 @@ function recuperarEspera(idx){
   cart=JSON.parse(JSON.stringify(e.cart));
   domicilio=e.domicilio||0;
   descFactura=e.descFactura||0;
+  bolsaActiva=!!e.bolsaActiva;
+  bolsa=e.bolsa||0;
   document.getElementById('domInput').value=domicilio||'';
+  var chkBolsaRec=document.getElementById('chkBolsa'); if(chkBolsaRec)chkBolsaRec.checked=bolsaActiva;
+  var bolsaInpRec=document.getElementById('bolsaInput');
+  if(bolsaInpRec){bolsaInpRec.style.display=bolsaActiva?'block':'none';bolsaInpRec.value=bolsaActiva?bolsa:'';}
   VENTAS_ESPERA.splice(idx,1);
   localStorage.setItem('lc_ventas_espera', JSON.stringify(VENTAS_ESPERA));
   renderItems(); updateTot(); renderEspera();
@@ -8600,7 +8641,7 @@ function toggleCarteraSection(){
 function updateCarteraSummary(){
   var abono=parseFloat(document.getElementById('abonoInicial').value)||0;
   var subtotal=cart.reduce(function(s,c){return s+c.total;},0);
-  var total=Math.max(0,subtotal+domicilio-descFactura);
+  var total=Math.max(0,subtotal+domicilio+(bolsaActiva?bolsa:0)-descFactura);
   var saldo=Math.max(0,total-abono);
   var div=document.getElementById('carteraSummary');
   if(div) div.innerHTML='<span style="color:var(--green);">Abono: '+fmt(abono)+'</span> · <span style="color:var(--red);">Queda debiendo: '+fmt(saldo)+'</span>';
