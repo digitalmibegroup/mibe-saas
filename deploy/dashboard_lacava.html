@@ -2479,7 +2479,9 @@ function goView(v,el){
   } else if(v==='cartera'){
     document.getElementById('vCartera').style.display='flex';
     document.getElementById('tgs').textContent='Cuentas por cobrar';
-    renderCarteraList();
+    var carL=document.getElementById('carteraList');if(carL)carL.innerHTML='<div style="text-align:center;padding:40px;color:var(--text3);">Cargando cartera...</div>';
+    var carK=document.getElementById('carteraKPIs');if(carK)carK.innerHTML='';
+    cargarCarteraCompletaSB().then(renderCarteraList);
   } else {
     document.getElementById('vInicio').style.display='block';
     document.getElementById('tgs').textContent='Resumen de tu negocio';
@@ -5820,6 +5822,21 @@ function closeVentaDet(){document.getElementById('modalVentaDet').style.display=
 async function eliminarVenta(id, num){
   if(!confirm('¿Eliminar la Venta #'+num+'?\n\nSe restaurará el stock de todos los productos vendidos.\nEsta acción no se puede deshacer.'))return;
   try{
+    /* Verificación PRIMERO, antes de tocar stock/detalle_ventas/ventas: si la venta tiene
+       una entrada en Cartera, la eliminación se bloquea por completo. public.cartera.venta_id
+       referencia a ventas(id) por FK sin ON DELETE CASCADE — no se fuerza el borrado. */
+    var rCartCheck=await fetch(SB+'/rest/v1/cartera?venta_id=eq.'+id+'&id_licencia=eq.'+CID+'&select=id',
+      {headers:{'apikey':SK,'Authorization':'Bearer '+SK}});
+    if(!rCartCheck.ok){
+      toast('No se pudo verificar si la venta tiene cartera asociada — inténtalo de nuevo');
+      return;
+    }
+    var carteraExistenteElim=await rCartCheck.json();
+    if(carteraExistenteElim.length){
+      toast('⚠ Esta venta tiene un crédito asociado en Cartera y no puede eliminarse. Resuelve primero el registro en Cartera.');
+      return;
+    }
+
     /* 1. Leer el detalle ANTES de eliminar para poder restaurar el stock */
     var rDet=await fetch(SB+'/rest/v1/detalle_ventas?venta_id=eq.'+id+'&select=*',
       {headers:{'apikey':SK,'Authorization':'Bearer '+SK}});
@@ -5869,20 +5886,16 @@ async function eliminarVenta(id, num){
 
     /* 3. Eliminar registros en Supabase */
     await fetch(SB+'/rest/v1/detalle_ventas?venta_id=eq.'+id,{method:'DELETE',headers:H});
-    await fetch(SB+'/rest/v1/ventas?id=eq.'+id,{method:'DELETE',headers:H});
+    var rVentaDelElim=await fetch(SB+'/rest/v1/ventas?id=eq.'+id,{method:'DELETE',headers:H});
+    if(!rVentaDelElim.ok){
+      console.error('Error al eliminar venta:', await rVentaDelElim.text());
+      toast('Error al eliminar la venta — no se completó');
+      return;
+    }
 
     /* 4. Actualizar UI local */
     VENTAS_MES=VENTAS_MES.filter(function(v){return v.id!==id;});
     renderVentasStats();renderVentasList();
-
-    /* 5. Si la venta estaba en cartera, eliminarla también */
-    var carteraIdxElim=CARTERA_LOCAL.findIndex(function(c){return c.id==id;});
-    if(carteraIdxElim>=0){
-      CARTERA_LOCAL.splice(carteraIdxElim,1);
-      localStorage.setItem('lc_cartera_local',JSON.stringify(CARTERA_LOCAL));
-      var vCart=document.getElementById('vCartera');
-      if(vCart&&vCart.style.display!=='none')renderCarteraList();
-    }
 
     /* Actualizar inventario si está visible */
     var vInv=document.getElementById('vInventario');
@@ -7155,7 +7168,12 @@ async function revertirCanje(enc){
         if(inv){inv.stock=inv.stock+(dit.cantidad||0);await fetch(SB+'/rest/v1/inventario?id=eq.'+inv.id+'&id_licencia=eq.'+CID,{method:'PATCH',headers:H,body:JSON.stringify({stock:inv.stock})});}
       }
       await fetch(SB+'/rest/v1/detalle_ventas?venta_id=eq.'+t.venta_id,{method:'DELETE',headers:H});
-      await fetch(SB+'/rest/v1/ventas?id=eq.'+t.venta_id,{method:'DELETE',headers:H});
+      var rVentaCanjeDel=await fetch(SB+'/rest/v1/ventas?id=eq.'+t.venta_id,{method:'DELETE',headers:H});
+      if(!rVentaCanjeDel.ok){
+        console.error('Error al eliminar venta de canje:', await rVentaCanjeDel.text());
+        toast('Error al revertir el canje — la venta no se pudo eliminar');
+        return;
+      }
       await fetch(SB+'/rest/v1/gastos?id_licencia=eq.'+CID+'&descripcion=ilike.*'+encodeURIComponent('[canje:'+t.venta_id+']')+'*',{method:'DELETE',headers:H});
     }
     /* 3. Eliminar la transacción de canje original */
@@ -8230,14 +8248,21 @@ async function guardarEdicionVenta(){
     var ventaIdx=VENTAS_MES.findIndex(function(v){return v.id===editVentaId;});
     if(ventaIdx>=0){VENTAS_MES[ventaIdx].total=nuevoTotal;VENTAS_MES[ventaIdx].subtotal=nuevoSubtotal;VENTAS_MES[ventaIdx].puntos_ganados=nuevoPts;}
 
-    /* Sincronizar total en CARTERA_LOCAL si la venta tiene entrada de cartera */
-    var carteraIdxEdit=CARTERA_LOCAL.findIndex(function(c){return c.id==editVentaId;});
-    if(carteraIdxEdit>=0){
-      var totalAbonadoCalc=(CARTERA_LOCAL[carteraIdxEdit].abonos_hist||[]).reduce(function(s,a){return s+(a.monto||0);},0);
-      CARTERA_LOCAL[carteraIdxEdit].total=nuevoTotal;
-      CARTERA_LOCAL[carteraIdxEdit].saldo_pendiente=Math.max(0,nuevoTotal-totalAbonadoCalc);
-      if(CARTERA_LOCAL[carteraIdxEdit].saldo_pendiente<=0) CARTERA_LOCAL[carteraIdxEdit].estado_cartera='pagada';
-      localStorage.setItem('lc_cartera_local',JSON.stringify(CARTERA_LOCAL));
+    /* Sincronizar total en Supabase (public.cartera) si la venta tiene entrada de cartera */
+    var carteraEntradaEdit=CARTERA_SB.find(function(c){return c.id==editVentaId;});
+    if(carteraEntradaEdit){
+      var totalAbonadoCalc=(carteraEntradaEdit.abonos_hist||[]).reduce(function(s,a){return s+(a.monto||0);},0);
+      var nuevoSaldoCartera=Math.max(0,nuevoTotal-totalAbonadoCalc);
+      var nuevoEstadoCartera=nuevoSaldoCartera<=0?'pagada':'activa';
+      try{
+        var rCartEdit=await fetch(SB+'/rest/v1/cartera?id=eq.'+carteraEntradaEdit._sbId,{method:'PATCH',headers:H,body:JSON.stringify({total:nuevoTotal,saldo_pendiente:nuevoSaldoCartera,estado_cartera:nuevoEstadoCartera})});
+        if(rCartEdit.ok){
+          await cargarCarteraCompletaSB();
+        } else {
+          console.error('Error al sincronizar cartera tras editar venta:', await rCartEdit.text());
+          toast('⚠ La venta se actualizó, pero Cartera no se pudo sincronizar — revísala manualmente');
+        }
+      }catch(e){ console.error(e); toast('⚠ La venta se actualizó, pero Cartera no se pudo sincronizar — revísala manualmente'); }
       var vCart=document.getElementById('vCartera');
       if(vCart&&vCart.style.display!=='none')renderCarteraList();
     }
@@ -8258,7 +8283,7 @@ function closeEditarVenta(){
 function renderEditVentaCartera(){
   var sec=document.getElementById('editVentaCarteraSection');
   if(!sec)return;
-  var entrada=CARTERA_LOCAL.find(function(c){return c.id==editVentaId;});
+  var entrada=CARTERA_SB.find(function(c){return c.id==editVentaId;});
   if(!entrada){sec.style.display='none';return;}
   sec.style.display='block';
   var info=document.getElementById('editVentaCarteraInfo');
@@ -8293,22 +8318,24 @@ function renderEditVentaCartera(){
     );
 }
 
-function aplicarAbonoDesdeEdicion(){
+async function aplicarAbonoDesdeEdicion(){
   var monto=parseFloat(document.getElementById('editCarteraAbonoInput').value)||0;
   if(monto<=0){toast('Ingresa un monto válido');return;}
-  var idx=CARTERA_LOCAL.findIndex(function(c){return c.id==editVentaId;});
-  if(idx<0){toast('No hay entrada de cartera para esta venta');return;}
-  CARTERA_LOCAL[idx].saldo_pendiente=Math.max(0,(CARTERA_LOCAL[idx].saldo_pendiente||0)-monto);
-  CARTERA_LOCAL[idx].abono=(CARTERA_LOCAL[idx].abono||0)+monto;
-  CARTERA_LOCAL[idx].abonos_hist=CARTERA_LOCAL[idx].abonos_hist||[];
-  CARTERA_LOCAL[idx].abonos_hist.push({fecha:new Date().toISOString(),monto:monto});
-  if(CARTERA_LOCAL[idx].saldo_pendiente<=0) CARTERA_LOCAL[idx].estado_cartera='pagada';
-  localStorage.setItem('lc_cartera_local',JSON.stringify(CARTERA_LOCAL));
-  var inp=document.getElementById('editCarteraAbonoInput');if(inp)inp.value='';
-  renderEditVentaCartera();
-  var vCart=document.getElementById('vCartera');
-  if(vCart&&vCart.style.display!=='none')renderCarteraList();
-  toast('&#10003; Abono de '+fmt(monto)+' registrado');
+  var entrada=CARTERA_SB.find(function(c){return c.id==editVentaId;});
+  if(!entrada){toast('No hay entrada de cartera para esta venta');return;}
+  var btn=document.querySelector('button[onclick="aplicarAbonoDesdeEdicion()"]');
+  if(btn)btn.disabled=true;
+  var ok=await registrarAbonoCarteraSB(entrada, monto);
+  if(btn)btn.disabled=false;
+  if(ok){
+    var inp=document.getElementById('editCarteraAbonoInput');if(inp)inp.value='';
+    renderEditVentaCartera();
+    var vCart=document.getElementById('vCartera');
+    if(vCart&&vCart.style.display!=='none')renderCarteraList();
+    toast('&#10003; Abono de '+fmt(monto)+' registrado');
+  } else {
+    toast('Error al registrar el abono — no se guardó, el saldo no cambió');
+  }
 }
 
 /* ===== COTIZACIONES ===== */
@@ -8724,13 +8751,85 @@ function enviarCotWAById(id){
   window.open('https://wa.me/'+num+'?text='+msg,'_blank');
 }
 
-/* ===== CARTERA / CXC ===== */
-var CARTERA_LOCAL = JSON.parse(localStorage.getItem('lc_cartera_local')||'[]');
+/* ===== CARTERA / CXC — centralizado en Supabase (public.cartera + public.cartera_abonos) =====
+   lc_cartera_local YA NO es el Read Path operativo. Se conserva intacta en localStorage como
+   respaldo temporal (no se lee ni se escribe desde aqui), tal como se pidio explicitamente. */
+var CARTERA_SB = [];
+var CARTERA_ABONOS_SB = [];
+var CARTERA_ERROR = false;
 
-function saveCarteraLocal(ventaId, cliente, wa, total, abono, saldo, fechaVence, numero){
-  var entry={id:ventaId,numero:numero,cliente:cliente,wa:wa,total:total,abono:abono,saldo_pendiente:saldo,fecha_vencimiento:fechaVence,fecha_creacion:new Date().toISOString(),abonos_hist:[abono>0?{fecha:new Date().toISOString(),monto:abono}:null].filter(Boolean),estado_cartera:saldo<=0?'pagada':'activa'};
-  CARTERA_LOCAL.push(entry);
-  localStorage.setItem('lc_cartera_local',JSON.stringify(CARTERA_LOCAL));
+function mapCarteraSB(row){
+  return {id:row.venta_id, _sbId:row.id, numero:row.numero_venta, cliente:row.cliente_nombre,
+    wa:row.cliente_whatsapp||'', total:parseFloat(row.total)||0, saldo_pendiente:parseFloat(row.saldo_pendiente)||0,
+    fecha_creacion:row.fecha_creacion, fecha_vencimiento:row.fecha_vencimiento, estado_cartera:row.estado_cartera,
+    abonos_hist:[]};
+}
+async function cargarCarteraSB(){
+  try{
+    var r=await fetch(SB+'/rest/v1/cartera?id_licencia=eq.'+CID+'&select=*',{headers:{'apikey':SK,'Authorization':'Bearer '+SK}});
+    if(!r.ok){ CARTERA_ERROR=true; return false; }
+    CARTERA_SB = (await r.json()).map(mapCarteraSB);
+    CARTERA_ERROR=false;
+    return true;
+  }catch(e){ CARTERA_ERROR=true; return false; }
+}
+async function cargarCarteraAbonosSB(){
+  try{
+    var r=await fetch(SB+'/rest/v1/cartera_abonos?id_licencia=eq.'+CID+'&select=*',{headers:{'apikey':SK,'Authorization':'Bearer '+SK}});
+    if(!r.ok) return false;
+    CARTERA_ABONOS_SB = await r.json();
+    return true;
+  }catch(e){ return false; }
+}
+function aplicarAbonosACartera(){
+  CARTERA_SB.forEach(function(c){
+    c.abonos_hist = CARTERA_ABONOS_SB.filter(function(a){return a.cartera_id===c._sbId;})
+      .map(function(a){return {fecha:a.fecha, monto:parseFloat(a.monto)||0, _sbId:a.id};})
+      .sort(function(x,y){return new Date(x.fecha)-new Date(y.fecha);});
+  });
+}
+async function cargarCarteraCompletaSB(){
+  var okC=await cargarCarteraSB();
+  var okA=await cargarCarteraAbonosSB();
+  aplicarAbonosACartera();
+  return okC&&okA;
+}
+/* Registra un abono real: cartera_abonos (INSERT) + cartera.saldo_pendiente (PATCH).
+   Compartida entre el modulo Cartera y la seccion de cartera dentro de Editar Venta,
+   para no duplicar la logica de calculo de saldo. */
+async function registrarAbonoCarteraSB(entrada, monto){
+  try{
+    var rA=await fetch(SB+'/rest/v1/cartera_abonos',{method:'POST',headers:H,body:JSON.stringify({id_licencia:CID,cartera_id:entrada._sbId,venta_id:entrada.id,monto:monto,fecha:new Date().toISOString(),registrado_por:'pos'})});
+    if(!rA.ok){ console.error('Error al registrar abono en Supabase:', await rA.text()); return false; }
+    var nuevoSaldo=Math.max(0, entrada.saldo_pendiente-monto);
+    var nuevoEstado=nuevoSaldo<=0?'pagada':'activa';
+    var rP=await fetch(SB+'/rest/v1/cartera?id=eq.'+entrada._sbId,{method:'PATCH',headers:H,body:JSON.stringify({saldo_pendiente:nuevoSaldo,estado_cartera:nuevoEstado})});
+    if(!rP.ok){ console.error('Error al actualizar saldo en Supabase:', await rP.text()); return false; }
+    await cargarCarteraCompletaSB();
+    return true;
+  }catch(e){ console.error(e); return false; }
+}
+
+async function saveCarteraLocal(ventaId, cliente, wa, total, abono, saldo, fechaVence, numero){
+  /* Best-effort: no bloquea ni altera el flujo de doVenta() si Supabase falla. */
+  try{
+    var fechaCreacion=new Date().toISOString();
+    var estadoInicial=saldo<=0?'pagada':'activa';
+    var r=await fetch(SB+'/rest/v1/cartera',{method:'POST',headers:H,body:JSON.stringify({
+      id_licencia:CID,venta_id:ventaId,numero_venta:numero,cliente_nombre:cliente,cliente_whatsapp:wa||null,
+      total:total,saldo_pendiente:saldo,fecha_creacion:fechaCreacion,fecha_vencimiento:fechaVence||null,estado_cartera:estadoInicial
+    })});
+    if(!r.ok){ console.error('Error al crear cartera en Supabase:', await r.text()); toast('⚠ La venta a crédito no quedó registrada en Cartera — revísala manualmente'); return; }
+    var created=await r.json();
+    var sbId=created[0].id;
+    if(abono>0){
+      var rA=await fetch(SB+'/rest/v1/cartera_abonos',{method:'POST',headers:H,body:JSON.stringify({id_licencia:CID,cartera_id:sbId,venta_id:ventaId,monto:abono,fecha:fechaCreacion,registrado_por:'pos'})});
+      if(!rA.ok) console.error('Error al registrar abono inicial en Supabase:', await rA.text());
+    }
+    await cargarCarteraCompletaSB();
+    var vCart=document.getElementById('vCartera');
+    if(vCart&&vCart.style.display!=='none')renderCarteraList();
+  }catch(e){ console.error(e); toast('⚠ La venta a crédito no quedó registrada en Cartera — revísala manualmente'); }
 }
 
 function toggleCarteraSection(){
@@ -8752,10 +8851,15 @@ function renderCarteraList(){
   var wrap=document.getElementById('carteraList');
   var kpiWrap=document.getElementById('carteraKPIs');
   if(!wrap)return;
+  if(CARTERA_ERROR){
+    wrap.innerHTML='<div style="text-align:center;padding:40px;color:var(--red);"><div style="font-size:40px;margin-bottom:12px;">⚠</div><div>No se pudo cargar Cartera desde Supabase.<br>Verifica tu conexión e intenta de nuevo.</div></div>';
+    if(kpiWrap)kpiWrap.innerHTML='';
+    return;
+  }
   var f=document.getElementById('carteraFiltro')?document.getElementById('carteraFiltro').value:'';
   var q=(document.getElementById('carteraSearch')?document.getElementById('carteraSearch').value:'').toLowerCase();
   var hoy=new Date();
-  var data=CARTERA_LOCAL.filter(function(c){
+  var data=CARTERA_SB.filter(function(c){
     var mQ=!q||(c.cliente||'').toLowerCase().indexOf(q)>=0;
     var vencida=c.fecha_vencimiento&&new Date(c.fecha_vencimiento)<hoy&&c.saldo_pendiente>0;
     var mF=true;
@@ -8764,9 +8868,9 @@ function renderCarteraList(){
     if(f==='pagada') mF=c.saldo_pendiente<=0;
     return mQ&&mF;
   });
-  var totalPend=CARTERA_LOCAL.reduce(function(s,c){return s+c.saldo_pendiente;},0);
-  var totalVenc=CARTERA_LOCAL.filter(function(c){return c.fecha_vencimiento&&new Date(c.fecha_vencimiento)<hoy&&c.saldo_pendiente>0;}).reduce(function(s,c){return s+c.saldo_pendiente;},0);
-  var cuentasActivas=CARTERA_LOCAL.filter(function(c){return c.saldo_pendiente>0;}).length;
+  var totalPend=CARTERA_SB.reduce(function(s,c){return s+c.saldo_pendiente;},0);
+  var totalVenc=CARTERA_SB.filter(function(c){return c.fecha_vencimiento&&new Date(c.fecha_vencimiento)<hoy&&c.saldo_pendiente>0;}).reduce(function(s,c){return s+c.saldo_pendiente;},0);
+  var cuentasActivas=CARTERA_SB.filter(function(c){return c.saldo_pendiente>0;}).length;
   if(kpiWrap) kpiWrap.innerHTML=[
     {l:'Cartera total',v:fmt(totalPend),c:'var(--gold)'},
     {l:'Vencida',v:fmt(totalVenc),c:'var(--red)'},
@@ -8807,19 +8911,21 @@ function renderCarteraList(){
   }).join('');
 }
 
-function registrarAbono(carteraId){
+async function registrarAbono(carteraId){
   var inp=document.getElementById('abonoInp_'+carteraId);
   var monto=parseFloat(inp?inp.value:0)||0;
   if(monto<=0){toast('Ingresa un monto válido');return;}
-  var idx=CARTERA_LOCAL.findIndex(function(c){return c.id==carteraId;});
-  if(idx<0){toast('Registro no encontrado');return;}
-  CARTERA_LOCAL[idx].saldo_pendiente=Math.max(0,CARTERA_LOCAL[idx].saldo_pendiente-monto);
-  CARTERA_LOCAL[idx].abonos_hist=CARTERA_LOCAL[idx].abonos_hist||[];
-  CARTERA_LOCAL[idx].abonos_hist.push({fecha:new Date().toISOString(),monto:monto});
-  if(CARTERA_LOCAL[idx].saldo_pendiente<=0) CARTERA_LOCAL[idx].estado_cartera='pagada';
-  localStorage.setItem('lc_cartera_local',JSON.stringify(CARTERA_LOCAL));
-  renderCarteraList();
-  toast('✅ Abono de '+fmt(monto)+' registrado');
+  var entrada=CARTERA_SB.find(function(c){return c.id==carteraId;});
+  if(!entrada){toast('Registro no encontrado');return;}
+  if(inp)inp.disabled=true;
+  var ok=await registrarAbonoCarteraSB(entrada, monto);
+  if(inp)inp.disabled=false;
+  if(ok){
+    renderCarteraList();
+    toast('✅ Abono de '+fmt(monto)+' registrado');
+  } else {
+    toast('Error al registrar el abono — no se guardó, el saldo no cambió');
+  }
 }
 </script>
 </body>
