@@ -470,7 +470,8 @@ async function cargarProductos(){
     var r=await fetch(SB+'/rest/v1/inventario?id_licencia=eq.'+CID+'&select=*&order=categoria.asc,nombre.asc',{headers:{'apikey':SK,'Authorization':'Bearer '+SK}});
     if(!r.ok)throw new Error();
     var data=await r.json();
-    var _catHidden=JSON.parse(localStorage.getItem('lacava_cat_hidden')||'[]');
+    var hiddenR=await fetch(SB+'/rest/v1/catalogo_producto_oculto?id_licencia=eq.'+CID+'&oculto=is.true&select=producto_id',{headers:{'apikey':SK,'Authorization':'Bearer '+SK}});
+    var _catHidden=hiddenR.ok?(await hiddenR.json()).map(function(row){return row.producto_id;}):[];
     productos=data.filter(function(p){return _catHidden.indexOf(p.id)===-1&&_catHidden.indexOf(String(p.id))===-1;});
     construirCats();
     renderGrid();

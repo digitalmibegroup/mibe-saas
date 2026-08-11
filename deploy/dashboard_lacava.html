@@ -2020,7 +2020,18 @@ var bolsaActiva=false, bolsa=0; // bolsa: cargo manual opcional, no es producto
 var INVENTARIO=[];
 
 /* ===== VENTAS EN ESPERA ===== */
-var VENTAS_ESPERA = JSON.parse(localStorage.getItem('lc_ventas_espera')||'[]');
+var VENTAS_ESPERA = [];
+async function cargarVentasEsperaSB(){
+  try{
+    var r=await fetch(SB+'/rest/v1/ventas_espera?id_licencia=eq.'+CID+'&select=*&order=numero_local.desc',{headers:{'apikey':SK,'Authorization':'Bearer '+SK}});
+    var data=r.ok?await r.json():[];
+    VENTAS_ESPERA=data.map(function(row){
+      return {id:row.numero_local,_sbId:row.id,label:row.label,cart:row.cart||[],domicilio:row.domicilio||0,
+        descFactura:row.descuento||0,bolsaActiva:!!row.bolsa_activa,bolsa:row.bolsa||0,
+        ts:row.created_at?new Date(row.created_at).toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'}):''};
+    });
+  }catch(e){VENTAS_ESPERA=[];}
+}
 
 /* ===== CAJA ===== */
 var CAJA_ACTUAL = JSON.parse(localStorage.getItem('lc_caja_actual')||'null');
@@ -2245,6 +2256,7 @@ async function iniciarApp(){
   await syncCajaDesdeSupabase();
   verificarEstadoCajaInicio();
   renderCajaBtn();
+  await cargarVentasEsperaSB();
   renderEspera();
   initExpandCart();
   setupCajaAutoSync();
@@ -2462,7 +2474,8 @@ function goView(v,el){
   } else if(v==='cotizaciones'){
     document.getElementById('vCotizaciones').style.display='flex';
     document.getElementById('tgs').textContent='Cotizaciones para clientes';
-    renderCotizacionesList();
+    var cotL=document.getElementById('cotizacionesList');if(cotL)cotL.innerHTML='<div style="text-align:center;padding:40px;color:var(--text3);">Cargando...</div>';
+    cargarCotizacionesSB().then(renderCotizacionesList);
   } else if(v==='cartera'){
     document.getElementById('vCartera').style.display='flex';
     document.getElementById('tgs').textContent='Cuentas por cobrar';
@@ -6576,26 +6589,47 @@ async function renderRepRentabilidad(){
 
 /* ==================== CATALOGO VIRTUAL ==================== */
 var CAT_URL='https://lacava-sistema.netlify.app/catalogo.html';
-/* Control de visibilidad en catálogo — guardado en localStorage */
-var CAT_HIDDEN_KEY='lacava_cat_hidden';
-function getCatHidden(){try{return JSON.parse(localStorage.getItem(CAT_HIDDEN_KEY)||'[]');}catch(e){return[];}}
-function setCatHidden(arr){localStorage.setItem(CAT_HIDDEN_KEY,JSON.stringify(arr));}
-function isHiddenCat(id){return getCatHidden().indexOf(id)>=0;}
-function toggleCatVisible(id){
-  var h=getCatHidden();
-  var idx=h.indexOf(id);
-  if(idx>=0)h.splice(idx,1);else h.push(id);
-  setCatHidden(h);
-  renderCatPanel();
-  updateCatStats();
+/* Control de visibilidad en catálogo — centralizado en Supabase (catalogo_producto_oculto) */
+var CAT_HIDDEN=[];
+async function cargarCatHiddenSB(){
+  try{
+    var r=await fetch(SB+'/rest/v1/catalogo_producto_oculto?id_licencia=eq.'+CID+'&oculto=is.true&select=producto_id',{headers:{'apikey':SK,'Authorization':'Bearer '+SK}});
+    CAT_HIDDEN = r.ok ? (await r.json()).map(function(row){return row.producto_id;}) : [];
+  }catch(e){CAT_HIDDEN=[];}
 }
-function catToggleAll(visible){
-  if(visible){setCatHidden([]);}
-  else{setCatHidden(INVENTARIO.map(function(p){return p.id;}));}
-  renderCatPanel();updateCatStats();
+function isHiddenCat(id){return CAT_HIDDEN.indexOf(id)>=0;}
+async function toggleCatVisible(id){
+  var ocultarlo = CAT_HIDDEN.indexOf(id)<0;
+  try{
+    var resp;
+    if(ocultarlo){
+      resp=await fetch(SB+'/rest/v1/catalogo_producto_oculto',{method:'POST',headers:H,body:JSON.stringify({id_licencia:CID,producto_id:id,oculto:true})});
+    } else {
+      resp=await fetch(SB+'/rest/v1/catalogo_producto_oculto?id_licencia=eq.'+CID+'&producto_id=eq.'+id,{method:'DELETE',headers:H});
+    }
+    if(!resp.ok){toast('Error al actualizar visibilidad — no se guardó el cambio');return;}
+    await cargarCatHiddenSB();
+    renderCatPanel();
+    updateCatStats();
+  }catch(e){console.error(e);toast('Error al actualizar visibilidad — no se guardó el cambio');}
+}
+async function catToggleAll(visible){
+  try{
+    var resp=await fetch(SB+'/rest/v1/catalogo_producto_oculto?id_licencia=eq.'+CID,{method:'DELETE',headers:H});
+    if(!resp.ok){toast('Error al actualizar catálogo — no se guardó el cambio');return;}
+    if(!visible){
+      var rows=INVENTARIO.map(function(p){return {id_licencia:CID,producto_id:p.id,oculto:true};});
+      if(rows.length){
+        var resp2=await fetch(SB+'/rest/v1/catalogo_producto_oculto',{method:'POST',headers:H,body:JSON.stringify(rows)});
+        if(!resp2.ok){toast('Error al ocultar todos los productos — quedó parcialmente aplicado');await cargarCatHiddenSB();renderCatPanel();updateCatStats();return;}
+      }
+    }
+    await cargarCatHiddenSB();
+    renderCatPanel();updateCatStats();
+  }catch(e){console.error(e);toast('Error al actualizar catálogo — no se guardó el cambio');}
 }
 function updateCatStats(){
-  var hidden=getCatHidden();
+  var hidden=CAT_HIDDEN;
   var total=INVENTARIO.length;
   var ocultos=INVENTARIO.filter(function(p){return hidden.indexOf(p.id)>=0;}).length;
   var visibles=total-ocultos;
@@ -6607,7 +6641,7 @@ function renderCatPanel(){
   var grid=document.getElementById('catPanelGrid');if(!grid)return;
   var q=(document.getElementById('catSearchProd')?document.getElementById('catSearchProd').value:'').toLowerCase();
   var data=INVENTARIO.filter(function(p){return !q||p.nombre.toLowerCase().indexOf(q)>=0||p.categoria.toLowerCase().indexOf(q)>=0;});
-  var hidden=getCatHidden();
+  var hidden=CAT_HIDDEN;
   if(!data.length){grid.innerHTML='<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--text3);">Sin productos</div>';return;}
   grid.innerHTML=data.map(function(p){
     var visible=hidden.indexOf(p.id)<0;
@@ -6623,7 +6657,9 @@ function renderCatPanel(){
     +'</div>';
   }).join('');
 }
-function initCatalogo(){
+async function initCatalogo(){
+  var grid=document.getElementById('catPanelGrid');if(grid)grid.innerHTML='<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--text3);">Cargando...</div>';
+  await cargarCatHiddenSB();
   updateCatStats();
   renderCatPanel();
 }
@@ -6808,16 +6844,25 @@ var canjeCliActivo=null;
 var canjeCart=[];
 var CANJE_PUNTOS_MAP={};
 
-/* Puntos requeridos = precio de venta / valor del punto ($16). Editable manualmente. */
+/* Puntos requeridos = precio de venta / valor del punto ($16). Editable manualmente, centralizado en Supabase (canje_puntos_config). */
 function ptsCanjeProducto(p){
   if(CANJE_PUNTOS_MAP[p.id]) return CANJE_PUNTOS_MAP[p.id];
   return Math.ceil((p.precio_venta||p.precio_costo||0)/PUNTOS_VALOR);
 }
+async function cargarCanjePuntosSB(){
+  try{
+    var r=await fetch(SB+'/rest/v1/canje_puntos_config?id_licencia=eq.'+CID+'&select=producto_id,valor_puntos',{headers:{'apikey':SK,'Authorization':'Bearer '+SK}});
+    var data=r.ok?await r.json():[];
+    CANJE_PUNTOS_MAP={};
+    data.forEach(function(row){CANJE_PUNTOS_MAP[row.producto_id]=row.valor_puntos;});
+  }catch(e){CANJE_PUNTOS_MAP={};}
+}
 
-function renderSubmoduloCanje(){
+async function renderSubmoduloCanje(){
   var cont=document.getElementById('ptsCanjeCont');
   if(!cont)return;
-  try{CANJE_PUNTOS_MAP=JSON.parse(localStorage.getItem('canje_puntos_'+CID)||'{}');}catch(e){CANJE_PUNTOS_MAP={};}
+  cont.innerHTML='<div style="text-align:center;padding:40px;color:var(--text3);">Cargando...</div>';
+  await cargarCanjePuntosSB();
   cont.innerHTML=
     '<div style="display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap;">'
     +'<div style="flex:1;min-width:300px;">'
@@ -6889,7 +6934,6 @@ function renderCliCanjeCard(){
 function renderCanjeCatalogo(){
   var cont=document.getElementById('canjeCatalogoCont');
   if(!cont)return;
-  try{CANJE_PUNTOS_MAP=JSON.parse(localStorage.getItem('canje_puntos_'+CID)||'{}');}catch(e){}
   var qel=document.getElementById('canjeCatSearch');
   var q=qel?qel.value.toLowerCase():'';
   var prods=INVENTARIO.filter(function(p){return p.stock>0&&p.precio_venta>0&&(!q||p.nombre.toLowerCase().indexOf(q)>=0);});
@@ -6915,14 +6959,23 @@ function renderCanjeCatalogo(){
     }).join('')+'</div>';
 }
 
-function editarPtsCanje(prodId,ptsActuales){
+async function editarPtsCanje(prodId,ptsActuales){
   var nuevo=prompt('Puntos requeridos para canjear este producto:',ptsActuales);
   if(!nuevo||isNaN(nuevo)||parseInt(nuevo)<=0)return;
-  CANJE_PUNTOS_MAP[prodId]=parseInt(nuevo);
-  try{localStorage.setItem('canje_puntos_'+CID,JSON.stringify(CANJE_PUNTOS_MAP));}catch(e){}
-  var ex=canjeCart.find(function(it){return it.id===prodId;});
-  if(ex)ex.ptsReq=parseInt(nuevo);
-  renderCanjeCatalogo();renderCanjeCart();
+  var valor=parseInt(nuevo);
+  try{
+    var resp=await fetch(SB+'/rest/v1/canje_puntos_config?on_conflict=id_licencia,producto_id',{
+      method:'POST',
+      headers:Object.assign({},H,{'Prefer':'resolution=merge-duplicates,return=minimal'}),
+      body:JSON.stringify({id_licencia:CID,producto_id:prodId,valor_puntos:valor,fecha_actualizacion:new Date().toISOString()})
+    });
+    if(!resp.ok){toast('Error al guardar puntos de canje — se mantiene el valor anterior');return;}
+    await cargarCanjePuntosSB();
+    var ex=canjeCart.find(function(it){return it.id===prodId;});
+    var prod=INVENTARIO.find(function(p){return p.id===prodId;});
+    if(ex&&prod)ex.ptsReq=ptsCanjeProducto(prod);
+    renderCanjeCatalogo();renderCanjeCart();
+  }catch(e){console.error(e);toast('Error al guardar puntos de canje — se mantiene el valor anterior');}
 }
 
 function addCanjeCart(prodId){
@@ -7568,34 +7621,31 @@ async function verificarVencimientoPuntos(wa){
 
 <script>
 /* ===== VENTAS EN ESPERA ===== */
-function guardarEnEspera(){
+async function guardarEnEspera(){
   if(!cart.length){toast('El carrito está vacío');return;}
   var nombre=document.getElementById('cliN').value.trim()||('Pedido '+(VENTAS_ESPERA.length+1));
-  VENTAS_ESPERA.push({
-    id: Date.now(),
-    label: nombre,
-    cart: JSON.parse(JSON.stringify(cart)),
-    domicilio: domicilio,
-    descFactura: descFactura,
-    bolsaActiva: bolsaActiva,
-    bolsa: bolsa,
-    ts: new Date().toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'})
-  });
-  localStorage.setItem('lc_ventas_espera', JSON.stringify(VENTAS_ESPERA));
-  cart=[]; domicilio=0; descFactura=0; bolsa=0; bolsaActiva=false;
-  document.getElementById('cliN').value='';
-  document.getElementById('cliW').value='';
-  document.getElementById('domInput').value='';
-  var dEl=document.getElementById('descInput'); if(dEl)dEl.value='';
-  var chkBolsaEsp=document.getElementById('chkBolsa'); if(chkBolsaEsp)chkBolsaEsp.checked=false;
-  var bolsaInpEsp=document.getElementById('bolsaInput'); if(bolsaInpEsp){bolsaInpEsp.value='';bolsaInpEsp.style.display='none';}
-  renderItems(); updateTot(); renderEspera();
-  toast('⏸ Pedido guardado en espera');
+  var body={id_licencia:CID,numero_local:Date.now(),label:nombre,cart:JSON.parse(JSON.stringify(cart)),
+    domicilio:domicilio,descuento:descFactura,bolsa_activa:bolsaActiva,bolsa:bolsa};
+  try{
+    var resp=await fetch(SB+'/rest/v1/ventas_espera',{method:'POST',headers:H,body:JSON.stringify(body)});
+    if(!resp.ok){toast('Error al guardar en espera — el carrito NO se vació, sigue activo');return;}
+    await cargarVentasEsperaSB();
+    cart=[]; domicilio=0; descFactura=0; bolsa=0; bolsaActiva=false;
+    document.getElementById('cliN').value='';
+    document.getElementById('cliW').value='';
+    document.getElementById('domInput').value='';
+    var dEl=document.getElementById('descInput'); if(dEl)dEl.value='';
+    var chkBolsaEsp=document.getElementById('chkBolsa'); if(chkBolsaEsp)chkBolsaEsp.checked=false;
+    var bolsaInpEsp=document.getElementById('bolsaInput'); if(bolsaInpEsp){bolsaInpEsp.value='';bolsaInpEsp.style.display='none';}
+    renderItems(); updateTot(); renderEspera();
+    toast('⏸ Pedido guardado en espera');
+  }catch(e){console.error(e);toast('Error al guardar en espera — el carrito NO se vació, sigue activo');}
 }
 
-function recuperarEspera(idx){
+async function recuperarEspera(idx){
   if(cart.length && !confirm('¿Reemplazar el carrito actual con el pedido en espera?'))return;
   var e=VENTAS_ESPERA[idx];
+  if(!e)return;
   cart=JSON.parse(JSON.stringify(e.cart));
   domicilio=e.domicilio||0;
   descFactura=e.descFactura||0;
@@ -7605,16 +7655,29 @@ function recuperarEspera(idx){
   var chkBolsaRec=document.getElementById('chkBolsa'); if(chkBolsaRec)chkBolsaRec.checked=bolsaActiva;
   var bolsaInpRec=document.getElementById('bolsaInput');
   if(bolsaInpRec){bolsaInpRec.style.display=bolsaActiva?'block':'none';bolsaInpRec.value=bolsaActiva?bolsa:'';}
-  VENTAS_ESPERA.splice(idx,1);
-  localStorage.setItem('lc_ventas_espera', JSON.stringify(VENTAS_ESPERA));
+  var borradoOk=false;
+  try{
+    var resp=await fetch(SB+'/rest/v1/ventas_espera?id=eq.'+e._sbId,{method:'DELETE',headers:H});
+    borradoOk=resp.ok;
+  }catch(err){console.error(err);}
+  await cargarVentasEsperaSB();
   renderItems(); updateTot(); renderEspera();
-  toast('✅ Pedido recuperado');
+  if(borradoOk){
+    toast('✅ Pedido recuperado');
+  } else {
+    toast('⚠ Pedido cargado al carrito, pero no se pudo quitar de "en espera" — revísalo para evitar duplicados');
+  }
 }
 
-function descartarEspera(idx){
-  VENTAS_ESPERA.splice(idx,1);
-  localStorage.setItem('lc_ventas_espera', JSON.stringify(VENTAS_ESPERA));
-  renderEspera();
+async function descartarEspera(idx){
+  var e=VENTAS_ESPERA[idx];
+  if(!e)return;
+  try{
+    var resp=await fetch(SB+'/rest/v1/ventas_espera?id=eq.'+e._sbId,{method:'DELETE',headers:H});
+    if(!resp.ok){toast('Error al descartar el pedido — no se eliminó');return;}
+    await cargarVentasEsperaSB();
+    renderEspera();
+  }catch(err){console.error(err);toast('Error al descartar el pedido — no se eliminó');}
 }
 
 function renderEspera(){
@@ -8249,11 +8312,23 @@ function aplicarAbonoDesdeEdicion(){
 }
 
 /* ===== COTIZACIONES ===== */
-var COTIZACIONES = JSON.parse(localStorage.getItem('lc_cotizaciones')||'[]');
+var COTIZACIONES = [];
 var cotActualId = null;
 var cotItems = [];
 
 var cotCatActual='all';
+
+function mapCotizacionSB(row){
+  return {id:row.numero_local,_sbId:row.id,numero:row.numero,cliente:row.cliente_nombre,
+    wa:row.cliente_whatsapp||'',estado:row.estado,items:row.items||[],total:row.total,
+    fecha_creacion:row.fecha_creacion,fecha_vencimiento:row.fecha_vencimiento,venta_id:row.venta_id};
+}
+async function cargarCotizacionesSB(){
+  try{
+    var r=await fetch(SB+'/rest/v1/cotizaciones?id_licencia=eq.'+CID+'&select=*&order=numero_local.desc',{headers:{'apikey':SK,'Authorization':'Bearer '+SK}});
+    COTIZACIONES = r.ok ? (await r.json()).map(mapCotizacionSB) : [];
+  }catch(e){COTIZACIONES=[];}
+}
 
 function abrirNuevaCotizacion(){
   cotActualId = null;
@@ -8449,7 +8524,7 @@ async function crearClienteDesdeCotizacion(){
   }
 }
 
-function guardarCotizacion(){
+async function guardarCotizacion(){
   var cliente=document.getElementById('cotCliente').value.trim()||'Cliente';
   var wa=document.getElementById('cotWA').value.trim()||'';
   var dias=parseInt(document.getElementById('cotDiasVence').value)||3;
@@ -8457,16 +8532,26 @@ function guardarCotizacion(){
   if(!cotItems.length){toast('Agrega al menos un producto');return;}
   var total=cotItems.reduce(function(s,it){return s+it.precio_total;},0);
   var vence=new Date();vence.setDate(vence.getDate()+dias);
-  if(cotActualId){
-    var idx=COTIZACIONES.findIndex(function(c){return c.id===cotActualId;});
-    if(idx>=0) COTIZACIONES[idx]=Object.assign(COTIZACIONES[idx],{cliente:cliente,wa:wa,estado:estado,items:JSON.parse(JSON.stringify(cotItems)),total:total,fecha_vencimiento:vence.toISOString()});
-  } else {
-    COTIZACIONES.unshift({id:Date.now(),numero:COTIZACIONES.length+1,cliente:cliente,wa:wa,estado:estado,items:JSON.parse(JSON.stringify(cotItems)),total:total,fecha_creacion:new Date().toISOString(),fecha_vencimiento:vence.toISOString()});
-  }
-  localStorage.setItem('lc_cotizaciones',JSON.stringify(COTIZACIONES));
-  closeCotizacionModal();
-  renderCotizacionesList();
-  toast('✅ Cotización guardada');
+  var btn=document.getElementById('btnGuardarCot');
+  if(btn){btn.disabled=true;}
+  try{
+    var resp;
+    if(cotActualId){
+      var actual=COTIZACIONES.find(function(c){return c.id===cotActualId;});
+      if(!actual){toast('Cotización no encontrada');if(btn)btn.disabled=false;return;}
+      var body={cliente_nombre:cliente,cliente_whatsapp:wa||null,estado:estado,items:JSON.parse(JSON.stringify(cotItems)),total:total,fecha_vencimiento:vence.toISOString()};
+      resp=await fetch(SB+'/rest/v1/cotizaciones?id=eq.'+actual._sbId,{method:'PATCH',headers:H,body:JSON.stringify(body)});
+    } else {
+      var body2={id_licencia:CID,numero_local:Date.now(),numero:COTIZACIONES.length+1,cliente_nombre:cliente,cliente_whatsapp:wa||null,estado:estado,items:JSON.parse(JSON.stringify(cotItems)),total:total,fecha_creacion:new Date().toISOString(),fecha_vencimiento:vence.toISOString()};
+      resp=await fetch(SB+'/rest/v1/cotizaciones',{method:'POST',headers:H,body:JSON.stringify(body2)});
+    }
+    if(!resp.ok){toast('Error al guardar cotización — no se guardó');if(btn)btn.disabled=false;return;}
+    await cargarCotizacionesSB();
+    closeCotizacionModal();
+    renderCotizacionesList();
+    toast('✅ Cotización guardada');
+  }catch(e){console.error(e);toast('Error al guardar cotización — no se guardó');}
+  if(btn){btn.disabled=false;}
 }
 
 function closeCotizacionModal(){
@@ -8494,13 +8579,16 @@ function editarCotizacion(id){
   document.getElementById('modalCotizacion').style.display='flex';
 }
 
-function cambiarEstadoCot(id, estado){
-  var idx=COTIZACIONES.findIndex(function(c){return c.id===id;});
-  if(idx<0)return;
-  COTIZACIONES[idx].estado=estado;
-  localStorage.setItem('lc_cotizaciones',JSON.stringify(COTIZACIONES));
-  renderCotizacionesList();
-  toast('Estado actualizado: '+estado);
+async function cambiarEstadoCot(id, estado){
+  var row=COTIZACIONES.find(function(c){return c.id===id;});
+  if(!row)return;
+  try{
+    var resp=await fetch(SB+'/rest/v1/cotizaciones?id=eq.'+row._sbId,{method:'PATCH',headers:H,body:JSON.stringify({estado:estado})});
+    if(!resp.ok){toast('Error al actualizar estado — no se guardó el cambio');return;}
+    await cargarCotizacionesSB();
+    renderCotizacionesList();
+    toast('Estado actualizado: '+estado);
+  }catch(e){console.error(e);toast('Error al actualizar estado — no se guardó el cambio');}
 }
 
 async function convertirCotVenta(id){
@@ -8523,21 +8611,34 @@ async function convertirCotVenta(id){
       var inv=INVENTARIO.find(function(p){return p.id===it.prod_id;});
       if(inv){inv.stock=Math.max(0,inv.stock-it.cantidad);actualizarStockSB(inv.id,inv.stock,undefined,inv.uds_sueltas||0);}
     });
-    var idx=COTIZACIONES.findIndex(function(c){return c.id===id;});
-    if(idx>=0){COTIZACIONES[idx].estado='convertida';COTIZACIONES[idx].venta_id=v.id;}
-    localStorage.setItem('lc_cotizaciones',JSON.stringify(COTIZACIONES));
+    var cotRow=COTIZACIONES.find(function(c){return c.id===id;});
+    var cotOk=true;
+    if(cotRow){
+      var cotResp=await fetch(SB+'/rest/v1/cotizaciones?id=eq.'+cotRow._sbId,{method:'PATCH',headers:H,body:JSON.stringify({estado:'convertida',venta_id:v.id})});
+      cotOk=cotResp.ok;
+    }
+    await cargarCotizacionesSB();
     renderCotizacionesList();
     renderInvTable();
-    toast('✅ Cotización convertida en venta #'+String(v.numero_venta||'').padStart(3,'0'));
+    if(cotOk){
+      toast('✅ Cotización convertida en venta #'+String(v.numero_venta||'').padStart(3,'0'));
+    } else {
+      toast('⚠ Venta #'+String(v.numero_venta||'').padStart(3,'0')+' creada, pero no se pudo marcar la cotización como convertida');
+    }
   }catch(e){console.error(e);toast('Error al convertir cotización');}
 }
 
-function eliminarCotizacion(id){
+async function eliminarCotizacion(id){
   if(!confirm('¿Eliminar esta cotización?'))return;
-  COTIZACIONES=COTIZACIONES.filter(function(c){return c.id!==id;});
-  localStorage.setItem('lc_cotizaciones',JSON.stringify(COTIZACIONES));
-  renderCotizacionesList();
-  toast('Cotización eliminada');
+  var row=COTIZACIONES.find(function(c){return c.id===id;});
+  if(!row)return;
+  try{
+    var resp=await fetch(SB+'/rest/v1/cotizaciones?id=eq.'+row._sbId,{method:'DELETE',headers:H});
+    if(!resp.ok){toast('Error al eliminar cotización — no se eliminó');return;}
+    await cargarCotizacionesSB();
+    renderCotizacionesList();
+    toast('Cotización eliminada');
+  }catch(e){console.error(e);toast('Error al eliminar cotización — no se eliminó');}
 }
 
 function enviarCotizacionWA(){
