@@ -2034,8 +2034,11 @@ async function cargarVentasEsperaSB(){
 }
 
 /* ===== CAJA ===== */
-var CAJA_ACTUAL = JSON.parse(localStorage.getItem('lc_caja_actual')||'null');
-var CAJA_HISTORIAL = JSON.parse(localStorage.getItem('lc_caja_historial')||'[]');
+/* El valor inicial YA NO se lee de localStorage: arranca vacio/desconocido
+   hasta que syncCajaDesdeSupabase() confirme el estado real (se invoca antes
+   de que cualquier vista de Caja pueda renderizarse, ver iniciarApp()). */
+var CAJA_ACTUAL = null;
+var CAJA_HISTORIAL = [];
 
 /* ===== CAJA · Fase 4 (D2): Supabase como fuente canónica de lectura ===== */
 var _cajaSyncing=false;        /* evita solapar lecturas */
@@ -3162,28 +3165,42 @@ async function doVenta(){
     if(bolsaActiva&&bolsa>0)notasParts.push('Bolsa: '+fmt(bolsa));
     if(notasParts.length)ventaBody.notas=notasParts.join(' | ');
     if(esCartera){try{ventaBody.abono=abonoVal;ventaBody.saldo_pendiente=saldoVal;ventaBody.fecha_vencimiento_cartera=fechaVence;}catch(e){}}
+
+    /* PASO 1 — Descontar el inventario ANTES de registrar la venta, de forma atomica
+       contra Supabase. Si algun item no alcanza, se devuelve lo ya descontado y la
+       venta NO se crea: nunca se muestra una venta exitosa sin descuento de stock. */
+    var descuentosAplicados=[];
+    for(var si=0;si<cart.length;si++){
+      var itStock=cart[si];
+      var resStock=await descontarStockItemSB(itStock);
+      if(!resStock.ok){
+        await revertirDescuentosSB(descuentosAplicados);
+        btn.disabled=false;btn.textContent='Registrar venta';
+        if(resStock.motivo==='insuficiente'){
+          toast('Stock insuficiente: '+itStock.nombre+' — la venta no se registró');
+        } else if(resStock.motivo==='conflicto'){
+          toast('Otro dispositivo modificó el stock de '+itStock.nombre+' — inténtalo de nuevo');
+        } else {
+          toast('No se pudo descontar el inventario — la venta no se registró');
+        }
+        renderPOS();
+        return;
+      }
+      descuentosAplicados.push(itStock);
+    }
+
+    /* PASO 2 — Registrar la venta. Si falla, se devuelve todo el stock descontado. */
     var vr=await fetch(SB+'/rest/v1/ventas',{method:'POST',headers:H,body:JSON.stringify(ventaBody)});
-    if(!vr.ok)throw new Error(await vr.text());
+    if(!vr.ok){
+      var errVenta=await vr.text();
+      await revertirDescuentosSB(descuentosAplicados);
+      renderPOS();
+      throw new Error(errVenta);
+    }
     var varr=await vr.json();var v=varr[0];
     await fetch(SB+'/rest/v1/detalle_ventas',{method:'POST',headers:H,body:JSON.stringify(cart.map(function(it){return {venta_id:v.id,prod_id:it.id,producto_nombre:it.nombre,categoria:it.cat,cantidad:it.qty,precio_unitario:it.precio,precio_total:it.total,es_unidad:it.esUnidad?true:false,uds_empaque:it.uds_empaque||1};}))});
-    /* Descontar stock del inventario local (respetando empaques) */
-    cart.forEach(function(it){
-      var inv=INVENTARIO.find(function(p){return p.id===it.id;});
-      if(!inv)return;
-      var udsEmp = it.uds_empaque || inv.uds_empaque || 1;
-      if(it.esUnidad && udsEmp>1){
-        /* it.qty = unidades sueltas vendidas; convertir a empaques para descontar */
-        var totalUdsPrevias = inv.stock * udsEmp + (inv.uds_sueltas||0);
-        var totalUdsRestantes = Math.max(0, totalUdsPrevias - it.qty);
-        inv.stock = Math.floor(totalUdsRestantes / udsEmp);
-        inv.uds_sueltas = totalUdsRestantes % udsEmp;
-      } else {
-        inv.stock = Math.max(0, inv.stock - it.qty);
-        inv.uds_sueltas = 0;
-      }
-      /* Sync to Supabase */
-      actualizarStockSB(inv.id, inv.stock, undefined, inv.uds_sueltas||0);
-    });
+    /* El stock ya fue descontado atomicamente en el PASO 1 y el array local
+       quedo sincronizado con el valor confirmado por Supabase. */
     if(esCartera&&saldoVal>0){saveCarteraLocal(v.id,cn,cw,total,abonoVal,saldoVal,fechaVence,v.numero_venta);}
     await upsertCli(cn,cw,cdir,cdet,total,pts,cid);
     if(cw&&pts>0)procesarPuntosPorVenta(v,total,pts,cn,cw);
@@ -5842,11 +5859,12 @@ async function eliminarVenta(id, num){
       {headers:{'apikey':SK,'Authorization':'Bearer '+SK}});
     var items=rDet.ok?await rDet.json():[];
 
-    /* 2. Restaurar stock de cada producto */
-    items.forEach(function(it){
+    /* 2. Restaurar stock de cada producto (atomico contra Supabase) */
+    for(var ei=0;ei<items.length;ei++){
+      var it=items[ei];
       var nombre=it.producto_nombre||'';
       var cantidad=it.cantidad||0;
-      if(!nombre||!cantidad)return;
+      if(!nombre||!cantidad)continue;
 
       /* Detectar si fue venta por unidad suelta o por empaque */
       var esUnidad=(nombre.indexOf(' (unidad)')>-1)||(nombre.indexOf(' (und)')>-1);
@@ -5863,26 +5881,25 @@ async function eliminarVenta(id, num){
         /* Tercer intento: búsqueda parcial tolerante */
         inv=INVENTARIO.find(function(p){return nombreBase.indexOf(p.nombre)===0||p.nombre.indexOf(nombreBase)===0;});
       }
-      if(!inv)return; /* producto no encontrado en inventario actual */
+      if(!inv)continue; /* producto no encontrado en inventario actual */
 
       /* Si el detalle tiene es_unidad guardado, usarlo; sino inferir por nombre */
       if(it.es_unidad!==undefined) esUnidad=!!it.es_unidad;
-      var udsEmp=(it.uds_empaque&&it.uds_empaque>1)?it.uds_empaque:(inv.uds_empaque||1);
 
-      if(esUnidad&&udsEmp>1){
-        /* Era venta de unidades sueltas → restaurar al pool de unidades */
-        var totalUdsActuales=inv.stock*udsEmp+(inv.uds_sueltas||0);
-        var totalRestauradas=totalUdsActuales+cantidad;
-        inv.stock=Math.floor(totalRestauradas/udsEmp);
-        inv.uds_sueltas=totalRestauradas%udsEmp;
-      } else {
-        /* Era venta de empaque completo o producto de unidad simple */
-        inv.stock=inv.stock+cantidad;
-      }
-
-      /* Sincronizar con Supabase */
-      actualizarStockSB(inv.id, inv.stock, undefined, inv.uds_sueltas||0);
-    });
+      /* Restauracion atomica: el valor base lo determina Supabase, no el array local */
+      var resRest=await (function(itemDet,esUnd){
+        return ajustarStockAtomicoSB(itemDet.id,function(stockAct,sueltasAct,udsEmpAct){
+          var udsEmp=(itemDet.udsEmpDet&&itemDet.udsEmpDet>1)?itemDet.udsEmpDet:(udsEmpAct||1);
+          if(esUnd&&udsEmp>1){
+            var tot=stockAct*udsEmp+sueltasAct+itemDet.cant;
+            return {stock:Math.floor(tot/udsEmp),uds_sueltas:tot%udsEmp};
+          }
+          return {stock:stockAct+itemDet.cant,uds_sueltas:sueltasAct};
+        });
+      })({id:inv.id,cant:cantidad,udsEmpDet:it.uds_empaque},esUnidad);
+      if(resRest.ok) sincronizarInvLocal(inv.id,resRest.stock,resRest.uds_sueltas);
+      else console.error('No se pudo restaurar el stock de',nombre,resRest.motivo);
+    }
 
     /* 3. Eliminar registros en Supabase */
     await fetch(SB+'/rest/v1/detalle_ventas?venta_id=eq.'+id,{method:'DELETE',headers:H});
@@ -6095,6 +6112,86 @@ async function actualizarStockSB(prodId, nuevoStock, nuevoCosto, udsSueltas){
   }
 }
 
+/* ===== STOCK ATOMICO (Compare-And-Swap) =====
+   Evita que dos dispositivos se pisen el stock. NO confia en el array local:
+   relee el valor real en Supabase y solo escribe si nadie lo cambio entre la
+   lectura y la escritura. Si otro dispositivo lo cambio, reintenta con el valor
+   fresco. 'calcular' recibe el estado real y devuelve el nuevo estado, o null si
+   no hay existencias suficientes. */
+async function ajustarStockAtomicoSB(prodId, calcular){
+  var INTENTOS=5;
+  for(var intento=0;intento<INTENTOS;intento++){
+    try{
+      var rG=await fetch(SB+'/rest/v1/inventario?id=eq.'+prodId+'&select=stock,uds_sueltas,uds_empaque',
+        {headers:{'apikey':SK,'Authorization':'Bearer '+SK}});
+      if(!rG.ok) return {ok:false,motivo:'red'};
+      var filas=await rG.json();
+      if(!filas.length) return {ok:false,motivo:'inexistente'};
+      var stockAct=parseInt(filas[0].stock)||0;
+      var sueltasAct=parseInt(filas[0].uds_sueltas)||0;
+      var udsEmpAct=parseInt(filas[0].uds_empaque)||1;
+      var nuevo=calcular(stockAct,sueltasAct,udsEmpAct);
+      if(!nuevo) return {ok:false,motivo:'insuficiente',stock:stockAct,uds_sueltas:sueltasAct,uds_empaque:udsEmpAct};
+      /* CAS: solo actualiza si stock y uds_sueltas siguen siendo los que lei */
+      var rP=await fetch(SB+'/rest/v1/inventario?id=eq.'+prodId+'&stock=eq.'+stockAct+'&uds_sueltas=eq.'+sueltasAct,
+        {method:'PATCH',headers:H,body:JSON.stringify({stock:nuevo.stock,uds_sueltas:nuevo.uds_sueltas})});
+      if(!rP.ok) return {ok:false,motivo:'red'};
+      var afectadas=await rP.json();
+      if(afectadas.length===1) return {ok:true,stock:nuevo.stock,uds_sueltas:nuevo.uds_sueltas};
+      /* 0 filas afectadas => otro dispositivo cambio el stock. Reintentar. */
+    }catch(e){ console.error('ajustarStockAtomicoSB:',e); return {ok:false,motivo:'red'}; }
+  }
+  return {ok:false,motivo:'conflicto'};
+}
+
+/* Descuenta el stock de un item del carrito. Conserva exactamente la misma
+   aritmetica de empaques/unidades que ya usaba doVenta(). */
+async function descontarStockItemSB(it){
+  var res=await ajustarStockAtomicoSB(it.id,function(stockAct,sueltasAct,udsEmpAct){
+    var udsEmp=it.uds_empaque||udsEmpAct||1;
+    if(it.esUnidad&&udsEmp>1){
+      var totalUds=stockAct*udsEmp+sueltasAct;
+      if(totalUds<it.qty) return null;
+      var rest=totalUds-it.qty;
+      return {stock:Math.floor(rest/udsEmp),uds_sueltas:rest%udsEmp};
+    }
+    if(stockAct<it.qty) return null;
+    /* Comportamiento historico preservado: la venta de empaque completo deja uds_sueltas en 0 */
+    return {stock:stockAct-it.qty,uds_sueltas:0};
+  });
+  if(res.ok) sincronizarInvLocal(it.id,res.stock,res.uds_sueltas);
+  return res;
+}
+
+/* Compensacion: devuelve al inventario los items ya descontados cuando la venta
+   no llega a registrarse. Se ejecuta contra Supabase, tambien de forma atomica. */
+async function revertirDescuentosSB(items){
+  for(var i=0;i<items.length;i++){
+    var it=items[i];
+    /* Closure por item para no capturar la variable del bucle */
+    var res=await (function(item){
+      return ajustarStockAtomicoSB(item.id,function(stockAct,sueltasAct,udsEmpAct){
+        var udsEmp=item.uds_empaque||udsEmpAct||1;
+        if(item.esUnidad&&udsEmp>1){
+          var tot=stockAct*udsEmp+sueltasAct+item.qty;
+          return {stock:Math.floor(tot/udsEmp),uds_sueltas:tot%udsEmp};
+        }
+        return {stock:stockAct+item.qty,uds_sueltas:sueltasAct};
+      });
+    })(it);
+    if(res.ok) sincronizarInvLocal(it.id,res.stock,res.uds_sueltas);
+    else console.error('No se pudo revertir el stock de',it.nombre,res.motivo);
+  }
+}
+
+/* Refleja en el array de UI el valor que Supabase confirmo como definitivo. */
+function sincronizarInvLocal(prodId,stock,udsSueltas){
+  var inv=INVENTARIO.find(function(p){return p.id===prodId;});
+  if(!inv)return;
+  inv.stock=stock;
+  inv.uds_sueltas=udsSueltas;
+}
+
 /* Eliminar producto de Supabase */
 async function eliminarProdSB(prodId){
   try{
@@ -6222,15 +6319,17 @@ async function generarReporteVentas(){
     }
     var maxProd=topProds.length>0?(topProds[0].uds||1):1;
 
-    /* Cuentas por Cobrar (cartera) del período */
-    var carteraLocal=[];
-    try{carteraLocal=JSON.parse(localStorage.getItem('lc_cartera_local')||'[]');}catch(e){}
-    var carteraDelPeriodo=carteraLocal.filter(function(c){
+    /* Cuentas por Cobrar (cartera) — fuente: Supabase public.cartera via CARTERA_SB.
+       Ya NO se lee lc_cartera_local. Si la consulta falla, carteraOk=false y el reporte
+       muestra un estado de error explicito: nunca $0 como si no hubiera cartera. */
+    var carteraOk=await cargarCarteraCompletaSB();
+    var carteraSrc=carteraOk?CARTERA_SB:[];
+    var carteraDelPeriodo=carteraSrc.filter(function(c){
       var fc=c.fecha_creacion||c.created_at||'';
       return fc>=desde&&fc<=hasta+'T23:59:59';
     });
-    var totalCartera=carteraLocal.filter(function(c){return (c.saldo_pendiente||0)>0;}).reduce(function(s,c){return s+c.saldo_pendiente;},0);
-    var carteraVencida=carteraLocal.filter(function(c){return c.saldo_pendiente>0&&c.fecha_vencimiento&&c.fecha_vencimiento<new Date().toISOString();});
+    var totalCartera=carteraSrc.filter(function(c){return (c.saldo_pendiente||0)>0;}).reduce(function(s,c){return s+c.saldo_pendiente;},0);
+    var carteraVencida=carteraSrc.filter(function(c){return c.saldo_pendiente>0&&c.fecha_vencimiento&&c.fecha_vencimiento<new Date().toISOString();});
 
     /* Render */
     var html='';
@@ -6240,12 +6339,23 @@ async function generarReporteVentas(){
     html+='<div class="rep-kc"><div class="rep-kl">Total ingresos</div><div class="rep-kv" style="color:var(--gold);">'+fmt(totalPesos)+'</div><div class="rep-ks">'+numVentas+' ventas en el período</div></div>';
     html+='<div class="rep-kc"><div class="rep-kl">Ticket promedio</div><div class="rep-kv" style="color:var(--green);">'+fmt(ticket)+'</div><div class="rep-ks">por transacción</div></div>';
     html+='<div class="rep-kc"><div class="rep-kl">Promedio por día</div><div class="rep-kv" style="color:var(--blue);">'+fmt(promDia)+'</div><div class="rep-ks">en los '+diasArr.length+' días con ventas</div></div>';
-    html+='<div class="rep-kc"><div class="rep-kl">Cartera vigente</div><div class="rep-kv" style="color:'+(totalCartera>0?'#dc2626':'var(--green)')+';">'+fmt(totalCartera)+'</div><div class="rep-ks">'+(carteraVencida.length>0?carteraVencida.length+' cuenta(s) vencida(s)':'Al día')+'</div></div>';
+    if(carteraOk){
+      html+='<div class="rep-kc"><div class="rep-kl">Cartera vigente</div><div class="rep-kv" style="color:'+(totalCartera>0?'#dc2626':'var(--green)')+';">'+fmt(totalCartera)+'</div><div class="rep-ks">'+(carteraVencida.length>0?carteraVencida.length+' cuenta(s) vencida(s)':'Al día')+'</div></div>';
+    } else {
+      html+='<div class="rep-kc"><div class="rep-kl">Cartera vigente</div><div class="rep-kv" style="color:var(--red);font-size:15px;">No disponible</div><div class="rep-ks" style="color:var(--red);">Error al consultar Cartera</div></div>';
+    }
     if(numCanjes>0) html+='<div class="rep-kc"><div class="rep-kl">Canjes de puntos</div><div class="rep-kv" style="color:var(--gold);">'+numCanjes+'</div><div class="rep-ks">movimientos sin ingreso</div></div>';
     html+='</div>';
 
-    /* Alerta cartera si hay pendientes */
-    if(totalCartera>0){
+    /* Alerta cartera si hay pendientes (o aviso si no se pudo consultar) */
+    if(!carteraOk){
+      html+='<div style="margin:14px 0;padding:12px 16px;background:#fef2f2;border-left:4px solid #dc2626;border-radius:0 8px 8px 0;display:flex;align-items:center;gap:12px;">'
+        +'<div style="font-size:22px;">&#9888;</div>'
+        +'<div><div style="font-size:13px;font-weight:700;color:#dc2626;">No se pudieron consultar las cuentas por cobrar</div>'
+        +'<div style="font-size:11px;color:#dc2626;margin-top:2px;">Verifica tu conexión. Las cifras de cartera de este reporte no se están mostrando.</div>'
+        +'</div></div>';
+    }
+    if(carteraOk&&totalCartera>0){
       html+='<div style="margin:14px 0;padding:12px 16px;background:#fef2f2;border-left:4px solid #dc2626;border-radius:0 8px 8px 0;display:flex;align-items:center;gap:12px;">'
         +'<div style="font-size:22px;">&#128179;</div>'
         +'<div><div style="font-size:13px;font-weight:700;color:#dc2626;">Cuentas por cobrar pendientes: '+fmt(totalCartera)+'</div>'
@@ -6345,15 +6455,18 @@ async function generarReporteVentas(){
       html+='<div class="rep-sh"><div class="rep-st">&#128179; Ventas a crédito en el período</div><span style="font-size:11px;color:var(--red);">'+numCredito+' ventas · '+fmt(totalCredito)+'</span></div>';
       html+='<div style="overflow-x:auto;"><table class="rep-table"><thead><tr><th>#</th><th>Cliente</th><th style="text-align:right;">Total</th><th style="text-align:right;">Saldo</th><th>Vence</th></tr></thead><tbody>';
       ventasCredito.slice(0,20).forEach(function(v){
-        var carteraEntry=carteraLocal.find(function(c){return c.id===v.id;});
+        var carteraEntry=carteraSrc.find(function(c){return c.id===v.id;});
         var saldo=carteraEntry?carteraEntry.saldo_pendiente:0;
         var vence=carteraEntry&&carteraEntry.fecha_vencimiento?new Date(carteraEntry.fecha_vencimiento).toLocaleDateString('es-CO',{day:'2-digit',month:'short',year:'numeric'}):'—';
         var vencida=carteraEntry&&carteraEntry.fecha_vencimiento&&new Date(carteraEntry.fecha_vencimiento)<new Date()&&saldo>0;
+        /* Si la cartera no se pudo consultar, no se inventa un saldo de $0 */
+        var saldoTxt=carteraOk?fmt(saldo):'—';
+        var saldoColor=carteraOk?(saldo>0?'var(--red)':'var(--green)'):'var(--text3)';
         html+='<tr>';
         html+='<td style="font-size:11px;color:var(--text3);">#'+String(v.numero_venta||'—').padStart(3,'0')+'</td>';
         html+='<td>'+v.cliente_nombre+'</td>';
         html+='<td style="text-align:right;">'+fmt(v.total)+'</td>';
-        html+='<td style="text-align:right;font-weight:700;color:'+(saldo>0?'var(--red)':'var(--green)')+';">'+fmt(saldo)+'</td>';
+        html+='<td style="text-align:right;font-weight:700;color:'+saldoColor+';">'+saldoTxt+'</td>';
         html+='<td style="font-size:11px;color:'+(vencida?'var(--red)':'var(--text3)')+';">'+(vencida?'&#9888; ':'')+vence+'</td>';
         html+='</tr>';
       });
@@ -7754,28 +7867,44 @@ function mostrarAperturaCaja(){
   document.getElementById('cajaBancoInicial').value='';
 }
 
-function confirmarAperturaCaja(){
+async function confirmarAperturaCaja(){
   var ef=parseFloat(document.getElementById('cajaEfectivoInicial').value)||0;
   var ba=parseFloat(document.getElementById('cajaBancoInicial').value)||0;
-  CAJA_ACTUAL={estado:'abierta',fecha_apertura:new Date().toISOString(),efectivo_inicial:ef,banco_inicial:ba};
-  localStorage.setItem('lc_caja_actual',JSON.stringify(CAJA_ACTUAL));
-  closeCajaModal();
-  renderCajaBtn();
-  toast('✅ Caja abierta — Efectivo: '+fmt(ef)+(ba>0?' | Banco: '+fmt(ba):''));
-  /* Dual-write espejo a Supabase — nunca bloquea la apertura local */
+  var fechaApertura=new Date().toISOString();
+  /* Supabase PRIMERO. La UI y el estado en memoria solo se actualizan si
+     Supabase confirma la escritura — nunca se muestra exito falso. */
   try{
-    fetch(SB+'/rest/v1/caja_sesiones',{method:'POST',headers:H,body:JSON.stringify({
-      id_licencia:CID,estado:'abierta',fecha_apertura:CAJA_ACTUAL.fecha_apertura,
+    var r=await fetch(SB+'/rest/v1/caja_sesiones',{method:'POST',headers:H,body:JSON.stringify({
+      id_licencia:CID,estado:'abierta',fecha_apertura:fechaApertura,
       efectivo_inicial:ef,banco_inicial:ba,abierta_por:'admin'
-    })}).then(function(r){
-      if(!r.ok)return r.text().then(function(t){throw new Error(t);});
-    }).catch(function(e){
-      console.error('Dual-write apertura caja falló:',e);
-      toast('Caja abierta localmente. Error de sincronización.');
-    }).then(function(){ syncCajaDesdeSupabase(); });
+    })});
+    if(!r.ok){
+      var errTxt=await r.text();
+      /* La tabla tiene una restriccion unica que impide dos sesiones abiertas
+         a la vez (idx_caja_una_abierta) — puede dispararse si otro dispositivo
+         ya abrio la caja. */
+      if(errTxt.indexOf('idx_caja_una_abierta')>=0||r.status===409){
+        toast('Ya existe una caja abierta (quizás en otro dispositivo). Actualizando...');
+      } else {
+        toast('Error al abrir la caja — no se guardó');
+      }
+      await syncCajaDesdeSupabase();
+      renderCajaBtn();
+      return;
+    }
+    var creada=await r.json();
+    if(!creada||!creada.length){
+      toast('Error al abrir la caja — no se confirmó la escritura');
+      return;
+    }
+    /* Recargar desde Supabase: la fuente de verdad, no lo que se acaba de enviar */
+    await syncCajaDesdeSupabase();
+    closeCajaModal();
+    renderCajaBtn();
+    toast('✅ Caja abierta — Efectivo: '+fmt(ef)+(ba>0?' | Banco: '+fmt(ba):''));
   }catch(e){
-    console.error('Dual-write apertura caja excepción:',e);
-    toast('Caja abierta localmente. Error de sincronización.');
+    console.error('Error al abrir caja:',e);
+    toast('Error al abrir la caja — no se guardó');
   }
 }
 
@@ -7810,7 +7939,7 @@ function mostrarCierreCaja(){
     +'<button onclick="confirmarCierreCaja('+efEsperado+','+baEsperado+')" style="background:var(--red);color:#fff;border:none;border-radius:var(--r);padding:10px;font-size:13px;font-family:inherit;cursor:pointer;width:100%;">🔒 Confirmar cierre de caja</button>';
 }
 
-function confirmarCierreCaja(efEsperado, baEsperado){
+async function confirmarCierreCaja(efEsperado, baEsperado){
   var efReal=parseFloat(document.getElementById('cajaEfectivoReal').value)||0;
   var baReal=parseFloat(document.getElementById('cajaBancoReal').value)||0;
   var inicio=CAJA_ACTUAL?new Date(CAJA_ACTUAL.fecha_apertura):new Date();
@@ -7828,33 +7957,55 @@ function confirmarCierreCaja(efEsperado, baEsperado){
     dif_banco:baReal-baEsperado,
     num_ventas:ventasTurno.length
   };
-  CAJA_HISTORIAL.unshift(registro);
-  if(CAJA_HISTORIAL.length>90) CAJA_HISTORIAL=CAJA_HISTORIAL.slice(0,90);
-  localStorage.setItem('lc_caja_historial',JSON.stringify(CAJA_HISTORIAL));
-  CAJA_ACTUAL=null;
-  localStorage.removeItem('lc_caja_actual');
-  renderCajaBtn();
-  /* Eliminar alerta de caja no cerrada si existía */
-  var al=document.getElementById('cajaAlertBanner');if(al)al.remove();
-  /* Mostrar resumen de cierre con opciones de exportar */
-  showCierreExport(registro);
-  /* Dual-write espejo a Supabase — cierra la sesión abierta. Nunca bloquea el cierre local */
+  /* Supabase PRIMERO, en dos pasos. PASO A: localizar la sesion abierta por id
+     (un GET con filtro por 'estado' funciona correctamente). PASO B: cerrarla
+     por su id exacto — comprobado que un PATCH filtrado por 'estado' devuelve
+     200 con 0 filas en esta tabla aunque la fila SI exista y SI coincida (visto
+     empiricamente con datos de prueba aislados); filtrar por id evita ese caso.
+     El historial local y la UI solo se actualizan si Supabase confirma que
+     realmente cerro una fila — un 200 con 0 filas NO es exito. */
   try{
-    fetch(SB+'/rest/v1/caja_sesiones?id_licencia=eq.'+CID+'&estado=eq.abierta',{method:'PATCH',headers:H,body:JSON.stringify({
+    var rBuscar=await fetch(SB+'/rest/v1/caja_sesiones?id_licencia=eq.'+CID+'&estado=eq.abierta&select=id&limit=1',
+      {headers:{'apikey':SK,'Authorization':'Bearer '+SK}});
+    if(!rBuscar.ok){
+      toast('Error al cerrar la caja — no se pudo verificar la sesión');
+      return;
+    }
+    var sesionAbierta=await rBuscar.json();
+    if(!sesionAbierta.length){
+      toast('No se encontró una caja abierta para cerrar — puede que ya se haya cerrado');
+      await syncCajaDesdeSupabase();
+      renderCajaBtn();
+      return;
+    }
+    var r=await fetch(SB+'/rest/v1/caja_sesiones?id=eq.'+sesionAbierta[0].id,{method:'PATCH',headers:H,body:JSON.stringify({
       estado:'cerrada',fecha_cierre:registro.fecha_cierre,
       efectivo_esperado:registro.efectivo_esperado,efectivo_real:registro.efectivo_real,
       banco_esperado:registro.banco_esperado,banco_real:registro.banco_real,
       diferencia_efectivo:registro.dif_efectivo,diferencia_banco:registro.dif_banco,
       numero_ventas:registro.num_ventas,cerrada_por:'admin'
-    })}).then(function(r){
-      if(!r.ok)return r.text().then(function(t){throw new Error(t);});
-    }).catch(function(e){
-      console.error('Dual-write cierre caja falló:',e);
-      toast('Caja cerrada localmente. Error de sincronización.');
-    }).then(function(){ syncCajaDesdeSupabase(); });
+    })});
+    if(!r.ok){
+      console.error('Error al cerrar caja:',await r.text());
+      toast('Error al cerrar la caja — no se guardó');
+      await syncCajaDesdeSupabase();
+      renderCajaBtn();
+      return;
+    }
+    var afectadas=await r.json();
+    if(!afectadas||!afectadas.length){
+      toast('No se encontró una caja abierta para cerrar — puede que ya se haya cerrado');
+      await syncCajaDesdeSupabase();
+      renderCajaBtn();
+      return;
+    }
+    /* Confirmado por Supabase: ahora si se refleja en memoria y UI */
+    await syncCajaDesdeSupabase();
+    var al=document.getElementById('cajaAlertBanner');if(al)al.remove();
+    showCierreExport(registro);
   }catch(e){
-    console.error('Dual-write cierre caja excepción:',e);
-    toast('Caja cerrada localmente. Error de sincronización.');
+    console.error('Error al cerrar caja:',e);
+    toast('Error al cerrar la caja — no se guardó');
   }
 }
 
@@ -7932,12 +8083,9 @@ function closeCajaModal(){
 
 /* Exportar respaldo del historial de caja — SOLO LECTURA, no modifica nada */
 function exportarHistorialCaja(){
-  var actualRaw=localStorage.getItem('lc_caja_actual');
-  var historialRaw=localStorage.getItem('lc_caja_historial');
-  var cajaActual=null, historial=[];
-  try{ cajaActual=actualRaw?JSON.parse(actualRaw):null; }catch(e){ cajaActual=null; }
-  try{ historial=historialRaw?JSON.parse(historialRaw):[]; }catch(e){ historial=[]; }
-  if(!Array.isArray(historial)) historial=[];
+  /* Exporta el estado ya confirmado por Supabase (CAJA_ACTUAL/CAJA_HISTORIAL),
+     no una copia de localStorage que podria estar desactualizada. */
+  var cajaActual=CAJA_ACTUAL, historial=Array.isArray(CAJA_HISTORIAL)?CAJA_HISTORIAL:[];
   if(!cajaActual && historial.length===0){
     toast('No existe información de caja para exportar.');
     return;
@@ -8066,7 +8214,7 @@ function previewCorreccion(){
     +'<div style="display:flex;justify-content:space-between;"><span>Diferencia banco:</span><span style="font-weight:700;color:'+(difBa===0?'var(--green)':difBa>0?'var(--gold)':'var(--red)')+';">'+(difBa>=0?'+':'')+fmt(difBa)+'</span></div>';
 }
 
-function confirmarCorreccionCierre(){
+async function confirmarCorreccionCierre(){
   if(_cajaCierreEditIdx===null)return;
   var r=CAJA_HISTORIAL[_cajaCierreEditIdx];
   var efNuevo=parseFloat(document.getElementById('cajaCorrEf').value)||0;
@@ -8075,33 +8223,35 @@ function confirmarCorreccionCierre(){
     toast('No hay cambios. Modifica al menos un valor.');
     return;
   }
-  CAJA_HISTORIAL[_cajaCierreEditIdx].efectivo_real=efNuevo;
-  CAJA_HISTORIAL[_cajaCierreEditIdx].banco_real=baNuevo;
-  CAJA_HISTORIAL[_cajaCierreEditIdx].dif_efectivo=efNuevo-r.efectivo_esperado;
-  CAJA_HISTORIAL[_cajaCierreEditIdx].dif_banco=baNuevo-r.banco_esperado;
-  CAJA_HISTORIAL[_cajaCierreEditIdx]._corregido=new Date().toISOString();
-  localStorage.setItem('lc_caja_historial',JSON.stringify(CAJA_HISTORIAL));
-  /* Dual-write espejo a Supabase — corrige la sesión por clave natural. Nunca bloquea la corrección local */
   var difEfCorr=efNuevo-r.efectivo_esperado, difBaCorr=baNuevo-r.banco_esperado, faCorr=r.fecha_apertura;
+  /* Supabase PRIMERO, identificado por clave natural (fecha_apertura). El
+     historial local solo se corrige si Supabase confirma que afecto una fila. */
   try{
-    fetch(SB+'/rest/v1/caja_sesiones?id_licencia=eq.'+CID+'&fecha_apertura=eq.'+encodeURIComponent(faCorr),{method:'PATCH',headers:H,body:JSON.stringify({
+    var rp=await fetch(SB+'/rest/v1/caja_sesiones?id_licencia=eq.'+CID+'&fecha_apertura=eq.'+encodeURIComponent(faCorr),{method:'PATCH',headers:H,body:JSON.stringify({
       efectivo_real:efNuevo,banco_real:baNuevo,
       diferencia_efectivo:difEfCorr,diferencia_banco:difBaCorr,
       cerrada_por:'admin · corregido'
-    })}).then(function(r2){
-      if(!r2.ok)return r2.text().then(function(t){throw new Error(t);});
-    }).catch(function(e){
-      console.error('Dual-write corrección cierre falló:',e);
-      toast('Corrección guardada localmente. Error de sincronización.');
-    }).then(function(){ syncCajaDesdeSupabase(); });
+    })});
+    if(!rp.ok){
+      console.error('Error al corregir cierre:',await rp.text());
+      toast('Error al guardar la corrección — no se guardó');
+      return;
+    }
+    var afectadas=await rp.json();
+    if(!afectadas||!afectadas.length){
+      toast('No se encontró el cierre en Supabase — la corrección no se guardó');
+      return;
+    }
+    /* Confirmado: recargar desde Supabase para reflejar el estado real */
+    await syncCajaDesdeSupabase();
+    closeCajaModal();
+    showCajaHistorial();
+    toast('✅ Cierre corregido correctamente');
+    _cajaCierreEditIdx=null;
   }catch(e){
-    console.error('Dual-write corrección cierre excepción:',e);
-    toast('Corrección guardada localmente. Error de sincronización.');
+    console.error('Error al corregir cierre:',e);
+    toast('Error al guardar la corrección — no se guardó');
   }
-  closeCajaModal();
-  showCajaHistorial();
-  toast('✅ Cierre corregido correctamente');
-  _cajaCierreEditIdx=null;
 }
 
 /* ===== EDITAR VENTAS ===== */
@@ -8203,24 +8353,26 @@ function editVentaAgregarItem(){
 async function guardarEdicionVenta(){
   if(!editVentaId||!editVentaOriginal)return;
   try{
-    editVentaItemsArr.forEach(function(it){
-      var inv=it.prod_id?INVENTARIO.find(function(p){return p.id===it.prod_id;}):null;
-      if(!inv)return;
-      var qtyOrig=it._qty_orig||0;
-      var qtyNuevo=it._deleted?0:it.cantidad;
-      var diff=qtyNuevo-qtyOrig;
-      var udsEmp=it.uds_empaque||1;
-      var esUnd=(it.es_unidad&&udsEmp>1);
-      if(diff>0){
-        if(esUnd){var totalUds=inv.stock*udsEmp+(inv.uds_sueltas||0)-diff;inv.stock=Math.floor(Math.max(0,totalUds)/udsEmp);inv.uds_sueltas=Math.max(0,totalUds)%udsEmp;}
-        else{inv.stock=Math.max(0,inv.stock-diff);}
-      } else if(diff<0){
-        var devDiff=Math.abs(diff);
-        if(esUnd){var totUdsRest=inv.stock*udsEmp+(inv.uds_sueltas||0)+devDiff;inv.stock=Math.floor(totUdsRest/udsEmp);inv.uds_sueltas=totUdsRest%udsEmp;}
-        else{inv.stock=inv.stock+devDiff;}
-      }
-      if(diff!==0) actualizarStockSB(inv.id,inv.stock,undefined,inv.uds_sueltas||0);
-    });
+    /* Ajuste de stock por diferencia, atomico contra Supabase */
+    for(var gi=0;gi<editVentaItemsArr.length;gi++){
+      var itEd=editVentaItemsArr[gi];
+      var invEd=itEd.prod_id?INVENTARIO.find(function(p){return p.id===itEd.prod_id;}):null;
+      if(!invEd)continue;
+      var diffEd=(itEd._deleted?0:itEd.cantidad)-(itEd._qty_orig||0);
+      if(diffEd===0)continue;
+      var resEd=await (function(prodId,diff,udsEmpItem,esUnd){
+        return ajustarStockAtomicoSB(prodId,function(stockAct,sueltasAct,udsEmpAct){
+          var udsEmp=udsEmpItem||udsEmpAct||1;
+          if(esUnd&&udsEmp>1){
+            var tot=Math.max(0,stockAct*udsEmp+sueltasAct-diff);
+            return {stock:Math.floor(tot/udsEmp),uds_sueltas:tot%udsEmp};
+          }
+          return {stock:Math.max(0,stockAct-diff),uds_sueltas:sueltasAct};
+        });
+      })(invEd.id,diffEd,itEd.uds_empaque||1,(itEd.es_unidad&&(itEd.uds_empaque||1)>1));
+      if(resEd.ok) sincronizarInvLocal(invEd.id,resEd.stock,resEd.uds_sueltas);
+      else console.error('No se pudo ajustar el stock al editar la venta:',resEd.motivo);
+    }
     var nuevoSubtotal=editVentaItemsArr.filter(function(it){return !it._deleted;}).reduce(function(s,it){return s+(it.precio_total||0);},0);
     var dom=parseFloat(editVentaOriginal.domicilio)||0;
     var desc=parseFloat(editVentaOriginal.descuento)||0;
@@ -8628,16 +8780,48 @@ async function convertirCotVenta(id){
     var RATIO2=typeof PUNTOS_RATIO!=='undefined'?PUNTOS_RATIO:800;
     var esMayCot=cot.wa&&Array.isArray(clisDB)&&clisDB.some(function(c){return c.whatsapp===cot.wa&&c.es_mayorista;});
     var pts=(!esMayCot&&subtotal>=PUNTOS_MIN2&&cot.wa)?Math.floor(subtotal/RATIO2):0;
+
+    /* PASO 1 — Descontar inventario ANTES de crear la venta, mismo mecanismo atomico
+       ya usado en doVenta(). Items sin prod_id se saltan (igual que el comportamiento
+       anterior: nunca tuvieron stock que descontar). */
+    var itemsConProducto=cot.items.filter(function(it){return !!it.prod_id;});
+    var descontadosCot=[];
+    for(var ci=0;ci<itemsConProducto.length;ci++){
+      var itCot=itemsConProducto[ci];
+      var itemStock={id:itCot.prod_id,nombre:itCot.nombre,qty:itCot.cantidad,esUnidad:false,uds_empaque:1};
+      var resCot=await descontarStockItemSB(itemStock);
+      if(!resCot.ok){
+        if(resCot.motivo==='inexistente'){
+          /* Producto ya no existe en Supabase: mismo comportamiento que antes (se saltaba
+             porque no estaba en el array local). No bloquea la conversion. */
+          continue;
+        }
+        await revertirDescuentosSB(descontadosCot);
+        if(resCot.motivo==='insuficiente'){
+          toast('Stock insuficiente: '+itCot.nombre+' — la venta no se registró');
+        } else if(resCot.motivo==='conflicto'){
+          toast('Otro dispositivo modificó el stock de '+itCot.nombre+' — inténtalo de nuevo');
+        } else {
+          toast('No se pudo descontar el inventario — la venta no se registró');
+        }
+        renderInvTable();
+        return;
+      }
+      descontadosCot.push(itemStock);
+    }
+
+    /* PASO 2 — Crear la venta. Si falla, revertir todo lo ya descontado. */
     var vr=await fetch(SB+'/rest/v1/ventas',{method:'POST',headers:H,body:JSON.stringify({id_cliente:CID,cliente_nombre:cot.cliente,total:subtotal,subtotal:subtotal,descuento:0,metodo_pago:'efectivo',estado:'completada',puntos_ganados:pts,domicilio:0})});
-    if(!vr.ok)throw new Error(await vr.text());
+    if(!vr.ok){
+      var errCotVenta=await vr.text();
+      await revertirDescuentosSB(descontadosCot);
+      renderInvTable();
+      throw new Error(errCotVenta);
+    }
     var varr=await vr.json();var v=varr[0];
     await fetch(SB+'/rest/v1/detalle_ventas',{method:'POST',headers:H,body:JSON.stringify(cot.items.map(function(it){
       return {venta_id:v.id,prod_id:it.prod_id,producto_nombre:it.nombre,categoria:'',cantidad:it.cantidad,precio_unitario:it.precio_unitario,precio_total:it.precio_total,es_unidad:false,uds_empaque:1};
     }))});
-    cot.items.forEach(function(it){
-      var inv=INVENTARIO.find(function(p){return p.id===it.prod_id;});
-      if(inv){inv.stock=Math.max(0,inv.stock-it.cantidad);actualizarStockSB(inv.id,inv.stock,undefined,inv.uds_sueltas||0);}
-    });
     var cotRow=COTIZACIONES.find(function(c){return c.id===id;});
     var cotOk=true;
     if(cotRow){
@@ -8907,6 +9091,9 @@ function renderCarteraList(){
         +'<input id="abonoInp_'+c.id+'" type="number" min="0" max="'+c.saldo_pendiente+'" placeholder="Abono $" style="flex:1;border:1.5px solid var(--border);border-radius:8px;padding:6px 10px;font-size:13px;font-family:inherit;min-width:0;"/>'
         +'<button onclick="registrarAbono(\''+c.id+'\')" style="background:var(--green);color:#fff;border:none;border-radius:8px;padding:6px 14px;font-size:13px;font-family:inherit;cursor:pointer;font-weight:700;">+ Abono</button>'
       +'</div>':'<div style="font-size:12px;font-weight:700;color:var(--green);border-top:1px solid var(--border);padding-top:12px;">✅ Pagado completamente</div>')
+      +((c.saldo_pendiente>0&&(c.abonos_hist||[]).length===0)?'<div style="text-align:right;margin-top:8px;">'
+        +'<button onclick="eliminarCarteraEntrada(\''+c.id+'\')" style="background:none;border:none;color:var(--red);font-size:11px;font-family:inherit;cursor:pointer;text-decoration:underline;padding:2px;">Eliminar registro de cartera (sin abonos)</button>'
+      +'</div>':'')
     +'</div>';
   }).join('');
 }
@@ -8925,6 +9112,41 @@ async function registrarAbono(carteraId){
     toast('✅ Abono de '+fmt(monto)+' registrado');
   } else {
     toast('Error al registrar el abono — no se guardó, el saldo no cambió');
+  }
+}
+
+/* Elimina el registro de Cartera de una venta que TODAVIA NO tiene abonos.
+   Solo así es seguro: no hay dinero real recibido que se pierda de vista.
+   Con esto eliminado, "Eliminar venta" (en Ventas) deja de estar bloqueada
+   para esa venta, porque ya no existe cartera asociada. No toca la venta. */
+async function eliminarCarteraEntrada(carteraId){
+  var entrada=CARTERA_SB.find(function(c){return c.id==carteraId;});
+  if(!entrada){toast('Registro no encontrado');return;}
+  if(!confirm('¿Eliminar el registro de Cartera de la venta #'+String(entrada.numero||'').padStart(3,'0')+' ('+entrada.cliente+')?\n\nLa venta NO se elimina, solo deja de aparecer como crédito pendiente.\nDespués podrás eliminar la venta desde Ventas si lo necesitas.'))return;
+  try{
+    /* Re-verificar en Supabase (no confiar solo en el array local) que sigue sin abonos */
+    var rChk=await fetch(SB+'/rest/v1/cartera_abonos?cartera_id=eq.'+entrada._sbId+'&select=id',
+      {headers:{'apikey':SK,'Authorization':'Bearer '+SK}});
+    if(!rChk.ok){toast('No se pudo verificar el estado del crédito — inténtalo de nuevo');return;}
+    var abonosReales=await rChk.json();
+    if(abonosReales.length){
+      toast('⚠ Este crédito ya tiene abonos registrados — no se puede eliminar. Actualizando...');
+      await cargarCarteraCompletaSB();
+      renderCarteraList();
+      return;
+    }
+    var rDel=await fetch(SB+'/rest/v1/cartera?id=eq.'+entrada._sbId,{method:'DELETE',headers:H});
+    if(!rDel.ok){
+      console.error('Error al eliminar cartera:',await rDel.text());
+      toast('Error al eliminar el registro de cartera — no se eliminó');
+      return;
+    }
+    await cargarCarteraCompletaSB();
+    renderCarteraList();
+    toast('✅ Registro de cartera eliminado — la venta ya no está bloqueada');
+  }catch(e){
+    console.error(e);
+    toast('Error al eliminar el registro de cartera — no se eliminó');
   }
 }
 </script>
