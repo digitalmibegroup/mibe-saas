@@ -1582,23 +1582,21 @@ body.pos-sb-off .pos-sb-btn{background:var(--gold-s);border-color:var(--gold-b);
       <div class="nc-section">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px;">
           <div class="nc-title" style="margin-bottom:0;">&#128230; Productos</div>
-          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-            <input type="text" id="iiBuscarProducto" placeholder="&#128269; Buscar producto por nombre o referencia..." oninput="filtrarProductosInvInicial(this.value)" style="border:1.5px solid var(--border);border-radius:8px;padding:8px 12px;font-size:12px;font-family:inherit;color:var(--text);outline:none;min-width:220px;"/>
-            <button type="button" class="add-item-btn" onclick="agregarFilaInvInicial()">+ Agregar ítem</button>
-          </div>
+          <button type="button" class="add-item-btn" onclick="agregarFilaInvInicial()">+ Agregar ítem</button>
         </div>
         <div style="overflow-x:auto;">
-          <table class="inv-table" style="min-width:920px;">
+          <table class="inv-table" style="min-width:1210px;table-layout:fixed;">
             <thead><tr>
-              <th style="width:18%;">Producto</th>
-              <th>Referencia</th>
-              <th>Presentación</th>
-              <th style="text-align:center;">Uds/emp.</th>
-              <th style="text-align:center;">Stock actual bodega</th>
+              <th style="width:170px;">Producto</th>
+              <th style="width:110px;">Referencia</th>
+              <th style="width:110px;">Presentación</th>
+              <th style="text-align:center;width:70px;">Uds/emp.</th>
+              <th style="text-align:center;width:140px;">Stock actual bodega</th>
               <th style="text-align:center;width:90px;">Cantidad</th>
-              <th style="text-align:center;width:90px;">Sueltas</th>
-              <th style="text-align:right;width:100px;">Costo</th>
-              <th style="text-align:center;">Nuevo stock</th>
+              <th style="text-align:center;width:90px;">Unidades</th>
+              <th style="text-align:right;width:140px;">Costo</th>
+              <th style="text-align:center;width:140px;">Nuevo stock</th>
+              <th style="text-align:right;width:110px;">Subtotal</th>
               <th style="width:36px;"></th>
             </tr></thead>
             <tbody id="invInicialItemsBody"></tbody>
@@ -1676,7 +1674,7 @@ body.pos-sb-off .pos-sb-btn{background:var(--gold-s);border-color:var(--gold-b);
               <th style="text-align:center;">Uds/emp.</th>
               <th style="text-align:center;">Stock disponible</th>
               <th style="text-align:center;width:76px;">Cantidad</th>
-              <th style="text-align:center;width:76px;">Sueltas</th>
+              <th style="text-align:center;width:76px;">Unidades</th>
               <th style="text-align:right;">Costo unit.</th>
               <th style="text-align:right;">Subtotal</th>
               <th style="width:36px;"></th>
@@ -4617,22 +4615,43 @@ function volverABodegaConfig(){
   renderBodegaContent();
 }
 
-/* ==================== HITO 6.11 — HOMOLOGACION VISUAL CON INVENTARIO PRINCIPAL ====================
+/* ==================== HITO 6.11/6.14 — HOMOLOGACION VISUAL CON INVENTARIO PRINCIPAL ====================
    La presentacion SIEMPRE se lee de INVENTARIO (nombrePresentacion/uds_empaque) — inventario_bodega
    nunca es una segunda fuente de verdad para el nombre de la presentacion, solo aporta cantidades.
    El "Nivel" reutiliza el mismo stock_min ya configurado en el producto maestro (no se inventa un
    minimo propio de bodega). "Precio venta" y "Margen" de Principal NO aplican aqui: la bodega no es
    un punto de venta (el POS solo vende desde public.inventario, HITO 6.6) — no existe un precio de
-   venta ni un margen que calcular para stock que todavia no llego al inventario principal. */
+   venta ni un margen que calcular para stock que todavia no llego al inventario principal.
+   HITO 6.14: la celda "Stock" se consolida en UNA sola celda compuesta (numero + presentacion +
+   "= X und" + unidades individuales), exactamente el mismo patron que ya usa renderInvTable() para
+   Inventario Principal — antes Bodega tenia Presentacion/Stock/Sueltas/Uds.totales como 4 columnas
+   separadas, mientras Principal siempre las mostro juntas en una sola celda "Stock". Se agrega
+   columna "Min." (mismo stock_min del producto maestro, igual que Principal), y categorias +
+   buscador (derivados de los productos YA presentes en esta bodega, nunca una lista inventada). */
+var _bodegaSearchQ='', _bodegaCatA='Todas';
+function filtrarBodegaBusqueda(val){
+  _bodegaSearchQ=val||'';
+  renderBodegaInventarioView();
+}
+function filtrarBodegaCategoria(cat){
+  _bodegaCatA=cat;
+  renderBodegaInventarioView();
+}
 function renderBodegaInventarioView(){
   var cont=document.getElementById('bodegaContent');
   if(!cont)return;
+  /* Preserva foco/cursor del buscador entre renders — renderBodegaInventarioView
+     reconstruye todo el HTML del panel, igual que abrirModalInvInicial ya cuidaba
+     el foco por fila; aqui se cuida el buscador general de la vista. */
+  var activeId=document.activeElement&&document.activeElement.id;
+  var cursorPos=(activeId==='bodegaSearchInput'&&document.activeElement.selectionStart!=null)?document.activeElement.selectionStart:null;
+
   var rows=BODEGA_INV_SB.map(function(r){
     return {fila:r, master:INVENTARIO.find(function(p){return p.id===r.prod_id;})};
   });
   var totalProductos=rows.length;
   var totalEmpaques=rows.reduce(function(s,x){return s+(parseInt(x.fila.stock)||0);},0);
-  var totalSueltas=rows.reduce(function(s,x){return s+(parseInt(x.fila.uds_sueltas)||0);},0);
+  var totalUnidades=rows.reduce(function(s,x){return s+(parseInt(x.fila.uds_sueltas)||0);},0);
   /* Valor de inventario: mismo patron conceptual que el resto del sistema
      (stock * precio unitario, ver renderInvStats / Reportes "Valor al costo"),
      usando el costo propio de la bodega y, si no esta registrado, el costo
@@ -4641,6 +4660,12 @@ function renderBodegaInventarioView(){
     var costo=(x.fila.precio_costo!=null&&parseFloat(x.fila.precio_costo)>0)?parseFloat(x.fila.precio_costo):(x.master?(parseFloat(x.master.precio_costo)||0):0);
     return s+(parseInt(x.fila.stock)||0)*costo;
   },0);
+
+  /* Categorias: SIEMPRE derivadas de los productos que ya estan en ESTA bodega (nunca
+     una lista independiente inventada) — asi cada pestaña de categoria garantiza tener
+     al menos un producto para mostrar. */
+  var catsBodega=['Todas'];
+  rows.forEach(function(x){ if(x.master&&catsBodega.indexOf(x.master.categoria)===-1) catsBodega.push(x.master.categoria); });
 
   var html='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px;">'
     +'<div><div style="font-size:11px;color:var(--accent);font-weight:700;cursor:pointer;margin-bottom:4px;" onclick="volverABodegaConfig()">&larr; '+(BODEGA_SB?BODEGA_SB.nombre:'Bodega')+'</div><div style="font-size:17px;font-weight:800;">Inventario de bodega</div></div>'
@@ -4652,59 +4677,100 @@ function renderBodegaInventarioView(){
   html+='<div class="inv-stats" style="margin-bottom:16px;">'
     +'<div class="inv-stat"><div class="inv-stat-lbl">Total productos</div><div class="inv-stat-val">'+totalProductos+'</div></div>'
     +'<div class="inv-stat"><div class="inv-stat-lbl">Empaques</div><div class="inv-stat-val">'+totalEmpaques+'</div></div>'
-    +'<div class="inv-stat"><div class="inv-stat-lbl">Unidades sueltas</div><div class="inv-stat-val yellow">'+totalSueltas+'</div></div>'
+    +'<div class="inv-stat"><div class="inv-stat-lbl">Unidades individuales</div><div class="inv-stat-val yellow">'+totalUnidades+'</div></div>'
     +'<div class="inv-stat"><div class="inv-stat-lbl">Valor inventario</div><div class="inv-stat-val green">'+fmt(valorTotal)+'</div></div>'
     +'</div>';
 
   if(!rows.length){
     html+='<div style="text-align:center;padding:60px 20px;color:var(--text3);"><div style="font-size:40px;margin-bottom:12px;">&#128230;</div><div>Esta bodega todavía no tiene productos registrados.</div><div style="font-size:12px;margin-top:6px;">Usa "📦 Inventario inicial" para incorporar existencias de un producto ya existente en el inventario principal.</div></div>';
-  } else {
-    html+='<div class="inv-table-wrap" style="padding:0;">'
-      +'<table class="inv-table"><thead><tr>'
-      +'<th style="width:24%;">Producto</th><th>Presentación</th><th style="text-align:center;">Stock</th><th style="text-align:center;">Sueltas</th><th style="text-align:center;">Uds. totales</th><th style="text-align:right;">Costo</th><th style="text-align:right;">Valor</th><th>Nivel</th><th style="text-align:center;">Acciones</th>'
-      +'</tr></thead><tbody>';
-    rows.forEach(function(x){
-      var r=x.fila,m=x.master;
-      var nombre=m?m.nombre:'(producto no encontrado)';
-      var categoria=m?m.categoria:'';
-      var udsEmp=m?(m.uds_empaque||1):1;
-      var presentacion=nombrePresentacion(m);
-      var stockF=parseInt(r.stock)||0, sueltasF=parseInt(r.uds_sueltas)||0;
-      var udsTotales=stockF*udsEmp+sueltasF;
-      var costo=(r.precio_costo!=null&&parseFloat(r.precio_costo)>0)?parseFloat(r.precio_costo):(m?(parseFloat(m.precio_costo)||0):0);
-      var valorFila=stockF*costo;
-      var thumbHtml=(m&&m.imagen)
-        ?'<img src="'+m.imagen+'" style="width:32px;height:32px;border-radius:6px;object-fit:cover;flex-shrink:0;" alt=""/>'
-        :'<div style="width:32px;height:32px;border-radius:6px;background:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0;">🍾</div>';
-      /* Nivel: reutiliza el stock_min ya configurado en el producto maestro (Inventario
-         Principal) — la bodega no define su propio minimo, ni SQL nuevo. */
-      var stockMin=m?(parseInt(m.stock_min)||0):0;
-      var estado=stockF===0?'out':(stockMin>0&&stockF<=stockMin)?'low':'ok';
-      var label=estado==='out'?'Agotado':estado==='low'?'Stock bajo':'OK';
-      var barColor=estado==='out'?'var(--red)':estado==='low'?'var(--yellow)':'var(--green)';
-      var pct=Math.min(100,Math.round((stockF/((stockMin*3)||1))*100));
-      html+='<tr>'
-        +'<td><div style="display:flex;align-items:center;gap:8px;">'+thumbHtml+'<div><div style="font-weight:600;font-size:12px;">'+nombre+'</div><div style="font-size:10px;color:var(--text3);">'+categoria+'</div></div></div></td>'
-        +'<td style="font-size:12px;color:var(--text2);font-weight:600;">'+presentacion+(udsEmp>1?'<div style="font-size:10px;color:var(--text3);font-weight:400;">'+udsEmp+' unidades</div>':'')+'</td>'
-        +'<td style="text-align:center;font-weight:800;">'+stockF+'</td>'
-        +'<td style="text-align:center;color:'+(sueltasF>0?'var(--yellow)':'var(--text3)')+';">'+sueltasF+'</td>'
-        +'<td style="text-align:center;color:var(--text2);">'+udsTotales+'</td>'
-        +'<td style="text-align:right;">'+(costo>0?fmt(costo):'<span style="color:#9CA3AF;font-size:11px;">Sin costo</span>')+'</td>'
-        +'<td style="text-align:right;font-weight:700;">'+fmt(valorFila)+'</td>'
-        +'<td><div style="display:flex;flex-direction:column;gap:5px;min-width:70px;">'
-          +'<div style="height:8px;background:var(--bg);border-radius:4px;overflow:hidden;"><div style="height:100%;border-radius:4px;width:'+pct+'%;background:'+barColor+';"></div></div>'
-          +'<span class="inv-sbadge '+estado+'" style="align-self:flex-start;">'+label+'</span>'
-        +'</div></td>'
-        +'<td><div style="display:flex;align-items:center;justify-content:center;gap:4px;">'
-          +'<div class="inv-act-btn add" onclick="abrirModalAjusteBodega(\''+r.prod_id+'\',\'entrada\')" title="Entrada">+</div>'
-          +'<div class="inv-act-btn" onclick="abrirModalAjusteBodega(\''+r.prod_id+'\',\'salida\')" title="Salida">&minus;</div>'
-          +'<div class="inv-act-btn" onclick="eliminarProductoDeBodega(\''+r.prod_id+'\')" title="Quitar de bodega" style="background:var(--red-bg);border-color:var(--red-b);color:var(--red);font-size:12px;">&#128465;</div>'
-        +'</div></td>'
-      +'</tr>';
-    });
-    html+='</tbody></table></div>';
+    cont.innerHTML=html;
+    return;
   }
+
+  /* Buscador + categorias — mismos componentes visuales que Inventario Principal
+     (.inv-search / .inv-cats / .cf), aplicados sobre los productos de ESTA bodega. */
+  html+='<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px;">'
+    +'<div class="inv-search" style="min-width:200px;max-width:280px;"><span class="inv-search-i">&#128269;</span><input type="text" id="bodegaSearchInput" placeholder="Buscar producto..." value="'+_bodegaSearchQ.replace(/"/g,'&quot;')+'" oninput="filtrarBodegaBusqueda(this.value)"/></div>'
+    +'<div class="inv-cats">'+catsBodega.map(function(c){
+      return '<div class="cf'+(c===_bodegaCatA?' on':'')+'" onclick="filtrarBodegaCategoria(\''+c.replace(/'/g,"\\'")+'\')">'+c+'</div>';
+    }).join('')+'</div>'
+  +'</div>';
+
+  var q=_bodegaSearchQ.toLowerCase().trim();
+  var rowsFiltradas=rows.filter(function(x){
+    var matchCat=_bodegaCatA==='Todas'||(x.master&&x.master.categoria===_bodegaCatA);
+    var matchQ=!q||(x.master&&(x.master.nombre.toLowerCase().indexOf(q)>=0||x.master.id.toLowerCase().indexOf(q)>=0));
+    return matchCat&&matchQ;
+  });
+
+  if(!rowsFiltradas.length){
+    html+='<div style="text-align:center;padding:40px 20px;color:#9CA3AF;">Sin resultados</div>';
+    cont.innerHTML=html;
+    if(activeId==='bodegaSearchInput'){var inp0=document.getElementById('bodegaSearchInput');if(inp0){inp0.focus();if(cursorPos!=null)inp0.setSelectionRange(cursorPos,cursorPos);}}
+    return;
+  }
+
+  html+='<div class="inv-table-wrap" style="padding:0;">'
+    +'<table class="inv-table"><thead><tr>'
+    +'<th style="width:28%;">Producto</th><th style="text-align:right;">Costo</th><th style="text-align:center;">Min.</th><th style="text-align:center;">Stock</th><th style="text-align:right;">Valor</th><th style="width:100px;">Nivel</th><th style="text-align:center;">Acciones</th>'
+    +'</tr></thead><tbody>';
+  rowsFiltradas.forEach(function(x){
+    var r=x.fila,m=x.master;
+    var nombre=m?m.nombre:'(producto no encontrado)';
+    var categoria=m?m.categoria:'';
+    var udsEmp=m?(m.uds_empaque||1):1;
+    var presentacion=nombrePresentacion(m);
+    var stockF=parseInt(r.stock)||0, sueltasF=parseInt(r.uds_sueltas)||0;
+    var udsTotales=stockF*udsEmp+sueltasF;
+    var costo=(r.precio_costo!=null&&parseFloat(r.precio_costo)>0)?parseFloat(r.precio_costo):(m?(parseFloat(m.precio_costo)||0):0);
+    var valorFila=stockF*costo;
+    var thumbHtml=(m&&m.imagen)
+      ?'<img src="'+m.imagen+'" style="width:32px;height:32px;border-radius:6px;object-fit:cover;flex-shrink:0;" alt=""/>'
+      :'<div style="width:32px;height:32px;border-radius:6px;background:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0;">🍾</div>';
+    /* Nivel: reutiliza el stock_min ya configurado en el producto maestro (Inventario
+       Principal) — la bodega no define su propio minimo, ni SQL nuevo. Calculado
+       exclusivamente con el stock DE BODEGA (stockF), nunca con el stock principal. */
+    var stockMin=m?(parseInt(m.stock_min)||0):0;
+    var estado=stockF===0?'out':(stockMin>0&&stockF<=stockMin)?'low':'ok';
+    var label=estado==='out'?'Agotado':estado==='low'?'Stock bajo':'OK';
+    var barColor=estado==='out'?'var(--red)':estado==='low'?'var(--yellow)':'var(--green)';
+    var pct=Math.min(100,Math.round((stockF/((stockMin*3)||1))*100));
+    /* Celda "Stock" compuesta — mismo patron exacto que renderInvTable() usa para
+       Inventario Principal (numero grande + presentacion + "= X und" + unidades
+       individuales), solo que aqui el numero es el stock DE BODEGA. */
+    var stockCell='<div style="display:flex;flex-direction:column;align-items:center;gap:3px;">'
+      +'<span style="font-size:22px;font-weight:800;color:'+barColor+';">'+stockF+'</span>';
+    if(udsEmp>1){
+      stockCell+='<span style="font-size:11px;font-weight:700;color:var(--text3);line-height:1.2;">'+presentacion+'</span>';
+      stockCell+='<span style="font-size:12px;font-weight:600;color:var(--text2);">= '+udsTotales+' und</span>';
+      if(sueltasF>0) stockCell+='<span style="font-size:10px;font-weight:600;color:var(--yellow);">+'+sueltasF+' unidades</span>';
+    } else {
+      stockCell+='<span style="font-size:11px;color:var(--text3);">unidades</span>';
+    }
+    stockCell+='</div>';
+    html+='<tr>'
+      +'<td><div style="display:flex;align-items:center;gap:8px;">'+thumbHtml+'<div><div style="font-weight:600;font-size:12px;">'+nombre+'</div><div style="font-size:10px;color:var(--text3);">'+categoria+'</div></div></div></td>'
+      +'<td style="text-align:right;">'+(costo>0?fmt(costo):'<span style="color:#9CA3AF;font-size:11px;">Sin costo</span>')+'</td>'
+      +'<td style="color:var(--text2);font-weight:600;text-align:center;">'+stockMin+'</td>'
+      +'<td style="text-align:center;">'+stockCell+'</td>'
+      +'<td style="text-align:right;font-weight:700;">'+fmt(valorFila)+'</td>'
+      +'<td><div style="display:flex;flex-direction:column;gap:5px;min-width:70px;">'
+        +'<div style="height:8px;background:var(--bg);border-radius:4px;overflow:hidden;"><div style="height:100%;border-radius:4px;width:'+pct+'%;background:'+barColor+';"></div></div>'
+        +'<span class="inv-sbadge '+estado+'" style="align-self:flex-start;">'+label+'</span>'
+      +'</div></td>'
+      +'<td><div style="display:flex;align-items:center;justify-content:center;gap:4px;">'
+        +'<div class="inv-act-btn add" onclick="abrirModalAjusteBodega(\''+r.prod_id+'\',\'entrada\')" title="Entrada">+</div>'
+        +'<div class="inv-act-btn" onclick="abrirModalAjusteBodega(\''+r.prod_id+'\',\'salida\')" title="Salida">&minus;</div>'
+        +'<div class="inv-act-btn" onclick="eliminarProductoDeBodega(\''+r.prod_id+'\')" title="Quitar de bodega" style="background:var(--red-bg);border-color:var(--red-b);color:var(--red);font-size:12px;">&#128465;</div>'
+      +'</div></td>'
+    +'</tr>';
+  });
+  html+='</tbody></table></div>';
   cont.innerHTML=html;
+  if(activeId==='bodegaSearchInput'){
+    var inp=document.getElementById('bodegaSearchInput');
+    if(inp){ inp.focus(); if(cursorPos!=null) inp.setSelectionRange(cursorPos,cursorPos); }
+  }
 }
 
 /* ==================== Ajuste atómico de inventario_bodega (CAS independiente) ====================
@@ -4848,24 +4914,38 @@ async function eliminarProductoDeBodega(prodId){
        que AUN NO tienen fila en esta bodega.
    Supabase-first en todo momento: nunca se asume el estado local, siempre se relee
    antes de decidir si el producto existe o no en la bodega. */
-var INV_INICIAL_ITEMS=[]; /* {rowId, prodId, cantidad, sueltas, costo} */
+var INV_INICIAL_ITEMS=[]; /* {rowId, prodId, cantidad, sueltas, costo, filtroLocal} */
 var _invInicialRowSeq=0;
-var _iiFiltroBusqueda=''; /* HITO 6.11: filtra el array INVENTARIO ya cargado — nunca consulta Supabase por tecla */
 
-/* HITO 6.11: filtra las opciones de producto mostradas en cada fila del modal, sin
-   tocar Supabase — INVENTARIO ya esta cargado en memoria (cargarInventarioSB). */
-function filtrarProductosInvInicial(val){
-  _iiFiltroBusqueda=(val||'').toLowerCase().trim();
-  renderInvInicialItemsTable();
+/* HITO 6.14: el buscador vive DENTRO de cada fila, pegado al selector de producto —
+   nunca un buscador global arriba del modal. Actualiza solo el <select> de ESA fila
+   (por id), nunca vuelve a pintar toda la tabla — asi el cursor/foco del input no se
+   pierde mientras se escribe, y las demas filas jamas se tocan. Sigue filtrando el
+   array INVENTARIO ya cargado en memoria — cero consultas a Supabase por tecla. */
+function filtrarProductoFila(rowId, val){
+  var item=INV_INICIAL_ITEMS.find(function(i){return i.rowId===rowId;});
+  if(!item)return;
+  item.filtroLocal=val||'';
+  var sel=document.getElementById('iiProdSelect_'+rowId);
+  if(!sel)return;
+  sel.innerHTML=opcionesProductoFila(item);
+}
+function opcionesProductoFila(item){
+  var yaUsados=INV_INICIAL_ITEMS.filter(function(i){return i.rowId!==item.rowId;}).map(function(i){return i.prodId;});
+  var q=(item.filtroLocal||'').toLowerCase().trim();
+  return '<option value="">Selecciona...</option>'+INVENTARIO.filter(function(p){
+    if(yaUsados.indexOf(p.id)>=0) return false;
+    if(!q) return true;
+    return p.nombre.toLowerCase().indexOf(q)>=0||p.id.toLowerCase().indexOf(q)>=0;
+  }).map(function(p){
+    return '<option value="'+p.id+'"'+(p.id===item.prodId?' selected':'')+'>'+p.nombre+'</option>';
+  }).join('');
 }
 
 async function abrirModalInvInicial(){
   if(!BODEGA_SB||!BODEGA_SB.id){toast('No existe una bodega secundaria configurada.');return;}
   INV_INICIAL_ITEMS=[];
   _invInicialRowSeq=0;
-  _iiFiltroBusqueda='';
-  var buscador=document.getElementById('iiBuscarProducto');
-  if(buscador) buscador.value='';
   document.getElementById('invInicialAvisoValidacion').style.display='none';
   /* Releer fresco antes de mostrar el "stock actual" de cada producto — nunca confiar
      en el cache de BODEGA_INV_SB de cuando se abrio la pestaña. */
@@ -4881,7 +4961,7 @@ function cerrarModalInvInicial(){
 }
 function agregarFilaInvInicial(){
   _invInicialRowSeq++;
-  INV_INICIAL_ITEMS.push({rowId:_invInicialRowSeq, prodId:'', cantidad:0, sueltas:0, costo:null});
+  INV_INICIAL_ITEMS.push({rowId:_invInicialRowSeq, prodId:'', cantidad:0, sueltas:0, costo:null, filtroLocal:''});
   renderInvInicialItemsTable();
   renderResumenInvInicial();
 }
@@ -4900,6 +4980,7 @@ function onCambioProductoFilaInvInicial(rowId, selectEl){
   var item=INV_INICIAL_ITEMS.find(function(i){return i.rowId===rowId;});
   if(item){
     item.prodId=prodId;
+    item.filtroLocal='';
     /* Costo por defecto: el de la bodega si el producto ya tiene fila alli, si no el
        del inventario principal como referencia — el usuario puede editarlo despues. */
     var filaBodega=BODEGA_INV_SB.find(function(r){return r.prod_id===prodId;});
@@ -4920,11 +5001,11 @@ function actualizarCantidadFilaInvInicial(rowId, campo, val){
     var n=parseInt(val); if(isNaN(n)||n<0)n=0;
     item[campo]=n;
   }
+  var info=calcularInfoFilaInvInicial(item);
   var celda=document.getElementById('iiFilaCalc_'+rowId);
-  if(celda){
-    var info=calcularInfoFilaInvInicial(item);
-    celda.innerHTML=celdasCalculadasFilaInvInicial(info);
-  }
+  if(celda) celda.innerHTML=celdasCalculadasFilaInvInicial(info);
+  var celdaSub=document.getElementById('iiSubtotal_'+rowId);
+  if(celdaSub) celdaSub.textContent=fmt(info.subtotal);
   renderResumenInvInicial();
 }
 
@@ -4964,54 +5045,52 @@ function celdasCalculadasFilaInvInicial(info){
   if(!info.prod) return '—';
   if(info.esUnidadSimple) return '<div style="font-weight:700;">'+info.nuevoStock+' unidades</div>'
     +'<div style="font-size:10px;color:var(--text3);">antes: '+info.stockActual+'</div>';
-  return '<div style="font-weight:700;">'+info.nuevoStock+' '+info.presentacion+' + '+info.nuevoSueltas+' sueltas</div>'
+  return '<div style="font-weight:700;">'+info.nuevoStock+' '+info.presentacion+' + '+info.nuevoSueltas+' unidades</div>'
     +'<div style="font-size:10px;color:var(--text3);">antes: '+info.stockActual+' + '+info.sueltasActual+'</div>';
 }
+/* HITO 6.14: buscador DENTRO de cada fila, pegado al selector de producto — nunca un
+   buscador global arriba del modal (ver filtrarProductoFila/opcionesProductoFila). */
 function renderInvInicialItemsTable(){
   var body=document.getElementById('invInicialItemsBody');
   if(!body)return;
   if(!INV_INICIAL_ITEMS.length){
-    body.innerHTML='<tr><td colspan="10" style="text-align:center;padding:24px;color:#9CA3AF;">Agrega al menos un producto</td></tr>';
+    body.innerHTML='<tr><td colspan="11" style="text-align:center;padding:24px;color:#9CA3AF;">Agrega al menos un producto</td></tr>';
     return;
   }
-  var yaUsados=INV_INICIAL_ITEMS.map(function(i){return i.prodId;});
   body.innerHTML=INV_INICIAL_ITEMS.map(function(item){
     var info=calcularInfoFilaInvInicial(item);
-    var opts='<option value="">Buscar producto...</option>'+INVENTARIO.map(function(p){
-      if(yaUsados.indexOf(p.id)>=0&&p.id!==item.prodId) return '';
-      /* HITO 6.11: filtro de busqueda sobre el array ya cargado — nunca oculta la
-         propia seleccion de la fila, aunque no coincida con el texto buscado. */
-      if(_iiFiltroBusqueda&&p.id!==item.prodId){
-        var matchNombre=p.nombre.toLowerCase().indexOf(_iiFiltroBusqueda)>=0;
-        var matchId=p.id.toLowerCase().indexOf(_iiFiltroBusqueda)>=0;
-        if(!matchNombre&&!matchId) return '';
-      }
-      return '<option value="'+p.id+'"'+(p.id===item.prodId?' selected':'')+'>'+p.nombre+'</option>';
-    }).join('');
-    /* Etiquetas dinamicas (HITO 6.11): nunca "Cantidad"/"Sueltas" genericos cuando ya
-       se conoce la presentacion real del producto seleccionado. Para empaque=unidad
-       no existe una segunda columna de "sueltas" artificial. */
+    var opts=opcionesProductoFila(item);
+    /* Etiquetas dinamicas (HITO 6.11/6.14): nunca "Cantidad"/"Unidades" genericos
+       cuando ya se conoce la presentacion real del producto seleccionado. Para
+       empaque=unidad no existe una segunda columna de unidades sueltas artificial. */
     var etiquetaCantidad=info.prod?(info.esUnidadSimple?'Unidades':info.presentacion):'—';
     var celdaCantidad='<div style="font-size:9px;color:var(--text3);margin-bottom:2px;text-align:center;">'+etiquetaCantidad+'</div>'
-      +'<input type="number" min="0" value="'+item.cantidad+'" oninput="actualizarCantidadFilaInvInicial('+item.rowId+',\'cantidad\',this.value)" style="width:100%;border:1.5px solid var(--border);border-radius:6px;padding:6px;font-size:12px;text-align:center;"/>';
-    var celdaSueltas=info.esUnidadSimple
+      +'<input type="number" min="0" value="'+item.cantidad+'" oninput="actualizarCantidadFilaInvInicial('+item.rowId+',\'cantidad\',this.value)" style="width:100%;border:1.5px solid var(--border);border-radius:6px;padding:6px;font-size:12px;text-align:center;box-sizing:border-box;"/>';
+    var celdaUnidades=info.esUnidadSimple
       ?'<div style="text-align:center;color:#9CA3AF;font-size:11px;">No aplica</div>'
-      :'<div style="font-size:9px;color:var(--text3);margin-bottom:2px;text-align:center;">Unidades sueltas</div>'
-        +'<input type="number" min="0" value="'+item.sueltas+'" oninput="actualizarCantidadFilaInvInicial('+item.rowId+',\'sueltas\',this.value)" style="width:100%;border:1.5px solid var(--border);border-radius:6px;padding:6px;font-size:12px;text-align:center;"/>';
+      :'<div style="font-size:9px;color:var(--text3);margin-bottom:2px;text-align:center;">Unidades individuales</div>'
+        +'<input type="number" min="0" value="'+item.sueltas+'" oninput="actualizarCantidadFilaInvInicial('+item.rowId+',\'sueltas\',this.value)" style="width:100%;border:1.5px solid var(--border);border-radius:6px;padding:6px;font-size:12px;text-align:center;box-sizing:border-box;"/>';
     var celdaCosto=info.prod&&info.udsEmp>1
-      ?'<input type="number" min="0" value="'+(item.costo!=null?item.costo:'')+'" placeholder="$0" oninput="actualizarCantidadFilaInvInicial('+item.rowId+',\'costo\',this.value)" style="width:100%;border:1.5px solid var(--border);border-radius:6px;padding:6px;font-size:12px;text-align:right;"/>'
+      ?'<input type="number" min="0" value="'+(item.costo!=null?item.costo:'')+'" placeholder="$0" oninput="actualizarCantidadFilaInvInicial('+item.rowId+',\'costo\',this.value)" style="width:100%;border:1.5px solid var(--border);border-radius:6px;padding:6px 7px;font-size:12px;text-align:right;box-sizing:border-box;"/>'
         +'<div style="font-size:9px;color:var(--text3);text-align:right;margin-top:2px;">'+fmt(info.costoPorUnidad)+'/und</div>'
-      :'<input type="number" min="0" value="'+(item.costo!=null?item.costo:'')+'" placeholder="$0" oninput="actualizarCantidadFilaInvInicial('+item.rowId+',\'costo\',this.value)" style="width:100%;border:1.5px solid var(--border);border-radius:6px;padding:6px;font-size:12px;text-align:right;"/>';
+      :'<input type="number" min="0" value="'+(item.costo!=null?item.costo:'')+'" placeholder="$0" oninput="actualizarCantidadFilaInvInicial('+item.rowId+',\'costo\',this.value)" style="width:100%;border:1.5px solid var(--border);border-radius:6px;padding:6px 7px;font-size:12px;text-align:right;box-sizing:border-box;"/>';
+    /* Producto: buscador + <select> apilados, ambos dentro de la MISMA celda — el
+       buscador filtra unicamente el <select> de esta fila (por id), nunca redibuja
+       la tabla completa, para no perder el foco ni afectar a las demas filas. */
+    var celdaProducto=
+      '<input type="text" value="'+(item.filtroLocal||'')+'" placeholder="&#128269; Buscar producto..." oninput="filtrarProductoFila('+item.rowId+',this.value)" autocomplete="off" style="width:100%;border:1.5px solid var(--border);border-bottom:none;border-radius:6px 6px 0 0;padding:5px 8px;font-size:11px;font-family:inherit;box-sizing:border-box;"/>'
+      +'<select id="iiProdSelect_'+item.rowId+'" onchange="onCambioProductoFilaInvInicial('+item.rowId+',this)" style="width:100%;border:1.5px solid var(--border);border-radius:0 0 6px 6px;padding:6px 8px;font-size:12px;font-family:inherit;box-sizing:border-box;">'+opts+'</select>';
     return '<tr>'
-      +'<td><select onchange="onCambioProductoFilaInvInicial('+item.rowId+',this)" style="width:100%;border:1.5px solid var(--border);border-radius:6px;padding:6px 8px;font-size:12px;font-family:inherit;">'+opts+'</select></td>'
+      +'<td>'+celdaProducto+'</td>'
       +'<td style="color:var(--text3);font-size:12px;">'+(info.prod?info.prod.id:'—')+'</td>'
       +'<td style="font-size:12px;font-weight:600;">'+(info.prod?info.presentacion:'—')+(info.prod&&info.existente?'<div style="font-size:9px;color:var(--accent);">ya existe en bodega</div>':'')+'</td>'
       +'<td style="text-align:center;">'+(info.prod?info.udsEmp:'—')+'</td>'
-      +'<td style="text-align:center;font-size:12px;">'+(info.prod?(info.esUnidadSimple?(info.stockActual+' unidades'):(info.stockActual+' '+info.presentacion+' + '+info.sueltasActual+' sueltas')):'—')+'</td>'
+      +'<td style="text-align:center;font-size:12px;">'+(info.prod?(info.esUnidadSimple?(info.stockActual+' unidades'):(info.stockActual+' '+info.presentacion+' + '+info.sueltasActual+' unidades')):'—')+'</td>'
       +'<td>'+celdaCantidad+'</td>'
-      +'<td>'+celdaSueltas+'</td>'
+      +'<td>'+celdaUnidades+'</td>'
       +'<td>'+celdaCosto+'</td>'
       +'<td style="text-align:center;font-size:12px;" id="iiFilaCalc_'+item.rowId+'">'+celdasCalculadasFilaInvInicial(info)+'</td>'
+      +'<td style="text-align:right;font-size:12px;font-weight:700;" id="iiSubtotal_'+item.rowId+'">'+(info.prod?fmt(info.subtotal):'—')+'</td>'
       +'<td style="text-align:center;"><span onclick="eliminarFilaInvInicial('+item.rowId+')" style="cursor:pointer;color:var(--red);font-size:16px;">&#215;</span></td>'
     +'</tr>';
   }).join('');
@@ -5343,7 +5422,7 @@ function renderTrasladosTable(){
         +'</div>'
         +'<div style="text-align:right;flex-shrink:0;">'
           +'<div style="font-size:16px;font-weight:800;color:var(--text);">'+t.unidades_totales+' und</div>'
-          +'<div style="font-size:11px;color:var(--text3);margin-top:2px;">'+t.empaques_trasladados+' '+nombrePresentacion(m)+' + '+t.sueltas_trasladadas+' sueltas</div>'
+          +'<div style="font-size:11px;color:var(--text3);margin-top:2px;">'+t.empaques_trasladados+' '+nombrePresentacion(m)+' + '+t.sueltas_trasladadas+' unidades</div>'
           +'<div style="display:inline-flex;align-items:center;font-size:10px;font-weight:700;padding:3px 9px;border-radius:10px;margin-top:4px;background:'+(EB[estado]||'#F3F4F6')+';color:'+(EC[estado]||'#6B7280')+';">'+(EI[estado]||estado)+'</div>'
         +'</div>'
       +'</div>'
@@ -5492,16 +5571,16 @@ function calcularInfoFilaTraslado(item){
   if(prod){
     if(origen==='principal'){
       stockDisponibleUnidades=prod.stock*udsEmp+(prod.uds_sueltas||0);
-      stockTexto=prod.stock+' '+presentacion+' + '+(prod.uds_sueltas||0)+' sueltas';
+      stockTexto=prod.stock+' '+presentacion+' + '+(prod.uds_sueltas||0)+' unidades';
       costoPresentacion=prod.precio_costo||0;
     } else if(origen==='bodega_secundaria'){
       var fb=BODEGA_INV_TRASLADO[item.prodId];
       if(fb){
         stockDisponibleUnidades=fb.stock*udsEmp+fb.uds_sueltas;
-        stockTexto=fb.stock+' '+presentacion+' + '+fb.uds_sueltas+' sueltas';
+        stockTexto=fb.stock+' '+presentacion+' + '+fb.uds_sueltas+' unidades';
         costoPresentacion=(fb.precio_costo!=null&&fb.precio_costo>0)?fb.precio_costo:(prod.precio_costo||0);
       } else {
-        stockTexto='0 '+presentacion+' + 0 sueltas';
+        stockTexto='0 '+presentacion+' + 0 unidades';
         costoPresentacion=prod.precio_costo||0;
       }
     } else {
@@ -5540,7 +5619,7 @@ function renderTrasladoItemsTable(){
       +'<td style="text-align:center;">'+(info.prod?info.udsEmp:'—')+'</td>'
       +'<td style="text-align:center;font-size:12px;">'+info.stockTexto+'</td>'
       +'<td>'+(info.prod?'<div style="font-size:9px;color:var(--text3);margin-bottom:2px;text-align:center;">'+info.presentacion+'</div>':'')+'<input type="number" min="0" value="'+item.empaques+'" oninput="actualizarCantidadFila('+item.rowId+',\'empaques\',this.value)" style="width:100%;border:1.5px solid var(--border);border-radius:6px;padding:6px;font-size:12px;text-align:center;"/></td>'
-      +'<td><input type="number" min="0" value="'+item.sueltas+'" oninput="actualizarCantidadFila('+item.rowId+',\'sueltas\',this.value)" style="width:100%;border:1.5px solid var(--border);border-radius:6px;padding:6px;font-size:12px;text-align:center;"/></td>'
+      +'<td>'+(info.prod?'<div style="font-size:9px;color:var(--text3);margin-bottom:2px;text-align:center;">Unidades individuales</div>':'')+'<input type="number" min="0" value="'+item.sueltas+'" oninput="actualizarCantidadFila('+item.rowId+',\'sueltas\',this.value)" style="width:100%;border:1.5px solid var(--border);border-radius:6px;padding:6px;font-size:12px;text-align:center;"/></td>'
       +'<td style="text-align:right;font-size:12px;">'+(info.prod?(fmt(info.costoPresentacion)+(info.udsEmp>1?'<div style="font-size:9px;color:var(--text3);">'+fmt(info.costoPorUnidad)+'/und</div>':'')):'—')+'</td>'
       +'<td style="text-align:right;font-size:12px;" id="trFilaCalc_'+item.rowId+'">'+celdasCalculadasFila(info)+'</td>'
       +'<td style="text-align:center;"><span onclick="eliminarFilaTraslado('+item.rowId+')" style="cursor:pointer;color:var(--red);font-size:16px;">&#215;</span></td>'
