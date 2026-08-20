@@ -3438,6 +3438,11 @@ function addP(id,modo,precioCustom){
   var precioVenta = precioCustom||0;
   if(!precioVenta){
     if(esUnidad && p.uds_empaque>1){
+      /* HITO 6.16 (auditado, no modificado): rama inalcanzable desde la UI real — el unico punto
+         de entrada a addP() con uds_empaque>1 es showEmpaquePicker()->confirmarPickerVenta(), que
+         SIEMPRE pasa precioCustom. Se deja intacta (no se elimina ni se activa) para no tocar
+         codigo muerto sin necesidad, pero NUNCA debe usarse como precio real de venta por unidad
+         (el negocio puede vender la unidad a un precio independiente del Six Pack/presentacion). */
       precioVenta = Math.round(p.precio_venta/(p.uds_empaque||1));
     } else {
       precioVenta = p.precio_venta;
@@ -3445,8 +3450,10 @@ function addP(id,modo,precioCustom){
   }
   var nombreVenta = esUnidad && p.uds_empaque>1 ? p.nombre.replace(/SixPack|Pack|Combo|Caja/gi,'').trim()+' (unidad)' : p.nombre;
   var cartKey = id+(esUnidad?'_und':'_emp');
-  /* Stock check: 1 unidad = 1/uds_empaque del stock */
-  var udsDisp = p.stock * p.uds_empaque;
+  /* Stock check: pool fisico completo (empaques*uds_empaque + uds_sueltas) — HITO 6.16.
+     Antes ignoraba uds_sueltas y bloqueaba vender unidades sueltas realmente disponibles,
+     aunque el descuento real en Supabase (descontarStockItemSB, sin cambios) ya las contemplaba. */
+  var udsDisp = p.stock * p.uds_empaque + (parseInt(p.uds_sueltas)||0);
   var ex=cart.find(function(c){return c.cartKey===cartKey;});
   var unidadesEnCart = ex ? (esUnidad ? ex.qty : ex.qty*p.uds_empaque) : 0;
   if(unidadesEnCart >= udsDisp){toast('Sin mas stock disponible');return;}
@@ -3514,7 +3521,8 @@ function chgQty(cartKey,d){
   if(newQty<=0){
     cart=cart.filter(function(c){return c.cartKey!==cartKey;});
   } else {
-    var udsDisp=inv?(inv.stock*(inv.uds_empaque||1)):Infinity;
+    /* HITO 6.16: pool fisico completo, igual que en addP() */
+    var udsDisp=inv?(inv.stock*(inv.uds_empaque||1)+(parseInt(inv.uds_sueltas)||0)):Infinity;
     var udsNuevas=it.esUnidad?newQty:newQty*(it.uds_empaque||1);
     if(inv&&udsNuevas>udsDisp){toast('Sin mas stock disponible');return;}
     it.qty=newQty;it.total=it.qty*it.precio;
@@ -5924,6 +5932,14 @@ function mostrarDetalleCosto(prodId){
 }
 function cerrarDetalleCosto(){document.getElementById('modalCostoDetalle').style.display='none';}
 
+/* HITO 6.16 — decision documentada: este "Valor inventario" usa precio_venta (no precio_costo),
+   a diferencia del stat homonimo de Bodega que SI es costo. Se audito si debia corregirse para
+   incluir uds_sueltas, pero hacerlo exigiria un precio de venta POR UNIDAD (precio_venta/uds_empaque),
+   prohibido explicitamente porque el precio de una unidad suelta puede ser independiente del de la
+   presentacion (ej. Six Pack $25.000 vs Unidad $5.500 real). Por eso se deja intacto: ignora sueltas,
+   pero no inventa un precio. Impacto real hoy: $0 (produccion no tiene uds_sueltas>0). Si se desea
+   homologar con Bodega (costo) requeriria cambiar tambien la etiqueta — decision de negocio, no
+   tomada en este hito. */
 function renderInvStats(){
   var sinStock=INVENTARIO.filter(function(p){return p.stock===0;}).length;
   var stockBajo=INVENTARIO.filter(function(p){return p.stock>0&&p.stock<=p.stock_min;}).length;
@@ -9124,16 +9140,26 @@ async function renderRepInventario(){
     cont.innerHTML='<div class="rep-empty" style="font-size:36px;">&#128230;<br><span style="font-size:14px;display:block;margin-top:10px;">No hay productos en el inventario</span></div>';
     return;
   }
-  await cargarPresentacionesCache();
+  /* HITO 6.16: fuente unica de COSTO = inventario.precio_costo (ya NO costoEquivalente()).
+     valor_costo = unidades_totales x costo_unitario, con costo_unitario=precio_costo/uds_empaque
+     (o precio_costo si uds_empaque=1) — incluye uds_sueltas en la valorizacion.
+     El lado VENTA (totalVenta, y todo lo que dependa de precio_venta*stock) se deja intacto:
+     corregirlo para incluir sueltas exigiria precio_venta/uds_empaque como precio unitario,
+     que esta explicitamente prohibido (Six Pack y Unidad pueden tener precios independientes
+     no proporcionales). costoEquivalente() ya no se usa aqui para sumar dinero — sigue vigente
+     como funcion informativa en renderInvTable/mostrarDetalleCosto. */
   var totalCosto=0,totalVenta=0;
   INVENTARIO.forEach(function(p){
-    totalCosto+=costoEquivalente(p).costo*p.stock;
+    var ue=parseInt(p.uds_empaque)||1, pc=parseFloat(p.precio_costo)||0;
+    var costoUnitario=ue>1?pc/ue:pc;
+    var unidadesTotales=(parseInt(p.stock)||0)*ue+(parseInt(p.uds_sueltas)||0);
+    totalCosto+=unidadesTotales*costoUnitario;
     totalVenta+=(parseFloat(p.precio_venta)||0)*p.stock;
   });
   var ganPotencial=totalVenta-totalCosto;
   var agotados=INVENTARIO.filter(function(p){return p.stock===0;});
   var stockBajo=INVENTARIO.filter(function(p){return p.stock>0&&p.stock<=(p.stock_min||2);});
-  var sinCosto=INVENTARIO.filter(function(p){return !(costoEquivalente(p).costo>0);});
+  var sinCosto=INVENTARIO.filter(function(p){return !(parseFloat(p.precio_costo)>0);});
   var numProds=INVENTARIO.length;
   var numOk=numProds-agotados.length-stockBajo.length;
 
@@ -9142,7 +9168,10 @@ async function renderRepInventario(){
   INVENTARIO.forEach(function(p){
     var c=p.categoria||'General';
     if(!porCat[c]) porCat[c]={cat:c,totalCosto:0,totalVenta:0,prods:0,agotados:0};
-    porCat[c].totalCosto+=costoEquivalente(p).costo*p.stock;
+    var ueC=parseInt(p.uds_empaque)||1, pcC=parseFloat(p.precio_costo)||0;
+    var costoUnitarioC=ueC>1?pcC/ueC:pcC;
+    var unidadesTotalesC=(parseInt(p.stock)||0)*ueC+(parseInt(p.uds_sueltas)||0);
+    porCat[c].totalCosto+=unidadesTotalesC*costoUnitarioC;
     porCat[c].totalVenta+=(parseFloat(p.precio_venta)||0)*p.stock;
     porCat[c].prods++;
     if(p.stock===0) porCat[c].agotados++;
@@ -9199,7 +9228,7 @@ async function renderRepInventario(){
   html+='<table class="rep-table"><thead><tr><th>Producto</th><th>Categoría</th><th style="text-align:center;">Stock</th>'+(INVENTARIO.some(function(p){return p.uds_empaque>1;})? '<th style="text-align:center;">Uds totales</th>':'')+'<th style="text-align:right;">Costo actual</th><th style="text-align:right;">P. venta</th><th style="text-align:right;">Margen</th><th style="text-align:right;">Val. inventario</th></tr></thead><tbody>';
   var hayEmp=INVENTARIO.some(function(p){return p.uds_empaque>1;});
   prods.forEach(function(p){
-    var costo=costoEquivalente(p).costo;
+    var costo=parseFloat(p.precio_costo)||0; /* HITO 6.16: precio_costo directo, no costoEquivalente() */
     var venta=parseFloat(p.precio_venta)||0;
     var margen=(costo>0&&venta>0)?Math.round((venta-costo)/venta*100):null;
     var semHtml=margen!==null?'<span class="sem '+(margen<0?'k':margen>=40?'g':margen>=20?'y':'r')+'">'+margen+'%</span>':'<span class="sem n">--</span>';
@@ -9224,11 +9253,11 @@ async function renderRepInventario(){
 }
 
 async function exportarInvTexto(){
-  await cargarPresentacionesCache();
+  /* HITO 6.16: costo desde inventario.precio_costo (ya no costoEquivalente()). */
   var lines=['INVENTARIO — LA CAVA LICORERA','Generado: '+new Date().toLocaleString('es-CO'),'','PRODUCTO | STOCK | COSTO ACTUAL | PRECIO VENTA | MARGEN','—————————————————————————————'];
   var prods=[].concat(INVENTARIO).sort(function(a,b){return a.nombre.localeCompare(b.nombre);});
   prods.forEach(function(p){
-    var costo=costoEquivalente(p).costo;
+    var costo=parseFloat(p.precio_costo)||0;
     var venta=parseFloat(p.precio_venta)||0;
     var margen=(costo>0&&venta>0)?Math.round((venta-costo)/venta*100)+'%':'--';
     lines.push(p.nombre+' | '+p.stock+'u | '+(costo>0?fmt(costo):'--')+' | '+fmt(venta)+' | '+margen);
@@ -9248,16 +9277,18 @@ async function renderRepRentabilidad(){
     cont.innerHTML='<div class="rep-empty" style="font-size:36px;">&#128201;<br><span style="font-size:14px;display:block;margin-top:10px;">No hay productos</span></div>';
     return;
   }
-  await cargarPresentacionesCache();
-  var conCosto=INVENTARIO.filter(function(p){return costoEquivalente(p).costo>0;});
-  var sinCosto=INVENTARIO.filter(function(p){return !(costoEquivalente(p).costo>0);});
+  /* HITO 6.16: costo desde inventario.precio_costo (ya no costoEquivalente()). costoUnd=costo/uds_empaque
+     es la equivalencia unitaria de COSTO, ya aprobada. ventaUnd es solo una referencia matematica
+     (precio_venta/uds_empaque) — NUNCA el precio real de venta por unidad, que puede ser distinto
+     (ej: Six Pack $25.000 pero Unidad se vende a $5.500) — se rotula explicitamente como tal en el HTML. */
+  var conCosto=INVENTARIO.filter(function(p){return parseFloat(p.precio_costo)>0;});
+  var sinCosto=INVENTARIO.filter(function(p){return !(parseFloat(p.precio_costo)>0);});
   var ordenados=conCosto.map(function(p){
-    var costo=costoEquivalente(p).costo;
+    var costo=parseFloat(p.precio_costo)||0;
     var venta=parseFloat(p.precio_venta)||0;
     var udsEmp=parseInt(p.uds_empaque)||1;
-    /* costo ya viene equivalente a la presentacion de venta (misma base que p.precio_venta) */
     var costoUnd=udsEmp>1?Math.round(costo/udsEmp):costo;
-    var ventaUnd=udsEmp>1?Math.round(venta/udsEmp):venta;
+    var ventaUnd=udsEmp>1?Math.round(venta/udsEmp):venta; /* referencial, no comercial */
     var margen=venta>0?Math.round((venta-costo)/venta*100):0;
     var gananciaUnd=ventaUnd-costoUnd;
     return {p:p,margen:margen,costo:costo,venta:venta,costoUnd:costoUnd,ventaUnd:ventaUnd,gananciaUnd:gananciaUnd,udsEmp:udsEmp};
@@ -9274,7 +9305,7 @@ async function renderRepRentabilidad(){
   conCosto.forEach(function(p){
     var c=p.categoria||'General';
     if(!porCatR[c]) porCatR[c]={cat:c,items:0,costoTotal:0,ventaTotal:0,ganancia:0};
-    var costo=costoEquivalente(p).costo;
+    var costo=parseFloat(p.precio_costo)||0;
     var venta=parseFloat(p.precio_venta)||0;
     porCatR[c].items++;
     porCatR[c].costoTotal+=costo;
@@ -9317,7 +9348,7 @@ async function renderRepRentabilidad(){
   html+='<div class="rep-section" style="margin-bottom:20px;">';
   html+='<div class="rep-sh"><div class="rep-st">Rentabilidad por producto</div><span style="font-size:11px;color:var(--text3);">'+ordenados.length+' productos con costo registrado · ordenados por margen</span></div>';
   html+='<div style="overflow-x:auto;">';
-  html+='<table class="rep-table"><thead><tr><th>#</th><th>Producto</th><th>Cat.</th><th style="text-align:right;">Costo actual</th><th style="text-align:right;">P. venta</th><th style="text-align:right;">Ganancia/u</th><th style="text-align:center;">Margen</th></tr></thead><tbody>';
+  html+='<table class="rep-table"><thead><tr><th>#</th><th>Producto</th><th>Cat.</th><th style="text-align:right;">Costo actual</th><th style="text-align:right;" title="La cifra /u es una referencia calculada (precio de presentacion ÷ unidades), no necesariamente el precio real de venta por unidad">P. venta</th><th style="text-align:right;" title="Estimado a partir de la venta equivalente por unidad — no es necesariamente la ganancia real de una venta unitaria">Ganancia/u (estim.)</th><th style="text-align:center;">Margen</th></tr></thead><tbody>';
   ordenados.forEach(function(x,i){
     var semClass=x.margen<0?'k':x.margen>=40?'g':x.margen>=20?'y':'r';
     html+='<tr>';
@@ -9325,7 +9356,7 @@ async function renderRepRentabilidad(){
     html+='<td style="font-size:12px;"><div style="font-weight:600;">'+x.p.nombre+'</div>'+(x.udsEmp>1?'<div style="font-size:10px;color:var(--text3);">Pack x'+x.udsEmp+'</div>':'')+'</td>';
     html+='<td style="color:var(--text3);font-size:11px;">'+(x.p.categoria||'—')+'</td>';
     html+='<td style="text-align:right;font-size:12px;">'+fmt(x.costo)+(x.udsEmp>1?'<div style="font-size:10px;color:var(--text3);">'+fmt(x.costoUnd)+'/u</div>':'')+'</td>';
-    html+='<td style="text-align:right;font-size:12px;">'+fmt(x.venta)+(x.udsEmp>1?'<div style="font-size:10px;color:var(--text3);">'+fmt(x.ventaUnd)+'/u</div>':'')+'</td>';
+    html+='<td style="text-align:right;font-size:12px;">'+fmt(x.venta)+(x.udsEmp>1?'<div style="font-size:10px;color:var(--text3);" title="Venta equivalente por unidad — referencia calculada, no el precio comercial real">&asymp; '+fmt(x.ventaUnd)+'/u</div>':'')+'</td>';
     html+='<td style="text-align:right;font-weight:700;font-size:12px;color:'+(x.gananciaUnd>=0?'var(--green)':'var(--red)')+';">'+(x.gananciaUnd>=0?'+':'')+fmt(x.gananciaUnd)+'/u</td>';
     html+='<td style="text-align:center;"><span class="sem '+semClass+'">'+x.margen+'%</span></td>';
     html+='</tr>';
