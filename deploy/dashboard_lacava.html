@@ -4655,10 +4655,16 @@ function renderBodegaInventarioView(){
   /* Valor de inventario: mismo patron conceptual que el resto del sistema
      (stock * precio unitario, ver renderInvStats / Reportes "Valor al costo"),
      usando el costo propio de la bodega y, si no esta registrado, el costo
-     del inventario principal como respaldo — nunca inventando un valor. */
+     del inventario principal como respaldo — nunca inventando un valor.
+     costo/precio_costo siempre representa el costo de UNA PRESENTACION completa
+     (ver calcularInfoFilaInvInicial/calcularInfoFilaTraslado), por eso las
+     uds_sueltas se valorizan a costo/udsEmp, nunca al costo completo. */
   var valorTotal=rows.reduce(function(s,x){
     var costo=(x.fila.precio_costo!=null&&parseFloat(x.fila.precio_costo)>0)?parseFloat(x.fila.precio_costo):(x.master?(parseFloat(x.master.precio_costo)||0):0);
-    return s+(parseInt(x.fila.stock)||0)*costo;
+    var udsEmpX=x.master?(x.master.uds_empaque||1):1;
+    var costoPorUnidadX=udsEmpX>1?costo/udsEmpX:costo;
+    var stockX=parseInt(x.fila.stock)||0, sueltasX=parseInt(x.fila.uds_sueltas)||0;
+    return s+stockX*costo+sueltasX*costoPorUnidadX;
   },0);
 
   /* Categorias: SIEMPRE derivadas de los productos que ya estan en ESTA bodega (nunca
@@ -4723,7 +4729,8 @@ function renderBodegaInventarioView(){
     var stockF=parseInt(r.stock)||0, sueltasF=parseInt(r.uds_sueltas)||0;
     var udsTotales=stockF*udsEmp+sueltasF;
     var costo=(r.precio_costo!=null&&parseFloat(r.precio_costo)>0)?parseFloat(r.precio_costo):(m?(parseFloat(m.precio_costo)||0):0);
-    var valorFila=stockF*costo;
+    var costoPorUnidad=udsEmp>1?costo/udsEmp:costo;
+    var valorFila=stockF*costo+sueltasF*costoPorUnidad;
     var thumbHtml=(m&&m.imagen)
       ?'<img src="'+m.imagen+'" style="width:32px;height:32px;border-radius:6px;object-fit:cover;flex-shrink:0;" alt=""/>'
       :'<div style="width:32px;height:32px;border-radius:6px;background:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0;">🍾</div>';
