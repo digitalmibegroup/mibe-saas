@@ -3869,6 +3869,13 @@ async function doVenta(){
     await fetch(SB+'/rest/v1/detalle_ventas',{method:'POST',headers:H,body:JSON.stringify(cart.map(function(it){return {venta_id:v.id,prod_id:it.id,producto_nombre:it.nombre,categoria:it.cat,cantidad:it.qty,precio_unitario:it.precio,precio_total:it.total,es_unidad:it.esUnidad?true:false,uds_empaque:it.uds_empaque||1};}))});
     /* El stock ya fue descontado atomicamente en el PASO 1 y el array local
        quedo sincronizado con el valor confirmado por Supabase. */
+    /* HITO 6.17.2 (ajuste domicilios): gasto automatico DOMICILIOS, secundario
+       best-effort — si falla, la venta ya creada NUNCA se revierte (ni stock,
+       ni detalle_ventas, ni cartera). Solo se avisa de forma visible. */
+    if(domicilio>0){
+      var resGasto=await crearGastoDomicilioSB(v,domicilio);
+      if(!resGasto.ok) toast('Venta registrada correctamente, pero el gasto de domicilio no se pudo registrar. Debes registrarlo manualmente.');
+    }
     if(esCartera&&saldoVal>0){saveCarteraLocal(v.id,cn,cw,total,abonoVal,saldoVal,fechaVence,v.numero_venta);}
     await upsertCli(cn,cw,cdir,cdet,total,pts,cid);
     if(cw&&pts>0)procesarPuntosPorVenta(v,total,pts,cn,cw);
@@ -6934,7 +6941,7 @@ async function cargarComprasSB(){
 
 /* ==================== MODULO GASTOS ==================== */
 var GASTOS = [];
-var CATEGORIAS_GASTO = ['Arriendo','Servicios publicos','Nomina','Transporte','Publicidad','Empaque','Mantenimiento','Otros'];
+var CATEGORIAS_GASTO = ['Arriendo','Servicios publicos','Nomina','Transporte','Publicidad','Empaque','Mantenimiento','DOMICILIOS','Otros'];
 
 async function initGastos(){
   var fi = document.getElementById('gastoFecha');
@@ -7028,7 +7035,7 @@ function renderGastosList(){
     cont.innerHTML='<div style="text-align:center;padding:60px;color:#9CA3AF;"><div style="font-size:36px;margin-bottom:10px;">&#128176;</div><div>Sin gastos registrados</div></div>';
     return;
   }
-  var ICONS={Arriendo:'&#127968;',Nomina:'&#128100;','Servicios publicos':'&#9889;',Transporte:'&#128666;',Publicidad:'&#128227;',Empaque:'&#128230;',Mantenimiento:'&#128295;',Otros:'&#128176;'};
+  var ICONS={Arriendo:'&#127968;',Nomina:'&#128100;','Servicios publicos':'&#9889;',Transporte:'&#128666;',Publicidad:'&#128227;',Empaque:'&#128230;',Mantenimiento:'&#128295;',DOMICILIOS:'&#128757;',Otros:'&#128176;'};
   var grouped={};
   data.forEach(function(g){if(!grouped[g.fecha])grouped[g.fecha]=[];grouped[g.fecha].push(g);});
   cont.innerHTML=Object.keys(grouped).sort(function(a,b){return b.localeCompare(a);}).map(function(fecha){
@@ -10351,8 +10358,8 @@ async function verificarVencimientoPuntos(wa){
     <div id="cajaAperturaForm">
       <div style="font-size:13px;color:var(--text2);margin-bottom:12px;">Ingresa el monto inicial con el que empiezas el día:</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px;">
-        <div><label style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;">💵 Efectivo</label><input id="cajaEfectivoInicial" type="number" placeholder="$0" style="width:100%;border:1.5px solid var(--border);border-radius:8px;padding:8px 10px;font-size:14px;font-family:inherit;margin-top:4px;box-sizing:border-box;"/></div>
-        <div><label style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;">🏦 Banco / Transf.</label><input id="cajaBancoInicial" type="number" placeholder="$0" style="width:100%;border:1.5px solid var(--border);border-radius:8px;padding:8px 10px;font-size:14px;font-family:inherit;margin-top:4px;box-sizing:border-box;"/></div>
+        <div style="background:#F0FDF4;border:1.5px solid #BBF7D0;border-radius:10px;padding:10px;"><label style="font-size:11px;font-weight:700;color:#166534;text-transform:uppercase;">💵 Efectivo</label><input id="cajaEfectivoInicial" type="number" placeholder="$0" style="width:100%;border:1.5px solid var(--border);border-radius:8px;padding:8px 10px;font-size:14px;font-family:inherit;margin-top:4px;box-sizing:border-box;background:#fff;"/></div>
+        <div style="background:#EFF6FF;border:1.5px solid #BFDBFE;border-radius:10px;padding:10px;"><label style="font-size:11px;font-weight:700;color:#1D4ED8;text-transform:uppercase;">🏦 Banco / Transf.</label><input id="cajaBancoInicial" type="number" placeholder="$0" style="width:100%;border:1.5px solid var(--border);border-radius:8px;padding:8px 10px;font-size:14px;font-family:inherit;margin-top:4px;box-sizing:border-box;background:#fff;"/></div>
       </div>
       <button onclick="confirmarAperturaCaja()" style="background:var(--green);color:#fff;border:none;border-radius:var(--r);padding:12px;font-size:14px;font-family:inherit;cursor:pointer;width:100%;font-weight:700;">✅ Abrir caja</button>
     </div>
@@ -10505,6 +10512,127 @@ function renderEspera(){
 }
 
 /* ===== CAJA ===== */
+/* HITO 6.17.2 — Motor de calculo del cierre.
+   MEDIO DE PAGO (como pago el cliente) != DESTINO FINANCIERO (donde queda el
+   dinero para el cierre). Mapeo CERRADO y explicito: un medio no contemplado
+   devuelve null y NUNCA se asume BANCO por descarte — evita que un medio de
+   pago futuro o desconocido se cuente mal. 'puntos' (canje) queda deliberadamente
+   fuera del mapa: no es dinero. */
+var DESTINO_FINANCIERO_POR_MEDIO={efectivo:'EFECTIVO',transferencia:'BANCO',nequi:'BANCO',daviplata:'BANCO'};
+function resolverDestinoFinanciero(medioPago){
+  return DESTINO_FINANCIERO_POR_MEDIO[medioPago]||null;
+}
+
+/* Dinero real que una venta aporto a caja. Credito: solo el abono realmente
+   recibido (venta.abono) — el saldo_pendiente es Cartera, nunca Caja. Canje:
+   no es dinero. NO se modifica doVenta ni como se persisten total/abono. */
+function montoRealParaCaja(venta){
+  if(venta.estado==='canje') return 0;
+  return venta.estado==='credito' ? (parseFloat(venta.abono)||0) : (parseFloat(venta.total)||0);
+}
+
+/* HITO 6.17.2 (ajuste domicilios): gasto automatico best-effort tras una venta
+   con domicilio>0. Nunca lanza hacia doVenta() — si falla, la venta permanece
+   valida (stock, detalle_ventas y cartera ya se resolvieron antes de llegar
+   aqui). medio_pago:'transferencia' es solo una representacion operativa del
+   gasto — la decision real de a que destino financiero afecta la toma
+   calcularCierreEsperado() por categoria, NUNCA leyendo este campo (ver mas
+   abajo). El tag [domicilio:<ventaId>] en la descripcion es unicamente para
+   trazabilidad/busqueda manual — NO es un mecanismo de deduplicacion: no hay
+   SELECT previo ni UNIQUE constraint porque no hace falta (venta.id siempre
+   es un UUID nuevo generado por Supabase, y esta funcion se invoca una sola
+   vez por venta exitosa — el boton ya esta deshabilitado desde el inicio de
+   doVenta(), sin bucles ni reintentos automaticos). */
+async function crearGastoDomicilioSB(venta, domicilioValor){
+  var dom=parseFloat(domicilioValor)||0;
+  if(dom<=0) return {ok:true};
+  try{
+    var tag='[domicilio:'+venta.id+']';
+    var r=await fetch(SB+'/rest/v1/gastos',{method:'POST',headers:H,body:JSON.stringify({
+      id_licencia:CID,
+      categoria:'DOMICILIOS',
+      valor:dom,
+      medio_pago:'transferencia',
+      fecha:(venta.created_at||new Date().toISOString()).split('T')[0],
+      descripcion:'Domicilio venta #'+(venta.numero_venta||'')+' '+tag
+    })});
+    if(!r.ok){
+      var errTxt=await r.text();
+      console.error('[gasto-domicilio] fallo al registrar:',errTxt);
+      shadowAudit('ventas','gastos',venta.id,'insert','fallo',errTxt,{categoria:'DOMICILIOS',valor:dom});
+      return {ok:false};
+    }
+    return {ok:true};
+  }catch(e){
+    console.error('[gasto-domicilio] excepcion:',e);
+    shadowAudit('ventas','gastos',venta.id,'insert','fallo',String(e&&e.message||e),{categoria:'DOMICILIOS',valor:dom});
+    return {ok:false};
+  }
+}
+
+/* Lectura fresca (NUNCA VENTAS_MES) de los movimientos de un turno + cartera
+   pendiente global, en paralelo entre si (no dependen unas de otras). El
+   limite superior de la ventana es implicito: se ejecuta en vivo, en el
+   instante del calculo, por lo que nunca puede traer movimientos "futuros".
+   HITO 6.17.2 (ajuste domicilios): se agrega una 4a consulta, tambien en
+   paralelo, exclusivamente a gastos de categoria DOMICILIOS del turno —
+   ninguna otra categoria de gasto se trae ni participa en Caja todavia. */
+async function obtenerMovimientosTurno(fechaAperturaISO){
+  var GH={'apikey':SK,'Authorization':'Bearer '+SK};
+  var qVentas=SB+'/rest/v1/ventas?id_cliente=eq.'+CID+'&created_at=gte.'+encodeURIComponent(fechaAperturaISO)+'&estado=neq.canje&select=metodo_pago,total,abono,estado,domicilio,created_at';
+  var qAbonos=SB+'/rest/v1/cartera_abonos?id_licencia=eq.'+CID+'&created_at=gte.'+encodeURIComponent(fechaAperturaISO)+'&select=monto,medio_pago,created_at';
+  var qCartera=SB+'/rest/v1/cartera?id_licencia=eq.'+CID+'&estado_cartera=neq.pagada&select=saldo_pendiente';
+  var qGastos=SB+'/rest/v1/gastos?id_licencia=eq.'+CID+'&categoria=eq.DOMICILIOS&created_at=gte.'+encodeURIComponent(fechaAperturaISO)+'&select=categoria,valor,medio_pago,created_at';
+  var res=await Promise.all([fetch(qVentas,{headers:GH}),fetch(qAbonos,{headers:GH}),fetch(qCartera,{headers:GH}),fetch(qGastos,{headers:GH})]);
+  if(!res[0].ok||!res[1].ok||!res[2].ok||!res[3].ok) throw new Error('No se pudieron obtener los movimientos frescos del turno');
+  var ventas=await res[0].json(), abonos=await res[1].json(), carteraRows=await res[2].json(), gastos=await res[3].json();
+  var carteraPendiente=carteraRows.reduce(function(s,c){return s+(parseFloat(c.saldo_pendiente)||0);},0);
+  return {ventas:ventas, abonos:abonos, carteraPendiente:carteraPendiente, gastos:gastos};
+}
+
+/* Motor UNICO de calculo — usado tanto por el preview (mostrarCierreCaja) como
+   por la confirmacion (confirmarCierreCaja), para que ambos NUNCA puedan
+   divergir por tener la formula escrita dos veces. Un medio desconocido
+   (incluye medio_pago=NULL de abonos historicos) NUNCA suma a EFECTIVO ni a
+   BANCO — se acumula aparte, verificable en detalle.desconocidos. */
+function calcularCierreEsperado(efectivoInicial, bancoInicial, movimientos){
+  var ventasEf=0, ventasBa=0, abonosEf=0, abonosBa=0, desconocidos=0, itemsDesconocidos=[];
+  movimientos.ventas.forEach(function(v){
+    var destino=resolverDestinoFinanciero(v.metodo_pago);
+    var monto=montoRealParaCaja(v);
+    if(destino==='EFECTIVO') ventasEf+=monto;
+    else if(destino==='BANCO') ventasBa+=monto;
+    else { desconocidos+=monto; itemsDesconocidos.push({tipo:'venta',metodo_pago:v.metodo_pago,monto:monto}); }
+  });
+  movimientos.abonos.forEach(function(a){
+    var destino=resolverDestinoFinanciero(a.medio_pago);
+    var monto=parseFloat(a.monto)||0;
+    if(destino==='EFECTIVO') abonosEf+=monto;
+    else if(destino==='BANCO') abonosBa+=monto;
+    else { desconocidos+=monto; itemsDesconocidos.push({tipo:'abono',medio_pago:a.medio_pago,monto:monto}); }
+  });
+  /* Regla de negocio explicita (ajuste domicilios): todo gasto de categoria
+     DOMICILIOS descuenta SIEMPRE de BANCO. La decision es por 'categoria',
+     nunca por 'medio_pago' — deliberadamente NO se usa resolverDestinoFinanciero()
+     aqui, para que un dato inconsistente o modificado manualmente en
+     medio_pago (ej. 'efectivo') jamas pueda reclasificar esta salida hacia
+     EFECTIVO. medio_pago='transferencia' que guarda crearGastoDomicilioSB()
+     es solo la representacion operativa del gasto, no la fuente de decision. */
+  var gastosBanco=0;
+  (movimientos.gastos||[]).forEach(function(g){
+    if(g.categoria==='DOMICILIOS') gastosBanco+=(parseFloat(g.valor)||0);
+  });
+  return {
+    efectivoEsperado:(parseFloat(efectivoInicial)||0)+ventasEf+abonosEf,
+    bancoEsperado:(parseFloat(bancoInicial)||0)+ventasBa+abonosBa-gastosBanco,
+    carteraPendiente:parseFloat(movimientos.carteraPendiente)||0,
+    detalle:{ventasEf:ventasEf,ventasBa:ventasBa,abonosEf:abonosEf,abonosBa:abonosBa,
+      gastosBanco:gastosBanco,
+      desconocidos:desconocidos,itemsDesconocidos:itemsDesconocidos,
+      numVentas:movimientos.ventas.length,numAbonos:movimientos.abonos.length}
+  };
+}
+
 function renderCajaBtn(){
   var abierta=CAJA_ACTUAL&&CAJA_ACTUAL.estado==='abierta';
   var bar=document.getElementById('cajaPOSBar');
@@ -10583,75 +10711,113 @@ async function confirmarAperturaCaja(){
   }
 }
 
-function mostrarCierreCaja(){
-  var inicio=CAJA_ACTUAL?new Date(CAJA_ACTUAL.fecha_apertura):new Date();
-  var ventasTurno=VENTAS_MES.filter(function(v){return new Date(v.created_at)>=inicio;});
-  var totalEfectivo=ventasTurno.filter(function(v){return v.metodo_pago==='efectivo';}).reduce(function(s,v){return s+(parseFloat(v.total)||0)-(parseFloat(v.domicilio)||0);},0);
-  var totalTransf=ventasTurno.filter(function(v){return v.metodo_pago!=='efectivo';}).reduce(function(s,v){return s+(parseFloat(v.total)||0)-(parseFloat(v.domicilio)||0);},0);
-  var efEsperado=(CAJA_ACTUAL?CAJA_ACTUAL.efectivo_inicial:0)+totalEfectivo;
-  var baEsperado=(CAJA_ACTUAL?CAJA_ACTUAL.banco_inicial:0)+totalTransf;
+/* HITO 6.17.3: valores calculados del preview actual, solo para la diferencia
+   en vivo (actualizarDiferenciaCierre) — NUNCA se usa para confirmar el cierre;
+   confirmarCierreCaja() siempre recalcula desde cero con datos frescos. */
+var _cajaCierrePreviewCalc=null;
+
+/* HITO 6.17.2: ya NO depende de VENTAS_MES. Lee la sesion abierta fresca
+   (necesaria antes de poder pedir movimientos: obtenerMovimientosTurno exige
+   fecha_apertura como input, es una dependencia real de datos, no arbitraria
+   — por eso este paso va secuencial y no en paralelo con los movimientos).
+   Dentro de obtenerMovimientosTurno, ventas/abonos/cartera si se piden en
+   paralelo entre si, porque esas 3 no dependen unas de otras.
+   HITO 6.17.3: rediseño visual en 3 bloques (EFECTIVO/BANCO/CARTERA). Los
+   datos ya venian separados en calc.detalle (ventasEf/abonosEf/ventasBa/
+   abonosBa/gastosBanco) — este cambio es puramente de presentacion, ningun
+   valor se recalcula distinto a como ya lo hacia 6.17.2. */
+async function mostrarCierreCaja(){
   document.getElementById('modalCajaOverlay').style.display='flex';
   document.getElementById('cajaModalTitulo').textContent='🔒 Cerrar Caja';
   document.getElementById('cajaAperturaForm').style.display='none';
   var cierreDiv=document.getElementById('cajaCierreInfo');
   cierreDiv.style.display='block';
-  var aperturaHora=CAJA_ACTUAL?new Date(CAJA_ACTUAL.fecha_apertura).toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'}):'--';
-  cierreDiv.innerHTML=
-    '<div style="background:var(--bg);border-radius:8px;padding:12px;margin-bottom:12px;">'
-      +'<div style="font-size:11px;color:var(--text3);margin-bottom:8px;">Apertura: '+aperturaHora+' · '+ventasTurno.length+' ventas en el turno</div>'
-      +'<div style="display:flex;justify-content:space-between;margin-bottom:6px;font-size:13px;"><span>Efectivo inicial</span><span style="font-weight:700;">'+fmt(CAJA_ACTUAL?CAJA_ACTUAL.efectivo_inicial:0)+'</span></div>'
-      +'<div style="display:flex;justify-content:space-between;margin-bottom:6px;font-size:13px;"><span>+ Ventas efectivo</span><span style="font-weight:700;color:var(--green);">+'+fmt(totalEfectivo)+'</span></div>'
-      +'<div style="display:flex;justify-content:space-between;margin-bottom:10px;font-size:14px;font-weight:800;border-top:1px solid var(--border);padding-top:8px;"><span>💵 Efectivo esperado</span><span style="color:var(--green);">'+fmt(efEsperado)+'</span></div>'
-      +'<div style="display:flex;justify-content:space-between;margin-bottom:6px;font-size:13px;"><span>Banco/transferencias inicial</span><span style="font-weight:700;">'+fmt(CAJA_ACTUAL?CAJA_ACTUAL.banco_inicial:0)+'</span></div>'
-      +'<div style="display:flex;justify-content:space-between;margin-bottom:6px;font-size:13px;"><span>+ Ventas banco/Nequi/Davi</span><span style="font-weight:700;color:var(--green);">+'+fmt(totalTransf)+'</span></div>'
-      +'<div style="display:flex;justify-content:space-between;font-size:14px;font-weight:800;border-top:1px solid var(--border);padding-top:8px;"><span>🏦 Banco esperado</span><span style="color:var(--green);">'+fmt(baEsperado)+'</span></div>'
-    +'</div>'
-    +'<div style="font-size:12px;font-weight:700;color:var(--text2);margin-bottom:6px;">Ingresa lo que hay físicamente:</div>'
-    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">'
-      +'<div><label style="font-size:11px;color:var(--text3);">Efectivo real</label><input id="cajaEfectivoReal" type="number" placeholder="$0" style="width:100%;border:1px solid var(--border);border-radius:6px;padding:6px 8px;font-size:13px;font-family:inherit;box-sizing:border-box;margin-top:2px;"/></div>'
-      +'<div><label style="font-size:11px;color:var(--text3);">Banco real</label><input id="cajaBancoReal" type="number" placeholder="$0" style="width:100%;border:1px solid var(--border);border-radius:6px;padding:6px 8px;font-size:13px;font-family:inherit;box-sizing:border-box;margin-top:2px;"/></div>'
-    +'</div>'
-    +'<button onclick="confirmarCierreCaja('+efEsperado+','+baEsperado+')" style="background:var(--red);color:#fff;border:none;border-radius:var(--r);padding:10px;font-size:13px;font-family:inherit;cursor:pointer;width:100%;">🔒 Confirmar cierre de caja</button>';
+  cierreDiv.innerHTML='<div style="text-align:center;padding:30px 0;color:var(--text3);font-size:13px;">Calculando cierre…</div>';
+  var GH={'apikey':SK,'Authorization':'Bearer '+SK};
+  try{
+    var rSesion=await fetch(SB+'/rest/v1/caja_sesiones?id_licencia=eq.'+CID+'&estado=eq.abierta&select=fecha_apertura,efectivo_inicial,banco_inicial&limit=1',{headers:GH});
+    if(!rSesion.ok) throw new Error('No se pudo leer la sesion de caja');
+    var sesionArr=await rSesion.json();
+    var sesion=sesionArr.length?sesionArr[0]:{fecha_apertura:new Date().toISOString(),efectivo_inicial:0,banco_inicial:0};
+    var movimientos=await obtenerMovimientosTurno(sesion.fecha_apertura);
+    var calc=calcularCierreEsperado(sesion.efectivo_inicial, sesion.banco_inicial, movimientos);
+    _cajaCierrePreviewCalc={efectivoEsperado:calc.efectivoEsperado,bancoEsperado:calc.bancoEsperado};
+    var aperturaHora=new Date(sesion.fecha_apertura).toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'});
+    cierreDiv.innerHTML=
+      '<div style="font-size:11px;color:var(--text3);margin-bottom:12px;text-align:center;">Apertura: '+aperturaHora+' · '+calc.detalle.numVentas+' ventas en el turno</div>'
+      /* ===== BLOQUE EFECTIVO ===== */
+      +'<div style="background:#F0FDF4;border:1.5px solid #BBF7D0;border-radius:10px;padding:12px;margin-bottom:12px;">'
+        +'<div style="font-size:12px;font-weight:800;color:#166534;text-transform:uppercase;letter-spacing:.3px;margin-bottom:8px;">💵 Efectivo</div>'
+        +'<div style="display:flex;justify-content:space-between;margin-bottom:5px;font-size:13px;"><span>Saldo inicial</span><span style="font-weight:700;">'+fmt(sesion.efectivo_inicial)+'</span></div>'
+        +'<div style="display:flex;justify-content:space-between;margin-bottom:5px;font-size:13px;"><span>+ Ventas en efectivo</span><span style="font-weight:700;color:#16a34a;">+'+fmt(calc.detalle.ventasEf)+'</span></div>'
+        +'<div style="display:flex;justify-content:space-between;margin-bottom:8px;font-size:13px;"><span>+ Abonos en efectivo</span><span style="font-weight:700;color:#16a34a;">+'+fmt(calc.detalle.abonosEf)+'</span></div>'
+        +'<div style="display:flex;justify-content:space-between;font-size:14px;font-weight:800;border-top:1px solid #BBF7D0;padding-top:8px;margin-bottom:12px;"><span>Efectivo al cierre</span><span>'+fmt(calc.efectivoEsperado)+'</span></div>'
+        +'<label style="font-size:11px;font-weight:700;color:#166534;text-transform:uppercase;display:block;margin-bottom:4px;">Efectivo real</label>'
+        +'<input id="cajaEfectivoReal" type="number" placeholder="$0" oninput="actualizarDiferenciaCierre()" style="width:100%;border:1.5px solid #BBF7D0;border-radius:8px;padding:8px 10px;font-size:14px;font-family:inherit;box-sizing:border-box;background:#fff;margin-bottom:8px;"/>'
+        +'<div id="cajaDifEfectivo" style="font-size:13px;"><span style="color:var(--text3);">Ingresa el conteo físico</span></div>'
+      +'</div>'
+      /* ===== BLOQUE BANCO ===== */
+      +'<div style="background:#EFF6FF;border:1.5px solid #BFDBFE;border-radius:10px;padding:12px;margin-bottom:12px;">'
+        +'<div style="font-size:12px;font-weight:800;color:#1D4ED8;text-transform:uppercase;letter-spacing:.3px;margin-bottom:8px;">🏦 Banco</div>'
+        +'<div style="display:flex;justify-content:space-between;margin-bottom:5px;font-size:13px;"><span>Saldo inicial</span><span style="font-weight:700;">'+fmt(sesion.banco_inicial)+'</span></div>'
+        +'<div style="display:flex;justify-content:space-between;margin-bottom:5px;font-size:13px;"><span>+ Ventas digitales</span><span style="font-weight:700;color:#16a34a;">+'+fmt(calc.detalle.ventasBa)+'</span></div>'
+        +'<div style="display:flex;justify-content:space-between;margin-bottom:5px;font-size:13px;"><span>+ Abonos digitales</span><span style="font-weight:700;color:#16a34a;">+'+fmt(calc.detalle.abonosBa)+'</span></div>'
+        +'<div style="display:flex;justify-content:space-between;margin-bottom:8px;font-size:13px;"><span>− Domicilios</span><span style="font-weight:700;color:#dc2626;">−'+fmt(calc.detalle.gastosBanco)+'</span></div>'
+        +'<div style="display:flex;justify-content:space-between;font-size:14px;font-weight:800;border-top:1px solid #BFDBFE;padding-top:8px;margin-bottom:12px;"><span>Banco al cierre</span><span>'+fmt(calc.bancoEsperado)+'</span></div>'
+        +'<label style="font-size:11px;font-weight:700;color:#1D4ED8;text-transform:uppercase;display:block;margin-bottom:4px;">Banco real</label>'
+        +'<input id="cajaBancoReal" type="number" placeholder="$0" oninput="actualizarDiferenciaCierre()" style="width:100%;border:1.5px solid #BFDBFE;border-radius:8px;padding:8px 10px;font-size:14px;font-family:inherit;box-sizing:border-box;background:#fff;margin-bottom:8px;"/>'
+        +'<div id="cajaDifBanco" style="font-size:13px;"><span style="color:var(--text3);">Ingresa el conteo físico</span></div>'
+      +'</div>'
+      +(calc.detalle.desconocidos>0?'<div style="margin-bottom:12px;font-size:11px;color:var(--gold);text-align:center;">&#9888; '+fmt(calc.detalle.desconocidos)+' con medio de pago no reconocido — no se sumó a ningún destino</div>':'')
+      /* ===== BLOQUE CARTERA ===== */
+      +'<div style="background:var(--bg);border:1.5px solid var(--border);border-radius:10px;padding:12px;margin-bottom:16px;">'
+        +'<div style="font-size:12px;font-weight:800;color:var(--text2);text-transform:uppercase;letter-spacing:.3px;margin-bottom:8px;">📋 Cartera</div>'
+        +'<div style="display:flex;justify-content:space-between;margin-bottom:6px;font-size:14px;font-weight:800;"><span>Cartera pendiente</span><span>'+fmt(calc.carteraPendiente)+'</span></div>'
+        +'<div style="font-size:11px;color:var(--text3);line-height:1.4;">Corresponde a saldos pendientes de clientes por cobrar. No hace parte del efectivo ni del banco disponible en este cierre.</div>'
+      +'</div>'
+      +'<button id="btnConfirmarCierreCaja" onclick="confirmarCierreCaja()" style="background:var(--red);color:#fff;border:none;border-radius:var(--r);padding:10px;font-size:13px;font-family:inherit;cursor:pointer;width:100%;">🔒 Confirmar cierre de caja</button>';
+  }catch(e){
+    console.error('Error al calcular el cierre:',e);
+    cierreDiv.innerHTML='<div style="text-align:center;padding:20px 0;color:var(--red);font-size:13px;">No se pudo calcular el cierre — inténtalo de nuevo.</div>'
+      +'<button onclick="mostrarCierreCaja()" style="width:100%;padding:10px;border:none;border-radius:var(--r);background:var(--bg);font-size:13px;font-family:inherit;cursor:pointer;font-weight:700;color:var(--text2);margin-top:10px;">Reintentar</button>';
+  }
 }
 
-async function confirmarCierreCaja(efEsperado, baEsperado){
+/* HITO 6.17.3: diferencia en vivo, puramente visual — lee los inputs y compara
+   contra _cajaCierrePreviewCalc (snapshot del preview). NUNCA se usa para
+   confirmar: confirmarCierreCaja() recalcula todo desde cero con datos
+   frescos y su propia lectura de los inputs, exactamente igual que antes. */
+function actualizarDiferenciaCierre(){
+  if(!_cajaCierrePreviewCalc) return;
+  function render(divId, inputId, esperado){
+    var divEl=document.getElementById(divId), inputEl=document.getElementById(inputId);
+    if(!divEl||!inputEl) return;
+    if(inputEl.value===''){ divEl.innerHTML='<span style="color:var(--text3);">Ingresa el conteo físico</span>'; return; }
+    var real=parseFloat(inputEl.value)||0;
+    var dif=real-esperado;
+    if(dif===0) divEl.innerHTML='<span style="color:#16a34a;font-weight:700;">✅ Cuadró</span>';
+    else if(dif<0) divEl.innerHTML='<span style="color:#dc2626;font-weight:700;">🔴 Faltan '+fmt(Math.abs(dif))+'</span>';
+    else divEl.innerHTML='<span style="color:#B45309;font-weight:700;">🟡 Sobran '+fmt(dif)+'</span>';
+  }
+  render('cajaDifEfectivo','cajaEfectivoReal',_cajaCierrePreviewCalc.efectivoEsperado);
+  render('cajaDifBanco','cajaBancoReal',_cajaCierrePreviewCalc.bancoEsperado);
+}
+
+/* HITO 6.17.2: ya NO recibe efEsperado/baEsperado del preview — los recalcula
+   desde cero con datos frescos, nunca reutiliza ciegamente lo mostrado cuando
+   se abrio el modal (puede haber pasado tiempo, otra venta, otro dispositivo).
+   El CAS de concurrencia por updated_at se mantiene exactamente igual. */
+async function confirmarCierreCaja(){
   var efReal=parseFloat(document.getElementById('cajaEfectivoReal').value)||0;
   var baReal=parseFloat(document.getElementById('cajaBancoReal').value)||0;
-  var inicio=CAJA_ACTUAL?new Date(CAJA_ACTUAL.fecha_apertura):new Date();
-  var ventasTurno=VENTAS_MES.filter(function(v){return new Date(v.created_at)>=inicio;});
-  var registro={
-    fecha_apertura:CAJA_ACTUAL?CAJA_ACTUAL.fecha_apertura:new Date().toISOString(),
-    fecha_cierre:new Date().toISOString(),
-    efectivo_inicial:CAJA_ACTUAL?CAJA_ACTUAL.efectivo_inicial:0,
-    banco_inicial:CAJA_ACTUAL?CAJA_ACTUAL.banco_inicial:0,
-    efectivo_esperado:efEsperado,
-    banco_esperado:baEsperado,
-    efectivo_real:efReal,
-    banco_real:baReal,
-    dif_efectivo:efReal-efEsperado,
-    dif_banco:baReal-baEsperado,
-    num_ventas:ventasTurno.length
-  };
-  /* Supabase PRIMERO, en dos pasos. PASO A: localizar la sesion abierta por id
-     (un GET con filtro por 'estado' funciona correctamente). PASO B: cerrarla
-     por su id exacto — comprobado que un PATCH filtrado por 'estado' devuelve
-     200 con 0 filas en esta tabla aunque la fila SI exista y SI coincida (visto
-     empiricamente con datos de prueba aislados); filtrar por id evita ese caso.
-     El historial local y la UI solo se actualizan si Supabase confirma que
-     realmente cerro una fila — un 200 con 0 filas NO es exito.
-     CAS de concurrencia: el PATCH tambien exige que 'updated_at' siga siendo
-     el valor recien leido (columna con trigger de Postgres que la actualiza
-     sola en cada UPDATE — no requiere DDL nuevo). Si otro dispositivo cerro
-     la MISMA sesion entre nuestro GET y nuestro PATCH, updated_at ya cambio y
-     el PATCH afecta 0 filas: se detecta como perdida de la carrera en vez de
-     sobreescribir en silencio los valores del que cerro primero (bug real
-     verificado empiricamente: sin este CAS, dos cierres simultaneos reportaban
-     "exito" ambos y el segundo pisaba los valores del primero). */
+  var btn=document.getElementById('btnConfirmarCierreCaja');
+  if(btn){btn.disabled=true;btn.textContent='Cerrando...';}
+  var GH={'apikey':SK,'Authorization':'Bearer '+SK};
   try{
-    var rBuscar=await fetch(SB+'/rest/v1/caja_sesiones?id_licencia=eq.'+CID+'&estado=eq.abierta&select=id,updated_at&limit=1',
-      {headers:{'apikey':SK,'Authorization':'Bearer '+SK}});
+    var rBuscar=await fetch(SB+'/rest/v1/caja_sesiones?id_licencia=eq.'+CID+'&estado=eq.abierta&select=id,updated_at,fecha_apertura,efectivo_inicial,banco_inicial&limit=1',{headers:GH});
     if(!rBuscar.ok){
       toast('Error al cerrar la caja — no se pudo verificar la sesión');
+      if(btn){btn.disabled=false;btn.textContent='🔒 Confirmar cierre de caja';}
       return;
     }
     var sesionAbierta=await rBuscar.json();
@@ -10661,7 +10827,33 @@ async function confirmarCierreCaja(efEsperado, baEsperado){
       renderCajaBtn();
       return;
     }
-    var r=await fetch(SB+'/rest/v1/caja_sesiones?id=eq.'+sesionAbierta[0].id+'&updated_at=eq.'+encodeURIComponent(sesionAbierta[0].updated_at),{method:'PATCH',headers:H,body:JSON.stringify({
+    var sesion=sesionAbierta[0];
+    /* Recalculo COMPLETO con datos frescos — mismo motor que el preview,
+       nunca los valores que se mostraron al abrir el modal. */
+    var movimientos=await obtenerMovimientosTurno(sesion.fecha_apertura);
+    var calc=calcularCierreEsperado(sesion.efectivo_inicial, sesion.banco_inicial, movimientos);
+    var registro={
+      fecha_apertura:sesion.fecha_apertura,
+      fecha_cierre:new Date().toISOString(),
+      efectivo_inicial:sesion.efectivo_inicial,
+      banco_inicial:sesion.banco_inicial,
+      efectivo_esperado:calc.efectivoEsperado,
+      banco_esperado:calc.bancoEsperado,
+      efectivo_real:efReal,
+      banco_real:baReal,
+      dif_efectivo:efReal-calc.efectivoEsperado,
+      dif_banco:baReal-calc.bancoEsperado,
+      num_ventas:calc.detalle.numVentas,
+      cartera_pendiente:calc.carteraPendiente
+    };
+    /* Supabase PRIMERO. CAS de concurrencia: el PATCH exige que 'updated_at'
+       siga siendo el valor recien leido (columna con trigger de Postgres que
+       la actualiza sola en cada UPDATE — no requiere DDL nuevo). Si otro
+       dispositivo cerro la MISMA sesion entre nuestro GET y nuestro PATCH,
+       updated_at ya cambio y el PATCH afecta 0 filas: se detecta como perdida
+       de la carrera en vez de sobreescribir en silencio los valores del que
+       cerro primero. Mecanismo SIN CAMBIOS respecto a antes de este hito. */
+    var r=await fetch(SB+'/rest/v1/caja_sesiones?id=eq.'+sesion.id+'&updated_at=eq.'+encodeURIComponent(sesion.updated_at),{method:'PATCH',headers:H,body:JSON.stringify({
       estado:'cerrada',fecha_cierre:registro.fecha_cierre,
       efectivo_esperado:registro.efectivo_esperado,efectivo_real:registro.efectivo_real,
       banco_esperado:registro.banco_esperado,banco_real:registro.banco_real,
@@ -10673,6 +10865,7 @@ async function confirmarCierreCaja(efEsperado, baEsperado){
       toast('Error al cerrar la caja — no se guardó');
       await syncCajaDesdeSupabase();
       renderCajaBtn();
+      if(btn){btn.disabled=false;btn.textContent='🔒 Confirmar cierre de caja';}
       return;
     }
     var afectadas=await r.json();
@@ -10682,13 +10875,21 @@ async function confirmarCierreCaja(efEsperado, baEsperado){
       renderCajaBtn();
       return;
     }
-    /* Confirmado por Supabase: ahora si se refleja en memoria y UI */
-    await syncCajaDesdeSupabase();
+    /* Confirmado por Supabase: mostrar el recibo YA — no esperar el resync
+       de historial (90 filas), que no aporta nada a lo que el usuario
+       necesita ver de inmediato. syncCajaDesdeSupabase() corre en segundo
+       plano, sin await, solo para refrescar CAJA_ACTUAL/CAJA_HISTORIAL para
+       el resto de la UI; su propio guard interno no bloquea este caso (solo
+       se auto-bloquea durante el flujo de CORRECCION de un cierre) y nunca
+       puede "revivir" la sesion que acabamos de cerrar porque lee el estado
+       real desde Supabase, donde ya quedo 'cerrada'. */
     var al=document.getElementById('cajaAlertBanner');if(al)al.remove();
     showCierreExport(registro);
+    syncCajaDesdeSupabase();
   }catch(e){
     console.error('Error al cerrar caja:',e);
     toast('Error al cerrar la caja — no se guardó');
+    if(btn){btn.disabled=false;btn.textContent='🔒 Confirmar cierre de caja';}
   }
 }
 
@@ -10705,8 +10906,8 @@ function showCierreExport(r){
   var waText='🔒 CIERRE DE CAJA — La Cava Licorera\n'
     +'📅 '+fa+' → '+fc+'\n'
     +'📦 Ventas del turno: '+r.num_ventas+'\n'
-    +'💵 Efectivo real: '+fmt(r.efectivo_real)+' (esp: '+fmt(r.efectivo_esperado)+') dif: '+(difEf>=0?'+':'')+fmt(difEf)+'\n'
-    +'🏦 Banco real: '+fmt(r.banco_real)+' (esp: '+fmt(r.banco_esperado)+') dif: '+(difBa>=0?'+':'')+fmt(difBa)+'\n'
+    +'💵 Efectivo real: '+fmt(r.efectivo_real)+' (al cierre: '+fmt(r.efectivo_esperado)+') dif: '+(difEf>=0?'+':'')+fmt(difEf)+'\n'
+    +'🏦 Banco real: '+fmt(r.banco_real)+' (al cierre: '+fmt(r.banco_esperado)+') dif: '+(difBa>=0?'+':'')+fmt(difBa)+'\n'
     +(cuadro?'✅ Caja cuadró perfectamente':'⚠️ Hay diferencias en caja');
   d.innerHTML=
     '<div style="text-align:center;padding:10px 0 14px;">'
@@ -10720,6 +10921,7 @@ function showCierreExport(r){
       +'<div style="display:flex;justify-content:space-between;margin-bottom:5px;"><span>🏦 Banco real</span><span style="font-weight:700;color:'+(difBa<0?'#dc2626':'#16a34a')+';">'+fmt(r.banco_real)+'</span></div>'
       +'<div style="display:flex;justify-content:space-between;font-size:12px;"><span style="color:var(--text3);">Diferencia</span><span style="font-weight:700;color:'+(difBa===0?'#16a34a':difBa>0?'#B8860B':'#dc2626')+';">'+(difBa>=0?'+':'')+fmt(difBa)+'</span></div>'
     +'</div>'
+    +(r.cartera_pendiente!=null?'<div style="display:flex;justify-content:space-between;margin-bottom:12px;font-size:12px;color:var(--text2);background:var(--bg);border-radius:8px;padding:8px 12px;"><span>📋 Cartera pendiente <span style="color:var(--text3);">(informativo)</span></span><span style="font-weight:700;">'+fmt(r.cartera_pendiente)+'</span></div>':'')
     +'<div style="display:flex;gap:8px;margin-bottom:8px;">'
       +'<button onclick="imprimirCierre()" style="flex:1;padding:10px;border:1.5px solid var(--border);border-radius:var(--r);background:#fff;font-size:13px;font-family:inherit;cursor:pointer;font-weight:700;">&#128424; Imprimir</button>'
       +'<a href="https://wa.me/'+(typeof CAVA_WA!=='undefined'?CAVA_WA:'')+'?text='+encodeURIComponent(waText)+'" target="_blank" style="flex:1;padding:10px;border:none;border-radius:var(--r);background:#25D366;color:#fff;font-size:13px;font-family:inherit;cursor:pointer;font-weight:700;text-decoration:none;text-align:center;display:flex;align-items:center;justify-content:center;">&#128172; WhatsApp</a>'
@@ -11880,10 +12082,14 @@ async function cargarCarteraCompletaSB(){
    alta), NUNCA se borra el abono ni se inventa un rollback: se devuelve
    saldoConfirmado:false para que el llamador lo documente y el usuario actualice
    Cartera — el siguiente abono (o refresco) volvera a recalcular el saldo real. */
-async function registrarAbonoCarteraSB(carteraSbId, ventaId, monto, fechaISO){
+async function registrarAbonoCarteraSB(carteraSbId, ventaId, monto, fechaISO, medioPago){
   var GH={'apikey':SK,'Authorization':'Bearer '+SK};
+  /* HITO 6.17.1: persiste el medio de pago original (efectivo/transferencia/nequi/daviplata)
+     ya recolectado y validado en confirmarAbonoModal() — antes se descartaba aqui mismo. NO
+     se guarda un "destino financiero" (EFECTIVO/BANCO): ese mapeo se deriva centralizadamente
+     en un sub-hito posterior, nunca se persiste. */
   var rA=await fetch(SB+'/rest/v1/cartera_abonos',{method:'POST',headers:H,body:JSON.stringify({
-    id_licencia:CID,cartera_id:carteraSbId,venta_id:ventaId,monto:monto,fecha:fechaISO,registrado_por:'pos'
+    id_licencia:CID,cartera_id:carteraSbId,venta_id:ventaId,monto:monto,fecha:fechaISO,registrado_por:'pos',medio_pago:medioPago
   })});
   if(!rA.ok){ console.error('Error al registrar abono en Supabase:', await rA.text()); return {ok:false,motivo:'insert'}; }
   var abonoArr=await rA.json();
@@ -12006,7 +12212,7 @@ async function confirmarAbonoModal(){
 
     /* PASO 2+3 — Registrar el abono y actualizar el saldo (concurrencia segura) */
     var fechaISO=new Date(fechaInp+'T12:00:00').toISOString();
-    var res=await registrarAbonoCarteraSB(carteraId, cartera.venta_id, monto, fechaISO);
+    var res=await registrarAbonoCarteraSB(carteraId, cartera.venta_id, monto, fechaISO, medioPago);
     if(!res.ok){
       toast('Error al registrar el abono — no se guardó, el saldo no cambió');
       btn.disabled=false;btn.textContent='Confirmar abono';
