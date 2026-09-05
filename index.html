@@ -1066,11 +1066,11 @@ body.pos-sb-off .pos-sb-btn{background:var(--gold-s);border-color:var(--gold-b);
                 <div class="nc-label">Producto</div>
                 <input type="text" id="compraSearchProd" placeholder="🔍 Buscar producto..." oninput="filtrarProductosCompra()" style="width:100%;border:1.5px solid var(--border);border-radius:8px;padding:8px 12px;font-size:12px;font-family:inherit;outline:none;margin-bottom:8px;"/>
                 <div id="compraCategFiltros" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;overflow-x:auto;padding-bottom:4px;"></div>
-                <select class="nc-input" id="compraAddProd" style="margin-bottom:0;" onchange="autoFillCosto(this.value)"><option value="">Seleccionar producto...</option></select>
+                <select class="nc-input" id="compraAddProd" style="margin-bottom:0;" onchange="autoFillCosto(this.value);actualizarPreviewCompra();"><option value="">Seleccionar producto...</option></select>
               </div>
               <div>
                 <div class="nc-label">Cantidad</div>
-                <input class="nc-input" type="number" id="compraAddQty" placeholder="0" min="1" style="margin-bottom:0;"/>
+                <input class="nc-input" type="number" id="compraAddQty" placeholder="0" min="1" style="margin-bottom:0;" oninput="actualizarPreviewCompra()"/>
               </div>
               <div>
                 <div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px;">Tipo de ingreso</div>
@@ -1082,7 +1082,7 @@ body.pos-sb-off .pos-sb-btn{background:var(--gold-s);border-color:var(--gold-b);
                 </div>
                 <div id="tipoCompraUdsWrap" style="margin-top:2px;display:none;">
                   <div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px;">Unidades por <span id="tipoCompraUdsLabel">empaque</span></div>
-                  <input class="inv-modal-input" type="number" id="tipoCompraUds" placeholder="6" min="2" value="6" style="margin-bottom:0;width:100px;"/>
+                  <input class="inv-modal-input" type="number" id="tipoCompraUds" placeholder="6" min="2" value="6" style="margin-bottom:0;width:100px;" oninput="actualizarPreviewCompra()"/>
                 </div>
                 <!-- hidden select mantiene compatibilidad con código existente -->
                 <select id="compraAddTipo" style="display:none;">
@@ -1092,7 +1092,7 @@ body.pos-sb-off .pos-sb-btn{background:var(--gold-s);border-color:var(--gold-b);
               </div>
               <div>
                 <div class="nc-label">Costo unit.</div>
-                <input class="nc-input" type="number" id="compraAddCosto" placeholder="$0" min="0" style="margin-bottom:0;" oninput="calcPrecioVenta('compraAddCosto','compraMargen','compraAddPV')"/>
+                <input class="nc-input" type="number" id="compraAddCosto" placeholder="$0" min="0" style="margin-bottom:0;" oninput="calcPrecioVenta('compraAddCosto','compraMargen','compraAddPV');actualizarPreviewCompra();"/>
               </div>
               <div>
                 <div class="nc-label">% Margen</div>
@@ -1107,6 +1107,8 @@ body.pos-sb-off .pos-sb-btn{background:var(--gold-s);border-color:var(--gold-b);
                 <button class="add-item-btn" onclick="addItemCompra()">Agregar</button>
               </div>
             </div>
+            <!-- HITO 6.18.5: vista previa en vivo de la linea antes de agregarla -->
+            <div id="compraItemPreview" style="display:none;background:#fff;border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:14px;"></div>
             <div id="compraItemsList">
               <div style="text-align:center;padding:30px;color:#9CA3AF;font-size:13px;">Agrega productos a la orden</div>
             </div>
@@ -1751,6 +1753,20 @@ body.pos-sb-off .pos-sb-btn{background:var(--gold-s);border-color:var(--gold-b);
   <div style="background:#fff;border-radius:16px;max-width:320px;width:100%;padding:24px;position:relative;animation:popIn .3s cubic-bezier(.34,1.56,.64,1);">
     <div onclick="cerrarDetalleCosto()" style="position:absolute;top:14px;right:16px;cursor:pointer;font-size:22px;color:var(--text3);line-height:1;">&#215;</div>
     <div id="dcContent"></div>
+  </div>
+</div>
+
+<!-- MODAL CONFIRMACION DE LINEA DE COMPRA (HITO 6.18.5) — bloquea el agregado cuando
+     tipo=unidad+uds_empaque>1 produce una conversion de costo, o cuando el costo resultante
+     supera el precio de venta. NO cambia la formula financiera, solo exige confirmacion visible. -->
+<div id="modalConfirmCompraItem" style="display:none;position:fixed;inset:0;z-index:10002;align-items:center;justify-content:center;padding:20px;background:rgba(0,0,0,.55);">
+  <div style="background:#fff;border-radius:16px;max-width:420px;width:100%;padding:24px;animation:popIn .3s cubic-bezier(.34,1.56,.64,1);max-height:90vh;overflow-y:auto;">
+    <div style="font-size:16px;font-weight:700;margin-bottom:4px;">&#9888; Confirmar costo de esta linea</div>
+    <div id="confirmCompraItemBody"></div>
+    <div style="display:flex;gap:10px;margin-top:16px;">
+      <button onclick="confirmarCompraItemDesdeModal()" style="flex:1;padding:12px;background:var(--gold-l);color:#fff;border:none;border-radius:9px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;">Confirmar y agregar</button>
+      <button onclick="cancelarConfirmacionCompraItem()" style="padding:12px 20px;background:var(--bg);color:var(--text2);border:1.5px solid var(--border);border-radius:9px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;">Cancelar</button>
+    </div>
   </div>
 </div>
 
@@ -3876,7 +3892,7 @@ async function doVenta(){
       var resGasto=await crearGastoDomicilioSB(v,domicilio);
       if(!resGasto.ok) toast('Venta registrada correctamente, pero el gasto de domicilio no se pudo registrar. Debes registrarlo manualmente.');
     }
-    if(esCartera&&saldoVal>0){saveCarteraLocal(v.id,cn,cw,total,abonoVal,saldoVal,fechaVence,v.numero_venta);}
+    if(esCartera&&saldoVal>0){saveCarteraLocal(v.id,cn,cw,total,abonoVal,saldoVal,fechaVence,v.numero_venta,pago);}
     await upsertCli(cn,cw,cdir,cdet,total,pts,cid);
     if(cw&&pts>0)procesarPuntosPorVenta(v,total,pts,cn,cw);
     lastVenta={id:v.id,numero:v.numero_venta,total:total,subtotal:subtotal,domicilio:domicilio,descuento:descFactura,cliente:cn,wa:cw,puntos:pts,pago:pago,items:cart.slice(),dir:cdir,det:cdet};
@@ -6300,6 +6316,7 @@ function setTipoCompra(tipo) {
   // Refrescar costo/PV al cambiar de presentacion, si ya hay un producto seleccionado
   var prodSel = document.getElementById('compraAddProd');
   if(prodSel && prodSel.value) autoFillCosto(prodSel.value);
+  if(typeof actualizarPreviewCompra==='function') actualizarPreviewCompra();
 }
 
 /* ---- CAMBIO 7: Buscador + categorías en selección de productos ---- */
@@ -6699,21 +6716,42 @@ async function guardarCompra(estadoDeseado){
   reactivarBotones();
 }
 
+/* HITO 6.18.6 — unidades fisicas que entran al inventario por UNA linea de compra.
+   Calculada UNA SOLA VEZ, explicita, a partir de la presentacion de LA COMPRA
+   (item.qty x item.uds_empaque, mas las sueltas que no completaron un empaque).
+   NUNCA depende de la configuracion actual del producto — eso es un dato distinto
+   (ver aplicarCompraAInventarioPrincipal/Bodega). item.qty ya viene dividido por
+   item.uds_empaque desde calcularItemCompra() (HITO 6.18.5), asi que este producto
+   es exactamente "cuantas unidades fisicas llegaron", sin importar como se cuenten
+   despues en el pool del producto. */
+function unidadesFisicasDeCompra(item){
+  return item.qty*(item.uds_empaque||1)+(item.sueltas||0);
+}
+
 /* Aplica el efecto de una compra sobre el INVENTARIO PRINCIPAL, reutilizando el CAS
    ya existente (ajustarStockAtomicoSB) — nunca un PATCH directo sin condicion.
    HALLAZGO corregido: la version anterior de esta logica ignoraba item.sueltas
    (unidades sueltas calculadas al agregar el item cuando no completaban un empaque),
    perdiendolas silenciosamente. Ahora se conservan con el mismo modelo de "pool"
-   ya validado en HITO 6.1/6.3: total = stock*uds_empaque + uds_sueltas. */
+   ya validado en HITO 6.1/6.3: total = stock*uds_empaque + uds_sueltas.
+   HITO 6.18.6 — SEGUNDO HALLAZGO corregido: la version anterior expandia el pool
+   YA EXISTENTE (stockAct/sueltasAct) usando item.uds_empaque (la presentacion de
+   ESTA compra), en vez de la configuracion REAL del producto (udsEmpAct, la misma
+   unidad en la que ese stock ya estaba contado). Cuando ambas coincidian el
+   resultado era correcto por coincidencia; cuando diferian (ej. Noule Cream:
+   producto uds_empaque=1, compra registrada como caja de 24) el pool existente se
+   reinterpretaba con la unidad equivocada — una cancelacion algebraica accidental
+   que solo quedaba oculta si el stock previo era 0. Ahora el pool (antes y despues)
+   SIEMPRE se expresa en udsEmpAct (leido fresco por el propio CAS); las unidades
+   fisicas que entran se calculan aparte, una sola vez, con unidadesFisicasDeCompra(). */
 async function aplicarCompraAInventarioPrincipal(items){
   for(var i=0;i<items.length;i++){
     var item=items[i];
     var res=await ajustarStockAtomicoSB(item.prod_id,function(stockAct,sueltasAct,udsEmpAct){
-      var udsEmp=item.uds_empaque||udsEmpAct||1;
-      var totalAct=stockAct*udsEmp+sueltasAct;
-      var delta=item.qty*udsEmp+(item.sueltas||0);
-      var totalNuevo=totalAct+delta;
-      return {stock:Math.floor(totalNuevo/udsEmp), uds_sueltas:totalNuevo%udsEmp};
+      var udsEmpProducto=udsEmpAct||1;
+      var totalAct=stockAct*udsEmpProducto+sueltasAct;
+      var totalNuevo=totalAct+unidadesFisicasDeCompra(item);
+      return {stock:Math.floor(totalNuevo/udsEmpProducto), uds_sueltas:totalNuevo%udsEmpProducto};
     });
     if(!res.ok) return {ok:false, detalle:'no se pudo actualizar "'+item.nombre+'"'};
     if(item.costo>0){
@@ -6730,7 +6768,16 @@ async function aplicarCompraAInventarioPrincipal(items){
 }
 
 /* Aplica el efecto de una compra sobre INVENTARIO_BODEGA (HITO 6.3), NUNCA sobre
-   public.inventario. Reutiliza ajustarStockBodegaAtomicoSB tal cual — no duplica logica. */
+   public.inventario. Reutiliza ajustarStockBodegaAtomicoSB tal cual — no duplica logica.
+   HITO 6.18.6: inventario_bodega no tiene columna uds_empaque propia — el pool
+   (antes y despues) se expresa SIEMPRE en el uds_empaque del PRODUCTO MAESTRO, nunca en
+   item.uds_empaque (la presentacion de ESTA compra). Las unidades fisicas que entran se
+   calculan aparte, una sola vez, con unidadesFisicasDeCompra().
+   HITO 6.18.8: el uds_empaque del producto maestro ahora se lee FRESCO desde Supabase
+   (nunca desde el array INVENTARIO en memoria, que puede estar desactualizado si otro
+   dispositivo cambio la configuracion del producto). Mismo patron exacto ya usado por la
+   reversion de bodega en eliminarCompra() (HITO 6.18.7) — misma fuente de verdad para
+   entrada y reversion, cerrando la asimetria detectada en la auditoria de ese hito. */
 async function aplicarCompraAInventarioBodega(items, idBodega){
   var GH={'apikey':SK,'Authorization':'Bearer '+SK};
   for(var i=0;i<items.length;i++){
@@ -6750,12 +6797,13 @@ async function aplicarCompraAInventarioBodega(items, idBodega){
         }
       }
     }
-    var udsEmp=item.uds_empaque||1;
+    var rProd=await fetch(SB+'/rest/v1/inventario?id=eq.'+item.prod_id+'&select=uds_empaque',{headers:GH});
+    var dProd=rProd.ok?await rProd.json():[];
+    var udsEmpProducto=dProd.length?(parseInt(dProd[0].uds_empaque)||1):1;
     var res=await ajustarStockBodegaAtomicoSB(idBodega, item.prod_id, function(stockAct,sueltasAct){
-      var totalAct=stockAct*udsEmp+sueltasAct;
-      var delta=item.qty*udsEmp+(item.sueltas||0);
-      var totalNuevo=totalAct+delta;
-      return {stock:Math.floor(totalNuevo/udsEmp), uds_sueltas:totalNuevo%udsEmp, precio_costo: item.costo>0?item.costo:undefined};
+      var totalAct=stockAct*udsEmpProducto+sueltasAct;
+      var totalNuevo=totalAct+unidadesFisicasDeCompra(item);
+      return {stock:Math.floor(totalNuevo/udsEmpProducto), uds_sueltas:totalNuevo%udsEmpProducto, precio_costo: item.costo>0?item.costo:undefined};
     });
     if(!res.ok) return {ok:false, detalle:'no se pudo actualizar "'+item.nombre+'" en la bodega'};
   }
@@ -6866,9 +6914,12 @@ function renderComprasList(){
     cont.innerHTML='<div style="text-align:center;padding:60px;color:#9CA3AF;"><div style="font-size:36px;margin-bottom:10px;">&#128230;</div><div>Sin ordenes de compra aun</div></div>';
     return;
   }
-  var PI={pendiente:'&#9203; Pendiente',recibida:'&#9989; Recibida',cancelada:'&#10060; Cancelada'};
-  var PC={pendiente:'#F59E0B',recibida:'#10B981',cancelada:'#EF4444'};
-  var PB={pendiente:'#FFFBEB',recibida:'#ECFDF5',cancelada:'#FEF2F2'};
+  /* HITO 6.18.9: 'eliminando' es el estado transicional de una eliminacion que quedo
+     incompleta — se muestra distinto para que el operador sepa que requiere revision
+     manual, nunca un reintento automatico desde el boton Eliminar. */
+  var PI={pendiente:'&#9203; Pendiente',recibida:'&#9989; Recibida',cancelada:'&#10060; Cancelada',eliminando:'&#9888; Requiere revisión'};
+  var PC={pendiente:'#F59E0B',recibida:'#10B981',cancelada:'#EF4444',eliminando:'#DC2626'};
+  var PB={pendiente:'#FFFBEB',recibida:'#ECFDF5',cancelada:'#FEF2F2',eliminando:'#FEF2F2'};
   var nombreBodegaCache=(typeof BODEGA_SB!=='undefined'&&BODEGA_SB&&BODEGA_SB.nombre)?BODEGA_SB.nombre:'Bodega secundaria';
   var DI={principal:'&#128230; Inventario principal', bodega_secundaria:'&#127970; '+nombreBodegaCache};
   cont.innerHTML = data.map(function(c){
@@ -7508,7 +7559,79 @@ function openEditProd(id){
 
 function closeEditProd(){document.getElementById('modalEditProd').style.display='none';editProdId=null;}
 
-/* addItemCompra -- version completa con empaque */
+/* ==================== HITO 6.18.5 — CALCULO PURO + VISTA PREVIA + CONFIRMACION ====================
+   La formula financiera NO cambia (verificada contra los casos A-E del hito: comprar por unidad
+   cuando uds_empaque>1 SIGUE derivando el costo de la presentacion completa a partir del costo
+   fisico por unidad — es lo que mantiene precio_costo consistente con costoEquivalente()/CMV/
+   Reportes en TODO el resto del sistema). Lo que cambia es que ahora esa conversion se muestra
+   explicitamente al operador ANTES de guardar, y exige confirmacion cuando: (a) tipo=unidad y
+   uds_empaque>1 provoca una multiplicacion del costo ingresado, o (b) el costo resultante supera
+   el precio de venta actual (margen negativo). Nunca corrige ni toca datos ya guardados. */
+function calcularItemCompra(prod, tipo, qty, costo, udsEmp){
+  var qtyEmpaques, sueltas=0, costoPorEmpaque, subtotal;
+  if(tipo==='unidad'&&udsEmp>1){
+    /* El usuario compró unidades sueltas → convertir a empaques */
+    qtyEmpaques=Math.floor(qty/udsEmp);
+    sueltas=qty%udsEmp;
+    costoPorEmpaque=Math.round(costo*udsEmp); /* costo unit × uds = costo empaque */
+    subtotal=qty*costo;                        /* dinero = unidades × precio/unidad */
+  } else {
+    /* El usuario compró empaques (sixpack/caja/empaque) o producto de unidad simple */
+    qtyEmpaques=qty;
+    costoPorEmpaque=costo;                     /* costo ingresado ES el costo del empaque */
+    subtotal=qty*costo;                        /* dinero = empaques × precio/empaque */
+  }
+  return {
+    qtyEmpaques:qtyEmpaques, sueltas:sueltas, costoPorEmpaque:costoPorEmpaque, subtotal:subtotal,
+    unidadesFisicas:qtyEmpaques*udsEmp+sueltas,
+    huboMultiplicacion:(tipo==='unidad'&&udsEmp>1&&costo>0),
+    margenNegativo:!!(prod&&prod.precio_venta>0&&costoPorEmpaque>prod.precio_venta)
+  };
+}
+
+function _filaPreviewCompra(label,val){
+  return '<div style="display:flex;justify-content:space-between;padding:3px 0;font-size:12px;"><span style="color:var(--text3);">'+label+'</span><span style="font-weight:600;">'+val+'</span></div>';
+}
+function _pluralTipoCompra(tipo,qty){
+  var singular=tipo==='unidad'?'unidad':tipo==='sixpack'?'six pack':tipo==='caja'?'caja':'empaque';
+  if(qty===1) return singular;
+  return tipo==='unidad'?'unidades':tipo==='sixpack'?'six packs':tipo==='caja'?'cajas':'empaques';
+}
+
+/* Vista previa en vivo, siempre visible mientras se llena el formulario. Solo lectura, no agrega nada. */
+function actualizarPreviewCompra(){
+  var prev=document.getElementById('compraItemPreview');
+  if(!prev) return;
+  var prodId=document.getElementById('compraAddProd').value;
+  var tipo=tipoCompraActual||'unidad';
+  var qty=parseInt(document.getElementById('compraAddQty').value)||0;
+  var costo=parseFloat(document.getElementById('compraAddCosto').value)||0;
+  var prod=prodId?INVENTARIO.find(function(p){return p.id===prodId;}):null;
+  if(!prod||!qty||!costo){ prev.style.display='none'; prev.innerHTML=''; return; }
+  var udsInpVal=parseInt(document.getElementById('tipoCompraUds')?document.getElementById('tipoCompraUds').value:0)||0;
+  var udsEmp=(tipo!=='unidad'&&udsInpVal>1)?udsInpVal:(prod.uds_empaque||1);
+  var r=calcularItemCompra(prod,tipo,qty,costo,udsEmp);
+  var tipoLbl=tipo==='unidad'?'unidad':tipo==='sixpack'?'six pack':tipo==='caja'?'caja':'empaque';
+  var html='<div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;">&#128065; Vista previa de esta línea</div>';
+  html+=_filaPreviewCompra('Costo ingresado', fmt(costo)+' por '+tipoLbl);
+  html+=_filaPreviewCompra('Tipo de compra', tipoLbl+(udsEmp>1?' ('+udsEmp+' und/'+tipoLbl+')':''));
+  html+=_filaPreviewCompra('Cantidad ingresada', qty+' '+_pluralTipoCompra(tipo,qty));
+  html+=_filaPreviewCompra('Unidades físicas resultantes', r.unidadesFisicas+' und'+(r.sueltas>0?' ('+r.qtyEmpaques+' paquetes + '+r.sueltas+' sueltas)':''));
+  html+=_filaPreviewCompra('Costo que se guardará', fmt(r.costoPorEmpaque));
+  html+=_filaPreviewCompra('Subtotal de esta línea', fmt(r.subtotal));
+  if(r.huboMultiplicacion){
+    html+='<div style="margin-top:8px;padding:8px 10px;background:var(--gold-s);border-radius:8px;font-size:11px;color:var(--gold);">Ingresaste '+fmt(costo)+' por unidad. Como este producto agrupa '+udsEmp+' unidades por presentación, se guardará '+fmt(r.costoPorEmpaque)+' como costo de la presentación completa ('+fmt(costo)+' × '+udsEmp+'). Verifica que '+fmt(costo)+' sea el precio de 1 unidad física, no el de la presentación completa.</div>';
+  }
+  if(r.margenNegativo){
+    html+='<div style="margin-top:8px;padding:8px 10px;background:var(--red-bg);border-radius:8px;font-size:11px;color:var(--red);font-weight:700;">Este costo ('+fmt(r.costoPorEmpaque)+') es mayor al precio de venta actual ('+fmt(prod.precio_venta)+'). El producto quedaría con margen negativo.</div>';
+  }
+  prev.innerHTML=html;
+  prev.style.display='block';
+}
+
+var _pendingItemCompra=null;
+
+/* addItemCompra -- version con calculo puro (calcularItemCompra) + confirmacion cuando hay riesgo */
 function addItemCompra(){
   var prodId=document.getElementById('compraAddProd').value;
   var tipo=tipoCompraActual||'unidad';
@@ -7522,36 +7645,62 @@ function addItemCompra(){
   var udsInpVal=parseInt(document.getElementById('tipoCompraUds')?document.getElementById('tipoCompraUds').value:0)||0;
   var udsEmp=(tipo!=='unidad'&&udsInpVal>1)?udsInpVal:(prod.uds_empaque||1);
 
-  /* ── Calcular empaques a sumar al stock y costo por empaque ── */
-  var qtyEmpaques, sueltas=0;
-  var costoPorEmpaque; /* SIEMPRE en términos del empaque → es lo que se guarda como precio_costo */
-  var subtotal;       /* dinero total gastado en esta entrada */
-
-  if(tipo==='unidad'&&udsEmp>1){
-    /* El usuario compró unidades sueltas → convertir a empaques */
-    qtyEmpaques=Math.floor(qty/udsEmp);
-    sueltas=qty%udsEmp;
-    costoPorEmpaque=Math.round(costo*udsEmp); /* costo unit × uds = costo empaque */
-    subtotal=qty*costo;                        /* dinero = unidades × precio/unidad */
-  } else {
-    /* El usuario compró empaques (sixpack/caja/empaque) o producto de unidad simple */
-    qtyEmpaques=qty;
-    costoPorEmpaque=costo;                     /* costo ingresado ES el costo del empaque */
-    subtotal=qty*costo;                        /* dinero = empaques × precio/empaque */
-  }
+  var r=calcularItemCompra(prod,tipo,qty,costo,udsEmp);
 
   var tipoLabel=tipo==='unidad'?'und':tipo==='sixpack'?'six':tipo==='caja'?'caja':'emp';
   var label=qty+' '+tipoLabel+(udsEmp>1&&tipo!=='unidad'?' (×'+udsEmp+' und)':'');
-  if(sueltas>0)label+=' +'+sueltas+' sueltas';
+  if(r.sueltas>0)label+=' +'+r.sueltas+' sueltas';
 
-  var existing=itemsCompra.find(function(i){return i.prod_id===prodId;});
+  var itemData={prod_id:prodId,nombre:prod.nombre,qty:r.qtyEmpaques,costo:r.costoPorEmpaque,subtotal:r.subtotal,label_qty:label,tipo:tipo,uds_empaque:udsEmp,sueltas:r.sueltas};
+
+  if(r.huboMultiplicacion||r.margenNegativo){
+    _pendingItemCompra=itemData;
+    var tipoLbl=tipo==='unidad'?'unidad':tipo==='sixpack'?'six pack':tipo==='caja'?'caja':'empaque';
+    var html='<div style="font-size:13px;color:var(--text2);margin:10px 0 14px;">Verifica los datos de esta línea antes de agregarla a la compra:</div>';
+    html+='<div style="background:var(--bg);border-radius:10px;padding:12px 14px;margin-bottom:12px;">';
+    html+=_filaPreviewCompra('Producto', prod.nombre);
+    html+=_filaPreviewCompra('Costo ingresado', fmt(costo)+' por '+tipoLbl);
+    html+=_filaPreviewCompra('Cantidad ingresada', qty+' '+_pluralTipoCompra(tipo,qty));
+    html+=_filaPreviewCompra('Unidades físicas resultantes', r.unidadesFisicas+' und'+(r.sueltas>0?' ('+r.qtyEmpaques+' paquetes + '+r.sueltas+' sueltas)':''));
+    html+=_filaPreviewCompra('Costo que se guardará', fmt(r.costoPorEmpaque));
+    html+=_filaPreviewCompra('Subtotal de esta línea', fmt(r.subtotal));
+    html+='</div>';
+    if(r.huboMultiplicacion){
+      html+='<div style="padding:10px 12px;background:var(--gold-s);border-radius:8px;font-size:12px;color:var(--gold);margin-bottom:10px;"><strong>Conversión aplicada:</strong> ingresaste '+fmt(costo)+' como costo de <strong>1 unidad física</strong>. Como este producto agrupa '+udsEmp+' unidades en su presentación, se guardará <strong>'+fmt(r.costoPorEmpaque)+'</strong> como costo de la presentación completa ('+fmt(costo)+' × '+udsEmp+'). Si en realidad '+fmt(costo)+' era el precio de la presentación completa (no de 1 unidad), cancela y vuelve a ingresar el costo dividido entre '+udsEmp+'.</div>';
+    }
+    if(r.margenNegativo){
+      html+='<div style="padding:10px 12px;background:var(--red-bg);border-radius:8px;font-size:12px;color:var(--red);font-weight:700;margin-bottom:10px;">Este costo ('+fmt(r.costoPorEmpaque)+') es MAYOR al precio de venta actual del producto ('+fmt(prod.precio_venta)+'). Si continúas, el producto quedará con margen negativo.</div>';
+    }
+    document.getElementById('confirmCompraItemBody').innerHTML=html;
+    document.getElementById('modalConfirmCompraItem').style.display='flex';
+    return;
+  }
+
+  _agregarItemCompraAlCarrito(itemData);
+}
+
+function cancelarConfirmacionCompraItem(){
+  document.getElementById('modalConfirmCompraItem').style.display='none';
+  _pendingItemCompra=null;
+}
+
+function confirmarCompraItemDesdeModal(){
+  if(!_pendingItemCompra) return;
+  document.getElementById('modalConfirmCompraItem').style.display='none';
+  _agregarItemCompraAlCarrito(_pendingItemCompra);
+  _pendingItemCompra=null;
+}
+
+function _agregarItemCompraAlCarrito(itemData){
+  var existing=itemsCompra.find(function(i){return i.prod_id===itemData.prod_id;});
   if(existing){
-    existing.qty+=qtyEmpaques;
-    existing.costo=costoPorEmpaque;   /* actualiza al costo más reciente */
-    existing.subtotal+=subtotal;
-    existing.label_qty=existing.qty+' '+tipoLabel+(udsEmp>1&&tipo!=='unidad'?' empaques':'');
+    existing.qty+=itemData.qty;
+    existing.costo=itemData.costo;   /* actualiza al costo más reciente */
+    existing.subtotal+=itemData.subtotal;
+    var tipoLabel=itemData.tipo==='unidad'?'und':itemData.tipo==='sixpack'?'six':itemData.tipo==='caja'?'caja':'emp';
+    existing.label_qty=existing.qty+' '+tipoLabel+(itemData.uds_empaque>1&&itemData.tipo!=='unidad'?' empaques':'');
   } else {
-    itemsCompra.push({prod_id:prodId,nombre:prod.nombre,qty:qtyEmpaques,costo:costoPorEmpaque,subtotal:subtotal,label_qty:label,tipo:tipo,uds_empaque:udsEmp,sueltas:sueltas});
+    itemsCompra.push(itemData);
   }
   document.getElementById('compraAddQty').value='';
   document.getElementById('compraAddCosto').value='';
@@ -7562,6 +7711,7 @@ function addItemCompra(){
   setTipoCompra('unidad');
   filtrarProductosCompra();
   renderItemsCompra();
+  actualizarPreviewCompra();
 }
 
 /* ==================== SHADOW WRITE — Presentaciones (SPRINT 1 / HITO 9.1) ====================
@@ -8190,7 +8340,7 @@ function renderFlujoCaja(){
     }).join('')
     +'</div>'
     +'<div style="border-top:1px solid var(--border);padding-top:12px;display:flex;justify-content:space-between;align-items:center;">'
-      +'<span style="font-size:13px;font-weight:600;color:var(--text2);">&#128178; Total en caja este periodo</span>'
+      +'<span style="font-size:13px;font-weight:600;color:var(--text2);">&#128178; Total facturado del periodo</span>'
       +'<span style="font-size:20px;font-weight:800;color:var(--green);">'+fmt(totalGeneral)+'</span>'
     +'</div>'
   +'</div>';
@@ -8519,7 +8669,33 @@ async function eliminarCliente(id, nombreEnc, waEnc){
    antes SIEMPRE revertía sobre public.inventario sin importar el destino, lo cual
    habría inflado el inventario principal al eliminar una compra que en realidad
    entró a la bodega secundaria. Ahora relee todo fresco desde Supabase (nunca del
-   array local COMPRAS/INVENTARIO) y usa el CAS que corresponda segun destino. */
+   array local COMPRAS/INVENTARIO) y usa el CAS que corresponda segun destino.
+   HITO 6.18.7: la reversion ahora es fisicamente simetrica con la entrada de 6.18.6.
+   ANTES: restaba item.qty (la presentacion de la compra) directo del stock, ignorando
+   uds_sueltas y el uds_empaque real del producto — si una compra entraba con una
+   presentacion distinta a la del producto (ej. Noule Cream: producto uds_empaque=1,
+   compra registrada como caja de 24), la entrada correcta suma unidades fisicas segun
+   el modelo de pool, pero esta reversion solo restaba item.qty (24), dejando stock
+   fantasma. AHORA reutiliza unidadesFisicasDeCompra(item) (la MISMA formula de 6.18.6,
+   sin duplicarla) y el modelo de pool (poolActual = stock*uds_empaque(PRODUCTO)+sueltas)
+   para retirar exactamente las mismas unidades fisicas que entraron — nunca reinterpreta
+   el stock con la presentacion de la compra, nunca deja stock negativo silencioso.
+   HITO 6.18.9 — mitigacion real (no transaccion completa; ver informe) contra la falta de
+   atomicidad entre revertir inventario y borrar los registros. Antes de tocar inventario,
+   la compra toma posesion exclusiva con un PATCH condicionado (estado=eq.recibida ->
+   'eliminando'), el MISMO patron CAS que ajustarStockAtomicoSB usa desde HITO 6.4: Postgres
+   garantiza que solo UNA solicitud concurrente puede ganar ese PATCH; la otra recibe 0 filas
+   y aborta sin tocar nada (cierra doble-clic y dos pestañas). Si el proceso falla DESPUES de
+   revertir aunque sea un producto, la compra queda visible en 'eliminando' — nunca se
+   revierte ese estado automaticamente — y un reintento posterior se niega a reprocesarla
+   (cierra la doble reversion por reintento). Si falla ANTES de revertir nada (p.ej. la
+   compra ya no tiene inventario suficiente por un cambio concurrente), se libera de vuelta
+   a 'recibida' porque no hay nada que proteger todavia. Esto NO es una transaccion real: si
+   el producto 2 de una compra multi-producto falla despues de que el producto 1 ya se
+   revirtio, no hay rollback automatico del producto 1 — la compra queda en 'eliminando'
+   visible y no reprocesable, pendiente de revision manual. La solucion completa (rollback
+   automatico real) requiere una funcion RPC transaccional en Postgres, fuera del alcance de
+   lo que este entorno puede desplegar (ver informe HITO 6.18.9). */
 async function eliminarCompra(id){
   if(!confirm('¿Eliminar esta orden de compra?\nEsta acción no se puede deshacer.'))return;
   var GH={'apikey':SK,'Authorization':'Bearer '+SK};
@@ -8536,9 +8712,19 @@ async function eliminarCompra(id){
     var items=compraReal.compras_items||[];
     var idBodegaDel=null;
 
+    if(compraReal.estado==='eliminando'){
+      toast('Esta compra tiene una eliminación en curso o quedó incompleta anteriormente — no se puede reprocesar automáticamente para evitar revertir el inventario dos veces. Contacta soporte para revisarla manualmente.');
+      return;
+    }
+
     if(compraReal.estado==='recibida'&&items.length){
-      var qtyPorProducto={};
-      items.forEach(function(item){ qtyPorProducto[item.prod_id]=(qtyPorProducto[item.prod_id]||0)+(parseInt(item.qty)||0); });
+      /* HITO 6.18.7: unidades FISICAS a revertir por producto — misma formula que la
+         entrada (unidadesFisicasDeCompra), nunca la cantidad cruda de la compra. */
+      var unidadesFisicasPorProducto={};
+      items.forEach(function(item){
+        unidadesFisicasPorProducto[item.prod_id]=(unidadesFisicasPorProducto[item.prod_id]||0)+unidadesFisicasDeCompra(item);
+      });
+      var udsEmpPorProductoBod={}; /* solo para destino bodega: uds_empaque del producto maestro, leido FRESCO */
 
       var insuficientes=[];
       if(compraReal.destino==='bodega_secundaria'){
@@ -8546,56 +8732,105 @@ async function eliminarCompra(id){
         var dB=rB.ok?await rB.json():[];
         if(!dB.length){ toast('No se pudo verificar la bodega secundaria — no se eliminó'); return; }
         idBodegaDel=dB[0].id;
-        for(var pid in qtyPorProducto){
-          var rP=await fetch(SB+'/rest/v1/inventario_bodega?id_licencia=eq.'+CID+'&id_bodega=eq.'+idBodegaDel+'&prod_id=eq.'+pid+'&select=stock',{headers:GH});
+        for(var pid in unidadesFisicasPorProducto){
+          var rP=await fetch(SB+'/rest/v1/inventario_bodega?id_licencia=eq.'+CID+'&id_bodega=eq.'+idBodegaDel+'&prod_id=eq.'+pid+'&select=stock,uds_sueltas',{headers:GH});
           var dP=rP.ok?await rP.json():[];
-          var stockReal=dP.length?(parseInt(dP[0].stock)||0):0;
-          if(stockReal<qtyPorProducto[pid]){
+          /* inventario_bodega no tiene columna uds_empaque propia — se lee FRESCO del
+             producto maestro (nunca del array local INVENTARIO), mismo patron de 6.18.6. */
+          var rProd=await fetch(SB+'/rest/v1/inventario?id=eq.'+pid+'&select=uds_empaque',{headers:GH});
+          var dProd=rProd.ok?await rProd.json():[];
+          var udsEmpProdBod=dProd.length?(parseInt(dProd[0].uds_empaque)||1):1;
+          udsEmpPorProductoBod[pid]=udsEmpProdBod;
+          var poolReal=dP.length?((parseInt(dP[0].stock)||0)*udsEmpProdBod+(parseInt(dP[0].uds_sueltas)||0)):0;
+          if(poolReal<unidadesFisicasPorProducto[pid]){
             var itemInfo=items.find(function(i){return i.prod_id===pid;});
-            insuficientes.push((itemInfo?itemInfo.nombre:pid)+' (disponible en bodega: '+stockReal+', requerido: '+qtyPorProducto[pid]+')');
+            insuficientes.push((itemInfo?itemInfo.nombre:pid)+' (disponible en bodega: '+poolReal+' unidades físicas, requerido: '+unidadesFisicasPorProducto[pid]+')');
           }
         }
       } else {
-        for(var pid2 in qtyPorProducto){
-          var rP2=await fetch(SB+'/rest/v1/inventario?id=eq.'+pid2+'&id_licencia=eq.'+CID+'&select=stock',{headers:GH});
+        for(var pid2 in unidadesFisicasPorProducto){
+          var rP2=await fetch(SB+'/rest/v1/inventario?id=eq.'+pid2+'&id_licencia=eq.'+CID+'&select=stock,uds_sueltas,uds_empaque',{headers:GH});
           var dP2=rP2.ok?await rP2.json():[];
-          var stockReal2=dP2.length?(parseInt(dP2[0].stock)||0):0;
-          if(stockReal2<qtyPorProducto[pid2]){
+          var udsEmpProd2=dP2.length?(parseInt(dP2[0].uds_empaque)||1):1;
+          var poolReal2=dP2.length?((parseInt(dP2[0].stock)||0)*udsEmpProd2+(parseInt(dP2[0].uds_sueltas)||0)):0;
+          if(poolReal2<unidadesFisicasPorProducto[pid2]){
             var itemInfo2=items.find(function(i){return i.prod_id===pid2;});
-            insuficientes.push((itemInfo2?itemInfo2.nombre:pid2)+' (disponible: '+stockReal2+', requerido: '+qtyPorProducto[pid2]+')');
+            insuficientes.push((itemInfo2?itemInfo2.nombre:pid2)+' (disponible: '+poolReal2+' unidades físicas, requerido: '+unidadesFisicasPorProducto[pid2]+')');
           }
         }
       }
       if(insuficientes.length){
-        toast('No se puede eliminar: el inventario de esta compra ya fue utilizado — '+insuficientes.join('; '));
+        toast('Esta compra no puede eliminarse porque ya no existe suficiente inventario físico para revertir las unidades que ingresó. Revisa ventas o movimientos posteriores antes de eliminarla. ('+insuficientes.join('; ')+')');
         return;
       }
 
-      for(var pid3 in qtyPorProducto){
-        var qtyRevert=qtyPorProducto[pid3];
+      /* HITO 6.18.9: toma de posesion exclusiva ANTES de tocar inventario. Si dos pestañas
+         o dos clics intentan eliminar la misma compra a la vez, solo uno puede ganar este
+         PATCH condicionado — el otro recibe 0 filas afectadas y aborta sin tocar nada. */
+      var rTake=await fetch(SB+'/rest/v1/compras?id=eq.'+id+'&estado=eq.recibida',{method:'PATCH',headers:H,body:JSON.stringify({estado:'eliminando'})});
+      var tomada=rTake.ok?await rTake.json():[];
+      if(!rTake.ok||!tomada.length){
+        toast('Otro proceso ya está eliminando esta compra, o su estado cambió — actualiza e inténtalo de nuevo.');
+        await cargarComprasSB();renderComprasList();
+        return;
+      }
+      var algunaReversionAplicada=false;
+
+      for(var pid3 in unidadesFisicasPorProducto){
+        var unidadesRevert=unidadesFisicasPorProducto[pid3];
         var resRev;
         if(compraReal.destino==='bodega_secundaria'){
-          resRev=await ajustarStockBodegaAtomicoSB(idBodegaDel, pid3, (function(qr){return function(stockAct,sueltasAct){
-            if(stockAct<qr) return null;
-            return {stock:stockAct-qr, uds_sueltas:sueltasAct};
-          };})(qtyRevert));
+          resRev=await ajustarStockBodegaAtomicoSB(idBodegaDel, pid3, (function(uf,udsEmpProd){return function(stockAct,sueltasAct){
+            var poolActual=stockAct*udsEmpProd+sueltasAct;
+            if(poolActual<uf) return null;
+            var poolNuevo=poolActual-uf;
+            return {stock:Math.floor(poolNuevo/udsEmpProd), uds_sueltas:poolNuevo%udsEmpProd};
+          };})(unidadesRevert, udsEmpPorProductoBod[pid3]));
         } else {
-          resRev=await ajustarStockAtomicoSB(pid3, (function(qr){return function(stockAct,sueltasAct,udsEmpAct){
-            if(stockAct<qr) return null;
-            return {stock:stockAct-qr, uds_sueltas:sueltasAct};
-          };})(qtyRevert));
+          resRev=await ajustarStockAtomicoSB(pid3, (function(uf){return function(stockAct,sueltasAct,udsEmpAct){
+            var udsEmpProducto=udsEmpAct||1;
+            var poolActual=stockAct*udsEmpProducto+sueltasAct;
+            if(poolActual<uf) return null;
+            var poolNuevo=poolActual-uf;
+            return {stock:Math.floor(poolNuevo/udsEmpProducto), uds_sueltas:poolNuevo%udsEmpProducto};
+          };})(unidadesRevert));
         }
         if(!resRev.ok){
-          toast('No se pudo revertir el inventario de esta compra — no se eliminó. Actualiza e inténtalo de nuevo.');
+          if(algunaReversionAplicada){
+            /* Ya se revirtio inventario de al menos un producto: NO hay rollback automatico
+               posible sin una transaccion real. La compra queda en 'eliminando', visible y
+               no reprocesable, en vez de fingir que nada paso. */
+            toast('Se revirtió parte del inventario de esta compra pero no se pudo completar. Esta compra quedó en estado "eliminando" y requiere revisión manual — no se puede reintentar automáticamente desde aquí.');
+          } else {
+            /* Nada se toco todavia: es seguro liberar la posesion de vuelta a 'recibida'. */
+            await fetch(SB+'/rest/v1/compras?id=eq.'+id+'&estado=eq.eliminando',{method:'PATCH',headers:H,body:JSON.stringify({estado:'recibida'})});
+            if(resRev.motivo==='insuficiente'){
+              toast('Esta compra no puede eliminarse porque ya no existe suficiente inventario físico para revertir las unidades que ingresó. Revisa ventas o movimientos posteriores antes de eliminarla.');
+            } else {
+              toast('No se pudo revertir el inventario de esta compra — no se eliminó. Actualiza e inténtalo de nuevo.');
+            }
+          }
+          await cargarComprasSB();renderComprasList();
           return;
         }
+        algunaReversionAplicada=true;
       }
     }
 
     var rItemsDel=await fetch(SB+'/rest/v1/compras_items?compra_id=eq.'+id,{method:'DELETE',headers:H});
-    if(!rItemsDel.ok){ console.error('Error al eliminar items de compra:',await rItemsDel.text()); toast('No se pudieron eliminar los productos de la compra — revisa manualmente'); return; }
+    if(!rItemsDel.ok){
+      console.error('Error al eliminar items de compra:',await rItemsDel.text());
+      toast('El inventario ya fue revertido pero no se pudieron eliminar los productos de la compra. Esta compra quedó en estado "eliminando" y requiere revisión manual — no se puede reintentar automáticamente desde aquí.');
+      await cargarComprasSB();renderComprasList();
+      return;
+    }
     var rCompraDel=await fetch(SB+'/rest/v1/compras?id=eq.'+id,{method:'DELETE',headers:H});
-    if(!rCompraDel.ok){ console.error('Error al eliminar compra:',await rCompraDel.text()); toast('Error al eliminar la compra'); return; }
+    if(!rCompraDel.ok){
+      console.error('Error al eliminar compra:',await rCompraDel.text());
+      toast('El inventario ya fue revertido y los productos de la compra ya se eliminaron, pero no se pudo eliminar el registro de la compra. Esta compra quedó en estado "eliminando" y requiere revisión manual.');
+      await cargarComprasSB();renderComprasList();
+      return;
+    }
 
     await cargarComprasSB();
     if(compraReal.destino==='principal'){
@@ -10579,8 +10814,8 @@ async function crearGastoDomicilioSB(venta, domicilioValor){
    ninguna otra categoria de gasto se trae ni participa en Caja todavia. */
 async function obtenerMovimientosTurno(fechaAperturaISO){
   var GH={'apikey':SK,'Authorization':'Bearer '+SK};
-  var qVentas=SB+'/rest/v1/ventas?id_cliente=eq.'+CID+'&created_at=gte.'+encodeURIComponent(fechaAperturaISO)+'&estado=neq.canje&select=metodo_pago,total,abono,estado,domicilio,created_at';
-  var qAbonos=SB+'/rest/v1/cartera_abonos?id_licencia=eq.'+CID+'&created_at=gte.'+encodeURIComponent(fechaAperturaISO)+'&select=monto,medio_pago,created_at';
+  var qVentas=SB+'/rest/v1/ventas?id_cliente=eq.'+CID+'&created_at=gte.'+encodeURIComponent(fechaAperturaISO)+'&estado=neq.canje&select=id,metodo_pago,total,abono,estado,domicilio,created_at';
+  var qAbonos=SB+'/rest/v1/cartera_abonos?id_licencia=eq.'+CID+'&created_at=gte.'+encodeURIComponent(fechaAperturaISO)+'&select=venta_id,monto,medio_pago,created_at&order=created_at.asc';
   var qCartera=SB+'/rest/v1/cartera?id_licencia=eq.'+CID+'&estado_cartera=neq.pagada&select=saldo_pendiente';
   var qGastos=SB+'/rest/v1/gastos?id_licencia=eq.'+CID+'&categoria=eq.DOMICILIOS&created_at=gte.'+encodeURIComponent(fechaAperturaISO)+'&select=categoria,valor,medio_pago,created_at';
   var res=await Promise.all([fetch(qVentas,{headers:GH}),fetch(qAbonos,{headers:GH}),fetch(qCartera,{headers:GH}),fetch(qGastos,{headers:GH})]);
@@ -10597,19 +10832,51 @@ async function obtenerMovimientosTurno(fechaAperturaISO){
    BANCO — se acumula aparte, verificable en detalle.desconocidos. */
 function calcularCierreEsperado(efectivoInicial, bancoInicial, movimientos){
   var ventasEf=0, ventasBa=0, abonosEf=0, abonosBa=0, desconocidos=0, itemsDesconocidos=[];
+  /* El abono inicial de una venta a credito queda persistido en DOS sitios:
+     ventas.abono y una fila en cartera_abonos (la crea saveCarteraLocal). El
+     mismo peso no puede entrar dos veces, y quien manda sobre el DESTINO es el
+     medio de pago del abono, no el de la venta: una venta puede quedar marcada
+     'transferencia' y su abono inicial haberse recibido en efectivo (caso real
+     venta #752, HITO 6.17.5). Por eso los abonos se procesan PRIMERO y cada uno
+     se clasifica por SU propio medio_pago; la venta a credito solo aporta el
+     remanente de venta.abono que ninguna fila de abono llego a representar (por
+     ejemplo si el INSERT del abono fallo), asi el dinero nunca se pierde. */
+  var abonoEsperadoPorVenta={}, tieneEspejo={};
   movimientos.ventas.forEach(function(v){
-    var destino=resolverDestinoFinanciero(v.metodo_pago);
-    var monto=montoRealParaCaja(v);
-    if(destino==='EFECTIVO') ventasEf+=monto;
-    else if(destino==='BANCO') ventasBa+=monto;
-    else { desconocidos+=monto; itemsDesconocidos.push({tipo:'venta',metodo_pago:v.metodo_pago,monto:monto}); }
+    if(v.estado==='credito'&&v.id) abonoEsperadoPorVenta[v.id]=montoRealParaCaja(v);
+  });
+  /* La fila espejo que escribe saveCarteraLocal tiene SIEMPRE el monto exacto de
+     venta.abono. Por eso solo se reconoce como espejo el primer abono del turno
+     con ese venta_id y ese monto exacto — no se descuenta contra cualquier abono.
+     Asi, si el INSERT del espejo fallo y despues hubo otro abono de monto
+     distinto, la venta conserva su aporte y no se pierde dinero. */
+  movimientos.abonos.forEach(function(a){
+    var esperado=abonoEsperadoPorVenta[a.venta_id]||0;
+    if(esperado>0 && !tieneEspejo[a.venta_id] && Math.round(parseFloat(a.monto)||0)===Math.round(esperado)) tieneEspejo[a.venta_id]=true;
   });
   movimientos.abonos.forEach(function(a){
-    var destino=resolverDestinoFinanciero(a.medio_pago);
     var monto=parseFloat(a.monto)||0;
+    /* Compatibilidad hacia atras: filas escritas antes de que saveCarteraLocal
+       guardara medio_pago. Hereda el de su venta solo si esa venta esta en el
+       turno. Las filas nuevas siempre traen medio_pago propio. */
+    var medio=a.medio_pago;
+    if(!medio){
+      var vOrigen=null;
+      for(var i=0;i<movimientos.ventas.length;i++){ if(movimientos.ventas[i].id===a.venta_id){ vOrigen=movimientos.ventas[i]; break; } }
+      if(vOrigen) medio=vOrigen.metodo_pago;
+    }
+    var destino=resolverDestinoFinanciero(medio);
     if(destino==='EFECTIVO') abonosEf+=monto;
     else if(destino==='BANCO') abonosBa+=monto;
     else { desconocidos+=monto; itemsDesconocidos.push({tipo:'abono',medio_pago:a.medio_pago,monto:monto}); }
+  });
+  movimientos.ventas.forEach(function(v){
+    var monto=(v.estado==='credito') ? (tieneEspejo[v.id]?0:montoRealParaCaja(v)) : montoRealParaCaja(v);
+    if(monto<=0) return;
+    var destino=resolverDestinoFinanciero(v.metodo_pago);
+    if(destino==='EFECTIVO') ventasEf+=monto;
+    else if(destino==='BANCO') ventasBa+=monto;
+    else { desconocidos+=monto; itemsDesconocidos.push({tipo:'venta',metodo_pago:v.metodo_pago,monto:monto}); }
   });
   /* Regla de negocio explicita (ajuste domicilios): todo gasto de categoria
      DOMICILIOS descuenta SIEMPRE de BANCO. La decision es por 'categoria',
@@ -12415,7 +12682,7 @@ function _construirPDFComprobanteAbono(cartera,abono,abonadoAntes,totalAbonadoHa
   doc.save('Comprobante-Abono-'+numVenta.replace('#','')+'-'+fechaAbono.toISOString().slice(0,10)+'.pdf');
 }
 
-async function saveCarteraLocal(ventaId, cliente, wa, total, abono, saldo, fechaVence, numero){
+async function saveCarteraLocal(ventaId, cliente, wa, total, abono, saldo, fechaVence, numero, medioPago){
   /* Best-effort: no bloquea ni altera el flujo de doVenta() si Supabase falla. */
   try{
     var fechaCreacion=new Date().toISOString();
@@ -12428,7 +12695,9 @@ async function saveCarteraLocal(ventaId, cliente, wa, total, abono, saldo, fecha
     var created=await r.json();
     var sbId=created[0].id;
     if(abono>0){
-      var rA=await fetch(SB+'/rest/v1/cartera_abonos',{method:'POST',headers:H,body:JSON.stringify({id_licencia:CID,cartera_id:sbId,venta_id:ventaId,monto:abono,fecha:fechaCreacion,registrado_por:'pos'})});
+      /* medio_pago heredado del metodo de pago de la venta: el abono inicial
+         se recibe siempre por el mismo medio con el que se registro la venta. */
+      var rA=await fetch(SB+'/rest/v1/cartera_abonos',{method:'POST',headers:H,body:JSON.stringify({id_licencia:CID,cartera_id:sbId,venta_id:ventaId,monto:abono,fecha:fechaCreacion,registrado_por:'pos',medio_pago:medioPago||null})});
       if(!rA.ok) console.error('Error al registrar abono inicial en Supabase:', await rA.text());
     }
     await cargarCarteraCompletaSB();
