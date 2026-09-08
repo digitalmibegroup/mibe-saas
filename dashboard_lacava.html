@@ -8102,9 +8102,18 @@ async function guardarEditProd(){
   var stockCambio = st!==stockAnterior;
   var costoCambio = pc>0 && pc!==pcAnterior;
 
-  /* Confirmacion explicita ANTES de aplicar nada — nunca un efecto secundario silencioso */
+  /* Confirmacion explicita ANTES de aplicar nada — nunca un efecto secundario silencioso.
+     BUGFIX (incidente Noule Cream): declinar esta confirmacion debe cancelar UNICAMENTE
+     el cambio de costo — nunca los datos generales ni el stock, que son operaciones
+     independientes (ver bloques (1)/(2)/(3) mas abajo). Antes, un "return" aqui abortaba
+     la funcion COMPLETA, de modo que si el usuario tambien habia cambiado el stock en el
+     mismo formulario y declinaba (o mal-interpretaba) este popup de costo, el ajuste de
+     stock se perdia en silencio, sin ningun mensaje de error — exactamente el sintoma
+     reportado ("el ajuste de inventario no funciona"). */
   if(costoCambio){
-    if(!confirm('Vas a modificar el COSTO de "'+nombre.split(' ').slice(0,3).join(' ')+'" de '+fmt(pcAnterior)+' a '+fmt(pc)+'.\n\nEsta es una acción independiente del stock.\n\n¿Confirmas el cambio de costo?')) return;
+    if(!confirm('Vas a modificar el COSTO de "'+nombre.split(' ').slice(0,3).join(' ')+'" de '+fmt(pcAnterior)+' a '+fmt(pc)+'.\n\nEsta es una acción independiente del stock.\n\n¿Confirmas el cambio de costo?')){
+      costoCambio = false;
+    }
   }
 
   prod.nombre=nombre;prod.categoria=cat;prod.precio_venta=pv;prod.stock_min=sm;
