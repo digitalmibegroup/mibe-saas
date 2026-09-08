@@ -1073,9 +1073,9 @@ body.pos-sb-off .pos-sb-btn{background:var(--gold-s);border-color:var(--gold-b);
                 <input class="nc-input" type="number" id="compraAddQty" placeholder="0" min="1" style="margin-bottom:0;" oninput="actualizarPreviewCompra()"/>
               </div>
               <div>
-                <div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px;">Tipo de ingreso</div>
+                <div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px;">Presentación <span style="color:var(--red);">*</span></div>
                 <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px;">
-                  <button type="button" class="tipo-btn on" id="tbUnidad" onclick="setTipoCompra('unidad')">Unidad</button>
+                  <button type="button" class="tipo-btn" id="tbUnidad" onclick="setTipoCompra('unidad')">Unidad</button>
                   <button type="button" class="tipo-btn" id="tbSixpack" onclick="setTipoCompra('sixpack')">Six Pack</button>
                   <button type="button" class="tipo-btn" id="tbCaja" onclick="setTipoCompra('caja')">Caja</button>
                   <button type="button" class="tipo-btn" id="tbEmpaque" onclick="setTipoCompra('empaque')">Empaque</button>
@@ -1850,6 +1850,96 @@ body.pos-sb-off .pos-sb-btn{background:var(--gold-s);border-color:var(--gold-b);
   </div>
 </div>
 
+<!-- HITO 6.18.14-C — MODAL DETALLE DE COMPRA (solo lectura, misma estetica que modalVentaDet) -->
+<div id="modalCompraDet" style="position:fixed;inset:0;z-index:600;display:none;align-items:center;justify-content:center;padding:20px;background:rgba(0,0,0,.5);">
+  <div style="background:#fff;border-radius:18px;max-width:560px;width:100%;max-height:88vh;overflow-y:auto;animation:popIn .3s cubic-bezier(.34,1.56,.64,1);">
+    <div style="padding:24px 24px 0;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+        <div style="font-size:17px;font-weight:700;">Detalle de compra</div>
+        <div onclick="cerrarDetalleCompra()" style="cursor:pointer;font-size:20px;color:var(--text3);line-height:1;">&#215;</div>
+      </div>
+      <div id="compraDetMeta" style="font-size:12px;color:var(--text3);margin-bottom:16px;"></div>
+      <div id="compraDetItems" style="margin-bottom:16px;"></div>
+      <div id="compraDetTotales" style="background:var(--bg);border-radius:10px;padding:14px 16px;margin-bottom:16px;"></div>
+      <!-- HITO 6.18.14-D: mensaje de bloqueo cuando la compra no es editable en su estado actual -->
+      <div id="compraDetBloqueo" style="display:none;font-size:12px;color:var(--text2);background:var(--red-bg);border-radius:8px;padding:10px 12px;margin-bottom:16px;"></div>
+    </div>
+    <div style="padding:0 24px 24px;display:flex;gap:8px;">
+      <button id="btnEditarCompra" onclick="abrirEdicionCompra(_compraDetIdActual)" style="display:none;flex:1;padding:11px;border:none;border-radius:9px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;background:var(--accent);color:#fff;">&#9998; Editar</button>
+      <button onclick="cerrarDetalleCompra()" style="flex:1;padding:11px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;background:#fff;color:var(--text2);">Cerrar</button>
+    </div>
+  </div>
+</div>
+
+<!-- HITO 6.18.14-D — MODAL EDICION SEGURA DE COMPRA -->
+<div id="modalEditCompra" style="position:fixed;inset:0;z-index:650;display:none;align-items:center;justify-content:center;padding:20px;background:rgba(0,0,0,.5);">
+  <div style="background:#fff;border-radius:18px;max-width:620px;width:100%;max-height:90vh;overflow-y:auto;animation:popIn .3s cubic-bezier(.34,1.56,.64,1);">
+    <div style="padding:24px 24px 0;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+        <div style="font-size:17px;font-weight:700;">Editar compra</div>
+        <div onclick="cerrarEdicionCompra()" style="cursor:pointer;font-size:20px;color:var(--text3);line-height:1;">&#215;</div>
+      </div>
+      <div id="editCompraAviso" style="font-size:12px;color:var(--text3);margin-bottom:16px;"></div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+        <div>
+          <div class="nc-label">Proveedor</div>
+          <select class="nc-input" id="editCompraProveedor" style="margin-bottom:0;"><option value="">Sin proveedor</option></select>
+        </div>
+        <div>
+          <div class="nc-label">Fecha</div>
+          <input class="nc-input" type="date" id="editCompraFecha" style="margin-bottom:0;"/>
+        </div>
+      </div>
+      <div style="margin-bottom:10px;">
+        <div class="nc-label">Nota</div>
+        <input class="nc-input" type="text" id="editCompraNota" placeholder="Observaciones (opcional)" style="width:100%;margin-bottom:0;"/>
+      </div>
+
+      <!-- Solo visible en modo COMPLETA (compra pendiente) -->
+      <div id="editCompraSeccionCompleta" style="display:none;">
+        <div style="margin-bottom:14px;">
+          <div class="nc-label">Destino</div>
+          <select class="nc-input" id="editCompraDestino" style="width:100%;margin-bottom:0;border:1.5px solid var(--gold-b);">
+            <option value="">Seleccionar destino...</option>
+            <option value="principal">Inventario principal — La Cava Licorera</option>
+          </select>
+        </div>
+
+        <div class="nc-title" style="margin-bottom:8px;">&#128230; Productos</div>
+        <div id="editCompraItemsList" style="margin-bottom:12px;"></div>
+
+        <div style="background:var(--bg);border-radius:10px;padding:12px;margin-bottom:14px;">
+          <div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;">Agregar producto</div>
+          <select class="nc-input" id="editCompraAddProd" style="width:100%;margin-bottom:8px;"><option value="">Seleccionar producto...</option></select>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;">
+            <button type="button" class="tipo-btn" id="editTbUnidad" onclick="editSetTipoCompra('unidad')" style="flex:1;min-width:70px;">Unidad</button>
+            <button type="button" class="tipo-btn" id="editTbSixpack" onclick="editSetTipoCompra('sixpack')" style="flex:1;min-width:70px;">Six Pack</button>
+            <button type="button" class="tipo-btn" id="editTbCaja" onclick="editSetTipoCompra('caja')" style="flex:1;min-width:70px;">Caja</button>
+            <button type="button" class="tipo-btn" id="editTbEmpaque" onclick="editSetTipoCompra('empaque')" style="flex:1;min-width:70px;">Empaque</button>
+          </div>
+          <div id="editCompraUdsWrap" style="display:none;margin-bottom:8px;">
+            <input class="inv-modal-input" type="number" id="editCompraUds" placeholder="6" min="2" value="6" style="margin-bottom:0;width:100px;"/>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:8px;">
+            <input class="nc-input" type="number" id="editCompraAddQty" placeholder="Cantidad" min="1" style="margin-bottom:0;"/>
+            <input class="nc-input" type="number" id="editCompraAddCosto" placeholder="Costo" min="0" style="margin-bottom:0;"/>
+            <button class="add-item-btn" onclick="editAgregarItem()">Agregar</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="editCompraTotalWrap" style="background:var(--bg);border-radius:10px;padding:14px 16px;margin-bottom:20px;display:flex;justify-content:space-between;font-size:15px;font-weight:800;">
+        <span>Total</span><span id="editCompraTotalVal" style="color:var(--green);">$0</span>
+      </div>
+    </div>
+    <div style="padding:0 24px 24px;display:flex;gap:8px;">
+      <button id="btnGuardarEdicionCompra" onclick="guardarEdicionCompra()" style="flex:1;padding:11px;border:none;border-radius:9px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;background:var(--green);color:#fff;">&#9989; Guardar cambios</button>
+      <button onclick="cerrarEdicionCompra()" style="flex:1;padding:11px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;background:#fff;color:var(--text2);">Cancelar</button>
+    </div>
+  </div>
+</div>
+
 <!-- MODAL VENTA -->
 <div id="modal"><div class="mw"><div class="mi">&#127881;</div><div class="mt">Venta registrada</div><div class="ms" id="mSub"></div><div class="mn" id="mNum"></div><div class="ma"><button class="mb wa" onclick="sendWA()">Enviar por WhatsApp</button><button class="mb pr" onclick="imprimirRemision()">&#128424; Imprimir / PDF</button><button class="mb pr" id="btnFacturaPDF" onclick="btnDescargarFacturaPOS()">&#128196; Descargar factura PDF</button><button class="mb pr" onclick="newVenta()">+ Nueva venta</button><button class="mb sc" onclick="goView('inicio',document.getElementById('niInicio'));document.getElementById('modal').classList.remove('o')">Ver resumen</button></div></div></div>
 
@@ -1888,11 +1978,14 @@ body.pos-sb-off .pos-sb-btn{background:var(--gold-s);border-color:var(--gold-b);
         <div class="inv-modal-label" id="invModalQtyLabel">Cantidad</div>
         <input class="inv-modal-input" type="number" id="invModalQty" placeholder="0" min="0" oninput="calcInvTotal()"/>
       </div>
-      <div>
+      <div id="invModalPrecioWrap">
         <div class="inv-modal-label" id="invModalPrecioLabel">Precio costo</div>
         <input class="inv-modal-input" type="number" id="invModalPrecio" placeholder="$0" min="0" oninput="calcInvTotal()"/>
       </div>
     </div>
+    <!-- HITO 6.18.11: aviso explicito para Ajuste/Salida — esta operacion NUNCA modifica
+         precio_costo, sin importar que el campo de precio exista en otras pestañas. -->
+    <div id="invAjusteCostoInfo" style="display:none;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 14px;margin-bottom:12px;font-size:12px;color:var(--text2);"></div>
 
     <!-- Resumen total entrada -->
     <div id="invTotalResumen" style="display:none;background:var(--gold-s);border:1px solid var(--gold-b);border-radius:10px;padding:12px 14px;margin-bottom:12px;">
@@ -3207,10 +3300,13 @@ async function loadDash(){
   var hoyDesde=hoy+'T00:00:00-05:00';
   var hoyHasta=hoy+'T23:59:59-05:00';
   var hace7=fechaBogotaYMD(new Date(Date.now()-6*24*60*60*1000));
-  var mes=hoy.slice(0,7);
-  var mesDesde=mes+'-01T00:00:00-05:00';
-  var mesPartes=mes.split('-');var mesY=parseInt(mesPartes[0]),mesM=parseInt(mesPartes[1]);
-  var mesHasta=(mesM===12?mesY+1:mesY)+'-'+String(mesM===12?1:mesM+1).padStart(2,'0')+'-01T00:00:00-05:00';
+  /* HITO 6.18.10 — mismo periodo "mes" que usa Contabilidad por defecto (setContPeriod
+     'mes'): desde el dia 1 del mes actual HASTA HOY (no hasta fin de mes calendario).
+     Antes este bloque definia su propio rango [1ro del mes, 1ro del mes siguiente) y
+     ademas nunca restaba el CMV — eso era exactamente la causa de que Inicio mostrara una
+     utilidad distinta a Contabilidad para "el mismo" periodo. */
+  var contMesDesde=hoy.slice(0,7)+'-01';
+  var contMesHasta=hoy;
 
   /* --- Render inmediato con INVENTARIO ya cargado --- */
   var invAlert=INVENTARIO.filter(function(p){return p.stock<=p.stock_min;}).length;
@@ -3238,30 +3334,31 @@ async function loadDash(){
     var results=await Promise.all([
       fetch(SB+'/rest/v1/ventas?id_cliente=eq.'+CID+'&created_at=gte.'+hoyDesde+'&created_at=lte.'+hoyHasta+'&estado=neq.canje&select=id,total,cliente_nombre,metodo_pago,created_at&order=created_at.desc',H2),
       fetch(SB+'/rest/v1/ventas?id_cliente=eq.'+CID+'&created_at=gte.'+hace7+'T00:00:00-05:00&estado=neq.canje&select=total,created_at',H2),
-      fetch(SB+'/rest/v1/ventas?id_cliente=eq.'+CID+'&created_at=gte.'+mesDesde+'&created_at=lt.'+mesHasta+'&estado=neq.canje&select=id,total&limit=500',H2),
-      fetch(SB+'/rest/v1/gastos?id_licencia=eq.'+CID+'&fecha=gte.'+mes+'-01&select=valor',H2),
-      fetch(SB+'/rest/v1/clientes_frecuentes?id_licencia=eq.'+CID+'&select=nombre,puntos&order=puntos.desc&limit=4',H2)
+      calcularResumenFinanciero(contMesDesde,contMesHasta),
+      fetch(SB+'/rest/v1/clientes_frecuentes?id_licencia=eq.'+CID+'&select=nombre,puntos&order=puntos.desc&limit=4',H2),
+      /* Solo para "Top productos del mes" — mismo rango que calcularResumenFinanciero,
+         no es parte de la formula financiera, solo se necesitan los ids. */
+      fetch(SB+'/rest/v1/ventas?id_cliente=eq.'+CID+'&created_at=gte.'+contMesDesde+'T00:00:00-05:00&created_at=lte.'+contMesHasta+'T23:59:59-05:00&estado=neq.canje&select=id',H2)
     ]);
     var ventasHoy=results[0].ok?await results[0].json():[];
     var ventas7d=results[1].ok?await results[1].json():[];
-    var ventasMes=results[2].ok?await results[2].json():[];
-    var gastosMes=results[3].ok?await results[3].json():[];
-    var topClis=results[4].ok?await results[4].json():[];
+    var resumenMes=results[2]; /* {ingresos,cmv,utilidadBruta,gastos,utilidadNeta,numVentas,numGastos} — MISMA fuente que Contabilidad */
+    var topClis=results[3].ok?await results[3].json():[];
+    var ventasMesIds=results[4].ok?await results[4].json():[];
 
     /* KPI CARDS */
     var totHoy=ventasHoy.reduce(function(s,v){return s+(parseFloat(v.total)||0);},0);
-    var totMes=ventasMes.reduce(function(s,v){return s+(parseFloat(v.total)||0)-(parseFloat(v.domicilio)||0);},0);
-    var totGas=gastosMes.reduce(function(s,g){return s+(parseFloat(g.valor)||0);},0);
-    var utilidad=totMes-totGas;
+    var totMes=resumenMes.ingresos;
+    var utilidad=resumenMes.utilidadNeta;
     var margen=totMes>0?Math.round(utilidad/totMes*100):0;
     document.getElementById('kpiVentasHoy').textContent=fmt(totHoy);
     document.getElementById('kpiVentasHoySub').textContent=ventasHoy.length+' pedido'+(ventasHoy.length!==1?'s':'')+' hoy';
     document.getElementById('kpiPedidosHoy').textContent=ventasHoy.length;
     document.getElementById('kpiPedidosHoySub').textContent=totHoy>0?'Total: '+fmt(totHoy):'Sin ventas aun';
     document.getElementById('kpiVentasMes').textContent=fmt(totMes);
-    document.getElementById('kpiVentasMesSub').textContent=ventasMes.length+' ventas este mes';
+    document.getElementById('kpiVentasMesSub').textContent=resumenMes.numVentas+' ventas este mes';
     document.getElementById('kpiUtilidad').textContent=fmt(utilidad);
-    document.getElementById('kpiUtilidadSub').textContent='Margen '+(margen>0?margen+'%':'--')+' (ventas - gastos)';
+    document.getElementById('kpiUtilidadSub').textContent='Margen '+(margen>0?margen+'%':'--')+' (ingresos - costo - gastos)';
     document.getElementById('kpiUtilidad').style.color=utilidad>=0?'var(--green)':'var(--red)';
 
     /* GRAFICA 7 DIAS */
@@ -3307,7 +3404,7 @@ async function loadDash(){
 
     /* TOP PRODUCTOS DEL MES */
     var pl=document.getElementById('prodList');pl.innerHTML='';
-    var ventaIds=ventasMes.map(function(v){return v.id;});
+    var ventaIds=ventasMesIds.map(function(v){return v.id;});
     if(ventaIds.length>0){
       try{
         var dets=[];
@@ -3355,8 +3452,9 @@ async function loadDash(){
     /* ESTADO FINANCIERO */
     var fg=document.getElementById('finGrid');fg.innerHTML='';
     var finRows=[
-      {label:'Ingresos del mes',value:fmt(totMes),sub:ventasMes.length+' ventas',up:true},
-      {label:'Gastos operacionales',value:fmt(totGas),sub:gastosMes.length+' registros',up:false},
+      {label:'Ingresos del mes',value:fmt(totMes),sub:resumenMes.numVentas+' ventas',up:true},
+      {label:'Costo de mercancía vendida (CMV)',value:fmt(resumenMes.cmv),sub:(totMes>0?Math.round(resumenMes.cmv/totMes*100):0)+'% de ingresos',up:false},
+      {label:'Gastos operacionales',value:fmt(resumenMes.gastos),sub:resumenMes.numGastos+' registros',up:false},
       {label:'Utilidad operacional',value:fmt(utilidad),sub:'Margen '+(totMes>0?margen+'%':'--'),up:utilidad>=0}
     ];
     finRows.forEach(function(f){fg.innerHTML+='<div class="fc"><div class="fl">'+f.label+'</div><div class="fv" style="color:'+(f.up?'var(--green)':'var(--red)')+'">'+f.value+'</div><div class="fs">'+f.sub+'</div></div>';});
@@ -6275,7 +6373,12 @@ function autoFillCostoLegacy(prodId, tipoActual) {
 
 function autoFillCosto(prodId) {
   if(!prodId) return;
-  var tipoActual = tipoCompraActual||'unidad';
+  /* HITO 6.18.14-A: sin presentacion elegida no se sugiere ningun costo — antes se asumia
+     'unidad' y se pre-llenaba un costo que podia no corresponder a la presentacion que el
+     operador terminara eligiendo. setTipoCompra() vuelve a invocar esta funcion en cuanto
+     hay presentacion, asi que el comportamiento con presentacion elegida es identico. */
+  if(!tipoCompraActual) return;
+  var tipoActual = tipoCompraActual;
   if(!READ_PATH_COMPRAS){ autoFillCostoLegacy(prodId, tipoActual); return; }
   /* Lectura del modelo nuevo (best-effort). Cualquier fallo o dato no confiable => fallback legacy. */
   fetch(SB+'/rest/v1/producto_presentaciones?id_producto=eq.'+encodeURIComponent(prodId)+'&tipo_presentacion=eq.'+encodeURIComponent(tipoActual)+'&select=costo_vigente,origen_costo,observaciones&limit=1',{headers:{'apikey':SK,'Authorization':'Bearer '+SK}})
@@ -6292,20 +6395,27 @@ function autoFillCosto(prodId) {
     .catch(function(){ autoFillCostoLegacy(prodId, tipoActual); });
 }
 
-/* ---- CAMBIO 6: Tipo de ingreso con botones ---- */
-var tipoCompraActual = 'unidad';
+/* ---- CAMBIO 6: Presentacion con botones ----
+   HITO 6.18.14-A: la presentacion es OBLIGATORIA y ya no arranca pre-seleccionada en
+   'unidad'. Antes, tipoCompraActual nacia en 'unidad' y addItemCompra() hacia
+   (tipoCompraActual||'unidad'), asi que una compra podia registrarse como "unidad" sin
+   que el operador eligiera nunca la presentacion. Ahora el estado inicial es '' (sin
+   eleccion) y setTipoCompra('') limpia la seleccion — mismo criterio que el destino
+   obligatorio de HITO 6.4. NO cambia las opciones disponibles ni ninguna formula de
+   costo/uds_empaque: solo exige la eleccion explicita. */
+var tipoCompraActual = '';
 function setTipoCompra(tipo) {
-  tipoCompraActual = tipo;
+  tipoCompraActual = tipo||'';
   ['Unidad','Sixpack','Caja','Empaque'].forEach(function(t){
     var b = document.getElementById('tb'+t);
-    if(b) b.classList.toggle('on', t.toLowerCase()===tipo);
+    if(b) b.classList.toggle('on', !!tipo && t.toLowerCase()===tipo);
   });
   // Sincronizar select oculto
   var sel = document.getElementById('compraAddTipo');
   if(sel) sel.value = (tipo==='unidad') ? 'unidad' : 'empaque';
   var wrap = document.getElementById('tipoCompraUdsWrap');
   if(wrap) {
-    wrap.style.display = (tipo!=='unidad') ? 'block' : 'none';
+    wrap.style.display = (!!tipo && tipo!=='unidad') ? 'block' : 'none';
     var lbl = document.getElementById('tipoCompraUdsLabel');
     if(lbl) lbl.textContent = tipo;
     var udsInp = document.getElementById('tipoCompraUds');
@@ -6533,7 +6643,7 @@ function resetNuevaCompra(){
   document.getElementById('compraFecha').value = new Date().toISOString().split('T')[0];
   document.getElementById('compraNota').value = '';
   if(document.getElementById('compraSearchProd'))document.getElementById('compraSearchProd').value='';
-  setTipoCompra('unidad');
+  setTipoCompra(''); /* HITO 6.18.14-A: sin presentacion pre-seleccionada */
   cargarDestinoCompraOptions();
   renderItemsCompra();
 }
@@ -6810,6 +6920,27 @@ async function aplicarCompraAInventarioBodega(items, idBodega){
   return {ok:true};
 }
 
+/* HITO 6.18.14-B — CAUSA RAIZ de la duplicacion: esta funcion hacia GET(estado) ->
+   verificar -> aplicar inventario -> PATCH(estado='recibida'), sin ninguna condicion
+   atomica entre la lectura y la escritura. El boton "Marcar como recibida" no tenia
+   proteccion alguna (ni disabled sincrono). Un doble clic, dos pestañas, dos usuarios, o
+   un reintento tras timeout, disparaban recibirCompra(id) mas de una vez; TODAS las
+   invocaciones leian el MISMO estado='pendiente' (porque ninguna habia escrito todavia) y
+   TODAS aplicaban aplicarCompraAInventarioPrincipal/Bodega — duplicando el inventario.
+   CORRECCION: se reutiliza EXACTAMENTE el mismo patron CAS ya validado por
+   eliminarCompra() en HITO 6.18.9. Antes de tocar inventario, la compra toma posesion
+   exclusiva mediante un PATCH condicionado (estado=eq.pendiente -> 'recibiendo').
+   Postgres/PostgREST garantiza que solo UNA solicitud concurrente puede ganar ese PATCH;
+   el resto recibe 0 filas afectadas y aborta sin tocar inventario — cierra doble clic, dos
+   pestañas, dos usuarios y reintento simultaneo de forma real, no simulada (no es un
+   "disabled" de UI, es una condicion a nivel de datos).
+   Si aplicarCompraAInventarioPrincipal/Bodega falla DESPUES de la toma de posesion, NO se
+   revierte automaticamente el estado a 'pendiente': esas funciones (SIN MODIFICAR, HITO
+   6.18.6) procesan los items uno por uno y pueden haber aplicado parcialmente algunos
+   productos antes de fallar en otro — reintentar automaticamente arriesgaria duplicar los
+   que SI se aplicaron. La compra queda visible en 'recibiendo', no reprocesable desde este
+   boton, para revision manual — misma filosofia honesta que 'eliminando': esto NO es una
+   transaccion real (esa requeriria una RPC en Postgres, fuera de alcance de este hito). */
 async function recibirCompra(id){
   var GH={'apikey':SK,'Authorization':'Bearer '+SK};
   try{
@@ -6822,6 +6953,9 @@ async function recibirCompra(id){
     var compraReal=cArr[0];
     if(compraReal.estado==='recibida'){ toast('Esta compra ya fue marcada como recibida'); await cargarComprasSB();renderComprasList(); return; }
     if(compraReal.estado==='cancelada'){ toast('Esta compra está cancelada — no se puede recibir'); return; }
+    if(compraReal.estado==='eliminando'){ toast('Esta compra tiene una eliminación en curso o quedó incompleta anteriormente — no se puede recibir. Contacta soporte para revisarla manualmente.'); return; }
+    if(compraReal.estado==='recibiendo'){ toast('Esta compra ya tiene una recepción en curso, o quedó incompleta anteriormente — no se puede reprocesar automáticamente para evitar duplicar el inventario. Contacta soporte para revisarla manualmente.'); return; }
+    if(compraReal.estado!=='pendiente'){ toast('Esta compra no está en un estado válido para recibir — actualiza e inténtalo de nuevo'); await cargarComprasSB();renderComprasList(); return; }
     if(compraReal.destino!=='principal'&&compraReal.destino!=='bodega_secundaria'){ toast('Esta compra no tiene un destino de inventario válido — no se puede recibir'); return; }
 
     var rItems=await fetch(SB+'/rest/v1/compras_items?compra_id=eq.'+id+'&select=*',{headers:GH});
@@ -6837,19 +6971,35 @@ async function recibirCompra(id){
       idBodegaReal=dB[0].id;
     }
 
+    /* Toma de posesion exclusiva ANTES de tocar inventario — mismo patron CAS de
+       eliminarCompra() (HITO 6.18.9). Si dos pestañas o dos clics intentan recibir la
+       misma compra a la vez, solo uno puede ganar este PATCH condicionado. */
+    var rTake=await fetch(SB+'/rest/v1/compras?id=eq.'+id+'&estado=eq.pendiente',{method:'PATCH',headers:H,body:JSON.stringify({estado:'recibiendo'})});
+    var tomada=rTake.ok?await rTake.json():[];
+    if(!rTake.ok||!tomada.length){
+      toast('Otro proceso ya está recibiendo esta compra, o su estado cambió — actualiza e inténtalo de nuevo.');
+      await cargarComprasSB();renderComprasList();
+      return;
+    }
+
     var resultadoInv=compraReal.destino==='principal'
       ? await aplicarCompraAInventarioPrincipal(itemsReales)
       : await aplicarCompraAInventarioBodega(itemsReales, idBodegaReal);
 
     if(!resultadoInv.ok){
-      toast('No se pudo actualizar el inventario ('+resultadoInv.detalle+') — la compra sigue pendiente');
+      /* No hay forma de saber desde aqui si aplicarCompraAInventarioPrincipal/Bodega ya
+         aplico parcialmente algun producto antes de fallar (esas funciones no exponen ese
+         detalle, y no se modifican en este hito) — se deja en 'recibiendo' en vez de
+         revertir a 'pendiente', para no arriesgar un reintento que duplique lo ya aplicado. */
+      toast('No se pudo completar la recepción del inventario ('+resultadoInv.detalle+'). Esta compra quedó en estado "recibiendo" y requiere revisión manual — no se puede reintentar automáticamente desde aquí.');
+      await cargarComprasSB();renderComprasList();
       return;
     }
 
-    var rEstado=await fetch(SB+'/rest/v1/compras?id=eq.'+id,{method:'PATCH',headers:H,body:JSON.stringify({estado:'recibida'})});
+    var rEstado=await fetch(SB+'/rest/v1/compras?id=eq.'+id+'&estado=eq.recibiendo',{method:'PATCH',headers:H,body:JSON.stringify({estado:'recibida'})});
     var afectadas=rEstado.ok?await rEstado.json():[];
     if(!rEstado.ok||!afectadas.length){
-      toast('El inventario se actualizó pero no se pudo confirmar el estado de la compra');
+      toast('El inventario se actualizó pero no se pudo confirmar el estado de la compra — quedó en "recibiendo", actualiza e inténtalo de nuevo');
       await cargarComprasSB();renderComprasList();
       return;
     }
@@ -6886,6 +7036,58 @@ function updateComprasBadge(){
   }
 }
 
+/* HITO 6.18.9: 'eliminando' es el estado transicional de una eliminacion que quedo
+   incompleta — se muestra distinto para que el operador sepa que requiere revision
+   manual, nunca un reintento automatico desde el boton Eliminar.
+   HITO 6.18.14-B: 'recibiendo' es el equivalente para una recepcion que quedo
+   incompleta — mismo criterio visual y misma filosofia de revision manual.
+   HITO 6.18.14-C: extraido a una constante compartida (antes vivia solo dentro de
+   renderComprasList) para que el modal de detalle de compra pueda mostrar el mismo
+   estado con la misma etiqueta/color, sin duplicar los mapas. Mismos valores exactos,
+   cero cambio de comportamiento en renderComprasList. */
+/* HITO 6.18.14-D: 'editando' es el equivalente transicional para una edicion en curso
+   (ver guardarEdicionCompra). Ningun estado 'editando' sobrevive salvo por un fallo a
+   mitad de guardado (mismo caso ya aceptado para 'recibiendo'/'eliminando'). */
+var ESTADO_COMPRA_INFO={
+  texto:{pendiente:'&#9203; Pendiente',recibida:'&#9989; Recibida',cancelada:'&#10060; Cancelada',eliminando:'&#9888; Requiere revisión',recibiendo:'&#9888; Requiere revisión',editando:'&#9888; Requiere revisión'},
+  color:{pendiente:'#F59E0B',recibida:'#10B981',cancelada:'#EF4444',eliminando:'#DC2626',recibiendo:'#DC2626',editando:'#DC2626'},
+  fondo:{pendiente:'#FFFBEB',recibida:'#ECFDF5',cancelada:'#FEF2F2',eliminando:'#FEF2F2',recibiendo:'#FEF2F2',editando:'#FEF2F2'}
+};
+function estadoCompraLabel(estado){
+  return {
+    texto: ESTADO_COMPRA_INFO.texto[estado]||estado||'—',
+    color: ESTADO_COMPRA_INFO.color[estado]||'#6B7280',
+    fondo: ESTADO_COMPRA_INFO.fondo[estado]||'#F3F4F6'
+  };
+}
+
+/* HITO 6.18.14-D — MATRIZ DE EDICION SEGURA (derivada de auditoria, no de intuicion):
+   PENDIENTE: edicion completa. Confirmado en 6.18.14-B: aplicarCompraAInventarioPrincipal/
+     Bodega() NUNCA se invocan para una compra en este estado — cero impacto en inventario,
+     asi que agregar/quitar/cambiar items, proveedor, fecha, nota o destino es seguro.
+   RECIBIDA: edicion LIMITADA a proveedor/fecha/nota unicamente. Auditado: detalle_ventas
+     (columnas reales: id, created_at, venta_id, producto_nombre, categoria, cantidad,
+     precio_unitario, precio_total, prod_id, es_unidad, uds_empaque) NO tiene compra_id ni
+     ningun campo de lote — no existe manera de saber si las unidades que ingreso ESTA
+     compra especifica siguen en stock o ya se vendieron (dos compras del mismo producto
+     son indistinguibles una vez que su stock se fusiona en el pool). Por tanto cualquier
+     cambio estructural (producto/cantidad/presentacion/destino/costo) queda BLOQUEADO: no
+     hay forma de calcular con seguridad el ajuste de inventario compensatorio. proveedor/
+     fecha/nota SI se confirmaron seguros: no alimentan getVentasRangoSB, calcularResumen
+     Financiero, ni ninguna consulta financiera (esas usan compras.created_at, nunca
+     compras.fecha), son puramente informativos.
+   RECIBIENDO/ELIMINANDO/EDITANDO: bloqueada — operacion en curso en otro proceso.
+   CANCELADA: bloqueada — estado terminal, nunca toco inventario, sin proposito de edicion. */
+function politicaEdicionCompra(estado){
+  if(estado==='pendiente') return {modo:'completa', motivo:null};
+  if(estado==='recibida') return {modo:'limitada', motivo:null};
+  if(estado==='recibiendo') return {modo:null, motivo:'Esta compra tiene una recepción en curso — no puede modificarse hasta que termine o se revise manualmente.'};
+  if(estado==='eliminando') return {modo:null, motivo:'Esta compra tiene una eliminación en curso — no puede modificarse hasta que termine o se revise manualmente.'};
+  if(estado==='editando') return {modo:null, motivo:'Esta compra tiene una edición en curso en otro proceso — no puede modificarse hasta que termine o se revise manualmente.'};
+  if(estado==='cancelada') return {modo:null, motivo:'Esta compra está cancelada y no puede modificarse.'};
+  return {modo:null, motivo:'Esta compra no puede modificarse porque ya está comprometida con el inventario o se encuentra en un estado que impide su edición.'};
+}
+
 /* -- LISTA DE COMPRAS -- */
 function renderComprasList(){
   var cont = document.getElementById('comprasListCont');
@@ -6914,12 +7116,7 @@ function renderComprasList(){
     cont.innerHTML='<div style="text-align:center;padding:60px;color:#9CA3AF;"><div style="font-size:36px;margin-bottom:10px;">&#128230;</div><div>Sin ordenes de compra aun</div></div>';
     return;
   }
-  /* HITO 6.18.9: 'eliminando' es el estado transicional de una eliminacion que quedo
-     incompleta — se muestra distinto para que el operador sepa que requiere revision
-     manual, nunca un reintento automatico desde el boton Eliminar. */
-  var PI={pendiente:'&#9203; Pendiente',recibida:'&#9989; Recibida',cancelada:'&#10060; Cancelada',eliminando:'&#9888; Requiere revisión'};
-  var PC={pendiente:'#F59E0B',recibida:'#10B981',cancelada:'#EF4444',eliminando:'#DC2626'};
-  var PB={pendiente:'#FFFBEB',recibida:'#ECFDF5',cancelada:'#FEF2F2',eliminando:'#FEF2F2'};
+  var PI=ESTADO_COMPRA_INFO.texto, PC=ESTADO_COMPRA_INFO.color, PB=ESTADO_COMPRA_INFO.fondo;
   var nombreBodegaCache=(typeof BODEGA_SB!=='undefined'&&BODEGA_SB&&BODEGA_SB.nombre)?BODEGA_SB.nombre:'Bodega secundaria';
   var DI={principal:'&#128230; Inventario principal', bodega_secundaria:'&#127970; '+nombreBodegaCache};
   cont.innerHTML = data.map(function(c){
@@ -6939,6 +7136,7 @@ function renderComprasList(){
         +'</div>'
       +'</div>'
       +'<div style="display:flex;gap:8px;margin-top:12px;padding-top:12px;border-top:1px solid var(--border);flex-wrap:wrap;">'
+        +'<button onclick="abrirDetalleCompra(\''+c.id+'\')" style="padding:8px 14px;background:var(--accent-s);color:var(--accent);border:1px solid var(--accent-b);border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;">&#128065; Ver detalle</button>'
         +(c.estado==='pendiente'?
           '<button onclick="recibirCompra(\''+c.id+'\')" style="flex:1;min-width:120px;padding:8px;background:var(--green);color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;">&#9989; Marcar como recibida</button>'
           +'<button onclick="cancelarCompra(\''+c.id+'\')" style="padding:8px 14px;background:var(--red-bg);color:var(--red);border:1px solid var(--red-b);border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;">Cancelar</button>'
@@ -6947,6 +7145,355 @@ function renderComprasList(){
       +'</div>'
     +'</div>';
   }).join('');
+}
+
+/* HITO 6.18.14-C — DETALLE DE COMPRA HISTORICA (solo lectura, READ ONLY).
+   Relectura FRESCA desde Supabase en cada apertura (nunca desde el array local COMPRAS,
+   que puede estar desactualizado si otro dispositivo cambio el estado de la compra) —
+   mismo principio ya usado por recibirCompra()/eliminarCompra(). Reutiliza
+   unidadesFisicasDeCompra() y etiquetaTipoPresentacion() tal cual, sin duplicar formulas.
+   No modifica compras, compras_items, inventario, ni ninguna otra tabla — solo GET.
+   _compraDetIdActual protege contra aperturas rapidas (A -> B -> C): si la respuesta de
+   una apertura anterior llega tarde, se descarta si ya no coincide con la compra
+   actualmente abierta (mismo patron que falta en openVentaDet, ver informe). */
+var _compraDetIdActual=null;
+async function abrirDetalleCompra(id){
+  _compraDetIdActual=id;
+  document.getElementById('compraDetMeta').innerHTML='';
+  document.getElementById('compraDetItems').innerHTML='<div style="text-align:center;padding:20px;color:var(--text3);">Cargando detalle...</div>';
+  document.getElementById('compraDetTotales').innerHTML='';
+  document.getElementById('btnEditarCompra').style.display='none';
+  document.getElementById('compraDetBloqueo').style.display='none';
+  document.getElementById('modalCompraDet').style.display='flex';
+  try{
+    var r=await fetch(SB+'/rest/v1/compras?id=eq.'+id+'&id_licencia=eq.'+CID+'&select=*,compras_items(*)',
+      {headers:{'apikey':SK,'Authorization':'Bearer '+SK}});
+    if(_compraDetIdActual!==id) return; /* se abrio otra compra mientras esta cargaba */
+    if(!r.ok){
+      document.getElementById('compraDetItems').innerHTML='<div style="text-align:center;padding:20px;color:var(--red);">Error al cargar el detalle de la compra</div>';
+      return;
+    }
+    var data=await r.json();
+    if(_compraDetIdActual!==id) return; /* re-verificar tras el segundo await */
+    if(!data.length){
+      document.getElementById('compraDetItems').innerHTML='<div style="text-align:center;padding:20px;color:var(--text3);">Esta compra ya no existe</div>';
+      return;
+    }
+    var c=data[0];
+    var items=c.compras_items||[];
+
+    var est=estadoCompraLabel(c.estado);
+    var DI={principal:'&#128230; Inventario principal', bodega_secundaria:'&#127970; Bodega secundaria'};
+    var fecha=c.fecha||'—';
+    document.getElementById('compraDetMeta').innerHTML=
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px 16px;margin-bottom:10px;">'
+      +'<div><div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;">Proveedor</div><div style="font-size:13px;font-weight:600;">'+(c.proveedor_nombre||'Sin proveedor')+'</div></div>'
+      +'<div><div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;">Fecha</div><div style="font-size:13px;font-weight:600;">'+fecha+'</div></div>'
+      +'<div><div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;">Estado</div><div style="display:inline-flex;align-items:center;font-size:11px;font-weight:700;padding:3px 9px;border-radius:10px;margin-top:2px;background:'+est.fondo+';color:'+est.color+';">'+est.texto+'</div></div>'
+      +'<div><div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;">Destino</div><div style="font-size:13px;font-weight:600;">'+(c.destino?(DI[c.destino]||c.destino):'—')+'</div></div>'
+      +'</div>'
+      +(c.nota?'<div style="font-size:12px;color:var(--text2);background:var(--bg);border-radius:8px;padding:8px 10px;margin-bottom:10px;"><strong>Observaciones:</strong> '+c.nota+'</div>':'')
+      +'<div style="font-size:10px;color:var(--text3);">ID: '+c.id+'</div>';
+
+    if(!items.length){
+      document.getElementById('compraDetItems').innerHTML='<div style="text-align:center;padding:20px;color:var(--text3);">Esta compra no tiene productos registrados.</div>';
+    } else {
+      document.getElementById('compraDetItems').innerHTML=
+        '<div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;">Productos ('+items.length+')</div>'
+        +'<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;min-width:480px;">'
+        +'<thead><tr style="background:var(--bg);">'
+        +'<th style="padding:8px 10px;text-align:left;font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;">Producto</th>'
+        +'<th style="padding:8px 10px;text-align:left;font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;">Presentación</th>'
+        +'<th style="padding:8px 10px;text-align:center;font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;">Cant.</th>'
+        +'<th style="padding:8px 10px;text-align:center;font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;">Uds. físicas</th>'
+        +'<th style="padding:8px 10px;text-align:right;font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;">Costo</th>'
+        +'<th style="padding:8px 10px;text-align:right;font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;">Subtotal</th>'
+        +'</tr></thead><tbody>'
+        +items.map(function(it){
+          var udsFisicas=unidadesFisicasDeCompra({qty:it.qty, uds_empaque:it.uds_empaque, sueltas:it.sueltas});
+          return '<tr style="border-bottom:1px solid var(--border);">'
+            +'<td style="padding:10px 10px;font-size:13px;font-weight:600;">'+(it.nombre||'—')+'</td>'
+            +'<td style="padding:10px 10px;font-size:12px;color:var(--text2);">'+etiquetaTipoPresentacion(it.tipo)+(it.uds_empaque>1?' (x'+it.uds_empaque+')':'')+'</td>'
+            +'<td style="padding:10px 10px;text-align:center;font-size:13px;">'+(it.qty!=null?it.qty:'—')+'</td>'
+            +'<td style="padding:10px 10px;text-align:center;font-size:13px;">'+udsFisicas+'</td>'
+            +'<td style="padding:10px 10px;text-align:right;font-size:13px;">'+(it.costo!=null?fmt(it.costo):'—')+'</td>'
+            +'<td style="padding:10px 10px;text-align:right;font-size:13px;font-weight:700;">'+(it.subtotal!=null?fmt(it.subtotal):'—')+'</td>'
+          +'</tr>';
+        }).join('')
+        +'</tbody></table></div>';
+    }
+
+    document.getElementById('compraDetTotales').innerHTML=
+      '<div style="display:flex;justify-content:space-between;font-size:15px;font-weight:800;"><span>Total</span><span style="color:var(--green);">'+fmt(c.total)+'</span></div>';
+
+    /* HITO 6.18.14-D: boton Editar (o mensaje de bloqueo) segun la matriz auditada. */
+    var pol=politicaEdicionCompra(c.estado);
+    if(pol.modo){
+      document.getElementById('btnEditarCompra').style.display='block';
+    } else {
+      var bloq=document.getElementById('compraDetBloqueo');
+      bloq.textContent=pol.motivo;
+      bloq.style.display='block';
+    }
+  }catch(e){
+    if(_compraDetIdActual!==id) return;
+    document.getElementById('compraDetItems').innerHTML='<div style="text-align:center;padding:20px;color:var(--red);">Error al cargar el detalle de la compra</div>';
+  }
+}
+function cerrarDetalleCompra(){ document.getElementById('modalCompraDet').style.display='none'; _compraDetIdActual=null; }
+
+/* ==================== HITO 6.18.14-D — EDICION SEGURA DE COMPRAS ====================
+   Estado DEDICADO y aislado del formulario de Nueva Compra (itemsCompra/tipoCompraActual,
+   HITO 6.4/6.18.5, NO se tocan ni se comparten): _editCompraItems es un array propio, y
+   los elementos del formulario (editCompraAddProd, editTbUnidad, etc.) son IDs propios.
+   Reutiliza calcularItemCompra() y unidadesFisicasDeCompra() tal cual (misma matematica
+   de 6.18.5/6.18.6), sin duplicar formulas.
+   CONCURRENCIA: toma de posesion CAS ANTES de escribir nada — mismo patron exacto ya
+   validado por recibirCompra() (6.18.14-B) y eliminarCompra() (6.18.9): PATCH condicionado
+   compras?id=eq.ID&estado=eq.<estado_original> -> 'editando'. Si dos usuarios/pestañas
+   intentan editar (o uno edita mientras otro recibe/elimina) la misma compra, solo uno
+   gana ese PATCH; el resto ve 0 filas afectadas y aborta sin escribir nada. El estado
+   'editando' no necesita guards nuevos en recibirCompra()/eliminarCompra() (no se tocan):
+   - recibirCompra() ya rechaza cualquier estado distinto de 'pendiente' con un mensaje
+     generico pero seguro (no aplica inventario).
+   - eliminarCompra() solo revierte inventario si estado==='recibida'; una compra en
+     'editando' que se origino en 'pendiente' nunca tuvo inventario aplicado, asi que
+     saltarse la reversion es correcto — el peor caso es que el DELETE de eliminarCompra
+     "gane la carrera" a mi edicion, y mi PATCH de liberacion final falle (0 filas, la
+     compra ya no existe): se maneja como error explicito, sin fingir exito. */
+var _editCompraId=null, _editCompraModo=null, _editCompraEstadoOriginal=null, _editCompraItems=[], _editCompraTipoActual='';
+
+async function abrirEdicionCompra(id){
+  if(!id) return;
+  try{
+    var r=await fetch(SB+'/rest/v1/compras?id=eq.'+id+'&id_licencia=eq.'+CID+'&select=*,compras_items(*)',
+      {headers:{'apikey':SK,'Authorization':'Bearer '+SK}});
+    if(!r.ok){ toast('No se pudo verificar la compra — inténtalo de nuevo'); return; }
+    var data=await r.json();
+    if(!data.length){ toast('Esta compra ya no existe — actualizando'); await cargarComprasSB();renderComprasList(); return; }
+    var c=data[0];
+    var pol=politicaEdicionCompra(c.estado);
+    if(!pol.modo){ toast(pol.motivo); await cargarComprasSB();renderComprasList();cerrarDetalleCompra(); return; }
+
+    _editCompraId=id;
+    _editCompraModo=pol.modo;
+    _editCompraEstadoOriginal=c.estado;
+    _editCompraItems=(c.compras_items||[]).map(function(it){
+      return {prod_id:it.prod_id, nombre:it.nombre, qty:it.qty, costo:parseFloat(it.costo)||0, subtotal:parseFloat(it.subtotal)||0, tipo:it.tipo||'unidad', uds_empaque:it.uds_empaque||1};
+    });
+
+    document.getElementById('editCompraProveedor').innerHTML='<option value="">Sin proveedor</option>'
+      +PROVEEDORES.map(function(p){return '<option value="'+p.id+'">'+p.nombre+'</option>';}).join('');
+    document.getElementById('editCompraProveedor').value=c.proveedor_id||'';
+    document.getElementById('editCompraFecha').value=c.fecha||'';
+    document.getElementById('editCompraNota').value=c.nota||'';
+
+    var seccionCompleta=document.getElementById('editCompraSeccionCompleta');
+    if(_editCompraModo==='completa'){
+      seccionCompleta.style.display='block';
+      document.getElementById('editCompraAviso').textContent='Esta compra está pendiente por recibir — todavía no afectó el inventario, así que puedes editar todo con seguridad.';
+      /* Destino: releer bodegas frescas, mismo criterio de HITO 6.4 (nunca confiar en cache) */
+      var selDest=document.getElementById('editCompraDestino');
+      selDest.innerHTML='<option value="">Seleccionar destino...</option><option value="principal">Inventario principal — La Cava Licorera</option>';
+      try{
+        var rB=await fetch(SB+'/rest/v1/bodegas?id_licencia=eq.'+CID+'&select=*',{headers:{'apikey':SK,'Authorization':'Bearer '+SK}});
+        if(rB.ok){
+          var dB=await rB.json();
+          if(dB.length) selDest.innerHTML+='<option value="bodega_secundaria">Bodega secundaria — '+dB[0].nombre+'</option>';
+        }
+      }catch(e){}
+      selDest.value=c.destino||'';
+      /* Selector de producto para agregar items */
+      var selProd=document.getElementById('editCompraAddProd');
+      selProd.innerHTML='<option value="">Seleccionar producto...</option>'
+        +INVENTARIO.map(function(p){return '<option value="'+p.id+'">'+p.nombre+' (stock: '+p.stock+')</option>';}).join('');
+      editSetTipoCompra('');
+      editRenderItems();
+    } else {
+      seccionCompleta.style.display='none';
+      document.getElementById('editCompraAviso').textContent='Esta compra ya fue recibida: solo puedes editar proveedor, fecha y nota. Productos, cantidades, presentación, costo y destino quedan bloqueados porque no existe forma de saber si estas unidades específicas siguen en inventario o ya se vendieron.';
+      document.getElementById('editCompraTotalVal').textContent=fmt(c.total);
+    }
+
+    document.getElementById('modalCompraDet').style.display='none';
+    document.getElementById('modalEditCompra').style.display='flex';
+  }catch(e){ console.error(e); toast('Error al abrir la edición de la compra'); }
+}
+
+function editSetTipoCompra(tipo){
+  _editCompraTipoActual=tipo||'';
+  ['Unidad','Sixpack','Caja','Empaque'].forEach(function(t){
+    var b=document.getElementById('editTb'+t);
+    if(b) b.classList.toggle('on', !!tipo && t.toLowerCase()===tipo);
+  });
+  var wrap=document.getElementById('editCompraUdsWrap');
+  if(wrap){
+    wrap.style.display=(!!tipo && tipo!=='unidad')?'block':'none';
+    var udsInp=document.getElementById('editCompraUds');
+    if(udsInp && tipo==='sixpack') udsInp.value=6;
+    if(udsInp && tipo==='caja') udsInp.value=24;
+    if(udsInp && tipo==='empaque') udsInp.value=12;
+  }
+}
+
+function editRenderItems(){
+  var cont=document.getElementById('editCompraItemsList');
+  if(!_editCompraItems.length){
+    cont.innerHTML='<div style="text-align:center;padding:16px;color:var(--text3);font-size:12px;">Sin productos — agrega al menos uno.</div>';
+  } else {
+    cont.innerHTML='<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;min-width:420px;">'
+      +'<thead><tr style="background:var(--bg);">'
+      +'<th style="padding:6px 8px;text-align:left;font-size:10px;color:var(--text3);text-transform:uppercase;">Producto</th>'
+      +'<th style="padding:6px 8px;text-align:left;font-size:10px;color:var(--text3);text-transform:uppercase;">Presentación</th>'
+      +'<th style="padding:6px 8px;text-align:center;font-size:10px;color:var(--text3);text-transform:uppercase;">Cant.</th>'
+      +'<th style="padding:6px 8px;text-align:right;font-size:10px;color:var(--text3);text-transform:uppercase;">Subtotal</th>'
+      +'<th></th></tr></thead><tbody>'
+      +_editCompraItems.map(function(it,idx){
+        return '<tr style="border-bottom:1px solid var(--border);">'
+          +'<td style="padding:8px;font-size:12px;font-weight:600;">'+it.nombre+'</td>'
+          +'<td style="padding:8px;font-size:11px;color:var(--text2);">'+etiquetaTipoPresentacion(it.tipo)+(it.uds_empaque>1?' (x'+it.uds_empaque+')':'')+'</td>'
+          +'<td style="padding:8px;text-align:center;font-size:12px;">'+it.qty+'</td>'
+          +'<td style="padding:8px;text-align:right;font-size:12px;font-weight:700;">'+fmt(it.subtotal)+'</td>'
+          +'<td style="padding:8px;text-align:center;"><span onclick="editQuitarItem('+idx+')" style="cursor:pointer;color:var(--red);font-size:14px;" title="Quitar">&#10060;</span></td>'
+        +'</tr>';
+      }).join('')
+      +'</tbody></table></div>';
+  }
+  editRecalcularTotal();
+}
+
+function editQuitarItem(idx){
+  _editCompraItems.splice(idx,1);
+  editRenderItems();
+}
+
+function editRecalcularTotal(){
+  var total=_editCompraItems.reduce(function(s,it){return s+(it.subtotal||0);},0);
+  document.getElementById('editCompraTotalVal').textContent=fmt(total);
+}
+
+function editAgregarItem(){
+  var prodId=document.getElementById('editCompraAddProd').value;
+  var tipo=_editCompraTipoActual;
+  if(!tipo){ toast('Selecciona una presentación antes de continuar.'); return; }
+  var qty=parseInt(document.getElementById('editCompraAddQty').value)||0;
+  var costo=parseFloat(document.getElementById('editCompraAddCosto').value)||0;
+  if(!prodId){ toast('Selecciona un producto'); return; }
+  if(!qty){ toast('Ingresa la cantidad'); return; }
+  if(!costo){ toast('Ingresa el precio de costo'); return; }
+  var prod=INVENTARIO.find(function(p){return p.id===prodId;});
+  if(!prod) return;
+  var udsInpVal=parseInt(document.getElementById('editCompraUds').value)||0;
+  var udsEmp=(tipo!=='unidad'&&udsInpVal>1)?udsInpVal:(prod.uds_empaque||1);
+  var res=calcularItemCompra(prod,tipo,qty,costo,udsEmp); /* HITO 6.18.5, sin modificar */
+  if(res.huboMultiplicacion){
+    if(!confirm('Ingresaste '+fmt(costo)+' como costo de 1 unidad física. Como este producto agrupa '+udsEmp+' unidades por presentación, se guardará '+fmt(res.costoPorEmpaque)+' como costo de la presentación completa. ¿Confirmas?')) return;
+  }
+  if(res.margenNegativo){
+    if(!confirm('Este costo ('+fmt(res.costoPorEmpaque)+') es mayor al precio de venta actual ('+fmt(prod.precio_venta)+'). El producto quedaría con margen negativo. ¿Continuar de todas formas?')) return;
+  }
+  var existing=_editCompraItems.find(function(i){return i.prod_id===prodId;});
+  if(existing){
+    existing.qty+=res.qtyEmpaques;
+    existing.costo=res.costoPorEmpaque;
+    existing.subtotal+=res.subtotal;
+  } else {
+    _editCompraItems.push({prod_id:prodId, nombre:prod.nombre, qty:res.qtyEmpaques, costo:res.costoPorEmpaque, subtotal:res.subtotal, tipo:tipo, uds_empaque:udsEmp});
+  }
+  document.getElementById('editCompraAddQty').value='';
+  document.getElementById('editCompraAddCosto').value='';
+  document.getElementById('editCompraAddProd').value='';
+  editSetTipoCompra('');
+  editRenderItems();
+}
+
+async function guardarEdicionCompra(){
+  if(!_editCompraId) return;
+  var proveedorSel=document.getElementById('editCompraProveedor').value;
+  var prov=PROVEEDORES.find(function(p){return p.id===proveedorSel;});
+  var fecha=document.getElementById('editCompraFecha').value;
+  var nota=document.getElementById('editCompraNota').value.trim();
+  var destino=_editCompraModo==='completa'?document.getElementById('editCompraDestino').value:null;
+
+  if(_editCompraModo==='completa'){
+    if(!_editCompraItems.length){ toast('Agrega al menos un producto'); return; }
+    if(destino!=='principal'&&destino!=='bodega_secundaria'){ toast('Debes seleccionar el destino del inventario antes de guardar.'); return; }
+  }
+
+  var btn=document.getElementById('btnGuardarEdicionCompra');
+  if(btn) btn.disabled=true;
+  try{
+    /* Toma de posesion exclusiva ANTES de escribir nada — mismo patron CAS de
+       recibirCompra()/eliminarCompra(). Solo el ganador continua. */
+    var rTake=await fetch(SB+'/rest/v1/compras?id=eq.'+_editCompraId+'&estado=eq.'+_editCompraEstadoOriginal,
+      {method:'PATCH',headers:H,body:JSON.stringify({estado:'editando'})});
+    var tomada=rTake.ok?await rTake.json():[];
+    if(!rTake.ok||!tomada.length){
+      toast('Otro proceso ya está modificando esta compra, o su estado cambió — actualiza e inténtalo de nuevo.');
+      if(btn) btn.disabled=false;
+      await cargarComprasSB();renderComprasList();
+      return;
+    }
+
+    if(_editCompraModo==='completa'){
+      var nuevoTotal=_editCompraItems.reduce(function(s,it){return s+(it.subtotal||0);},0); /* HITO 6.18.14-D: total SIEMPRE derivado de los items, nunca un valor manual */
+      var rDel=await fetch(SB+'/rest/v1/compras_items?compra_id=eq.'+_editCompraId,{method:'DELETE',headers:H});
+      if(!rDel.ok){
+        toast('No se pudieron actualizar los productos de la compra. Quedó en estado "editando" y requiere revisión manual — no se puede reintentar automáticamente desde aquí.');
+        if(btn) btn.disabled=false;
+        await cargarComprasSB();renderComprasList();
+        return;
+      }
+      var itemsBody=_editCompraItems.map(function(i){
+        return {compra_id:_editCompraId,prod_id:i.prod_id,nombre:i.nombre,qty:i.qty,costo:i.costo,subtotal:i.subtotal,tipo:i.tipo||'unidad',uds_empaque:i.uds_empaque||1};
+      });
+      var rIns=await fetch(SB+'/rest/v1/compras_items',{method:'POST',headers:H,body:JSON.stringify(itemsBody)});
+      if(!rIns.ok){
+        toast('Los productos anteriores se eliminaron pero no se pudieron guardar los nuevos. Esta compra quedó en estado "editando" y requiere revisión manual — no se puede reintentar automáticamente desde aquí.');
+        if(btn) btn.disabled=false;
+        await cargarComprasSB();renderComprasList();
+        return;
+      }
+      var rHead=await fetch(SB+'/rest/v1/compras?id=eq.'+_editCompraId+'&estado=eq.editando',{method:'PATCH',headers:H,body:JSON.stringify({
+        proveedor_id:proveedorSel||null, proveedor_nombre:prov?prov.nombre:'Sin proveedor', fecha:fecha||null, nota:nota, destino:destino, total:nuevoTotal, estado:'pendiente'
+      })});
+      var afectadasHead=rHead.ok?await rHead.json():[];
+      if(!rHead.ok||!afectadasHead.length){
+        toast('Los productos se guardaron pero no se pudo confirmar el resto de los cambios. Esta compra quedó en estado "editando" y requiere revisión manual.');
+        if(btn) btn.disabled=false;
+        await cargarComprasSB();renderComprasList();
+        return;
+      }
+    } else {
+      /* Modo LIMITADA (compra recibida): solo campos administrativos, nunca items/destino/costo/inventario. */
+      var rHeadLim=await fetch(SB+'/rest/v1/compras?id=eq.'+_editCompraId+'&estado=eq.editando',{method:'PATCH',headers:H,body:JSON.stringify({
+        proveedor_id:proveedorSel||null, proveedor_nombre:prov?prov.nombre:'Sin proveedor', fecha:fecha||null, nota:nota, estado:'recibida'
+      })});
+      var afectadasLim=rHeadLim.ok?await rHeadLim.json():[];
+      if(!rHeadLim.ok||!afectadasLim.length){
+        toast('No se pudieron confirmar los cambios. Esta compra quedó en estado "editando" y requiere revisión manual.');
+        if(btn) btn.disabled=false;
+        await cargarComprasSB();renderComprasList();
+        return;
+      }
+    }
+
+    var idEditada=_editCompraId;
+    cerrarEdicionCompra();
+    await cargarComprasSB();
+    renderComprasList();updateComprasBadge();
+    toast('✅ Compra actualizada');
+    abrirDetalleCompra(idEditada);
+  }catch(e){
+    console.error(e);
+    toast('Error al guardar los cambios de la compra');
+  }
+  if(btn) btn.disabled=false;
+}
+
+function cerrarEdicionCompra(){
+  document.getElementById('modalEditCompra').style.display='none';
+  _editCompraId=null; _editCompraModo=null; _editCompraEstadoOriginal=null; _editCompraItems=[];
 }
 
 /* ==================== SUPABASE — COMPRAS ==================== */
@@ -7032,15 +7579,23 @@ async function buscarGastosPeriodo(){
   await cargarGastosPorRango(desde,hasta||desde);
 }
 
-async function cargarGastosPorRango(desde,hasta){
+/* HITO 6.18.10 — extraida de cargarGastosPorRango sin cambiar la consulta ni el mapeo
+   (mismo filtro por gastos.fecha, ambos extremos inclusive, ya usado por Contabilidad).
+   Version PURA: no toca el array global GASTOS ni re-renderiza el modulo de Gastos, para
+   poder reutilizarla desde calcularResumenFinanciero() (Inicio) sin heredar esos efectos
+   secundarios de UI. */
+async function obtenerGastosRangoSB(desde,hasta){
   try{
     var r=await fetch(SB+'/rest/v1/gastos?id_licencia=eq.'+CID+'&fecha=gte.'+desde+'&fecha=lte.'+hasta+'&select=*&order=fecha.desc,created_at.desc',
       {headers:{'apikey':SK,'Authorization':'Bearer '+SK}});
-    if(r.ok){
-      var data=await r.json();
-      GASTOS=data.map(function(g){return {id:g.id,fecha:g.fecha,categoria:g.categoria,descripcion:g.descripcion,valor:parseFloat(g.valor)||0};});
-    }
-  }catch(e){console.warn('Error cargando gastos:',e);}
+    if(!r.ok) return [];
+    var data=await r.json();
+    return data.map(function(g){return {id:g.id,fecha:g.fecha,categoria:g.categoria,descripcion:g.descripcion,valor:parseFloat(g.valor)||0};});
+  }catch(e){console.warn('Error cargando gastos:',e); return [];}
+}
+
+async function cargarGastosPorRango(desde,hasta){
+  GASTOS=await obtenerGastosRangoSB(desde,hasta);
   renderGastosStats();renderGastosList();
 }
 
@@ -7214,7 +7769,7 @@ async function getVentasRangoSB(desde,hasta){
       totalVentas=vdata.reduce(function(s,v){return s+(parseFloat(v.total)||0);},0);
       if(vdata.length>0){
         var ids=vdata.map(function(v){return v.id;}).join(',');
-        var r2=await fetch(SB+'/rest/v1/detalle_ventas?venta_id=in.('+ids+')&select=producto_nombre,cantidad',
+        var r2=await fetch(SB+'/rest/v1/detalle_ventas?venta_id=in.('+ids+')&select=producto_nombre,cantidad,es_unidad,uds_empaque',
           {headers:{'apikey':SK,'Authorization':'Bearer '+SK}});
         if(r2.ok){
           var items=await r2.json();
@@ -7224,13 +7779,48 @@ async function getVentasRangoSB(desde,hasta){
               var pn=p.nombre.toLowerCase();
               return pn===nombre||nombre.indexOf(pn.split(' ').slice(0,3).join(' '))===0;
             });
-            if(prod&&prod.precio_costo>0) costo+=prod.precio_costo*(parseInt(item.cantidad)||1);
+            if(prod&&prod.precio_costo>0){
+              /* HITO 6.18.14 — precio_costo es el costo de UNA PRESENTACION completa (uds_empaque
+                 unidades fisicas), confirmado en HITO 6.18.13. cantidad en detalle_ventas cuenta
+                 presentaciones cuando es_unidad=false, o unidades fisicas sueltas cuando
+                 es_unidad=true (mismo campo que ya usa descontarStockItemSB para el stock — no se
+                 inventa una interpretacion nueva). Antes esta linea multiplicaba precio_costo por
+                 cantidad SIN mirar es_unidad, sobreestimando el CMV en un factor de uds_empaque en
+                 cada venta de unidad suelta de un producto empacado (ver auditoria 6.18.13). uds_empaque
+                 se lee del propio detalle_ventas (capturado al momento de la venta), no del producto
+                 actual, para no introducir una segunda fuente de retroactividad ademas de la ya
+                 documentada en precio_costo. No se redondea por linea: igual que antes, el unico
+                 punto de redondeo del motor financiero sigue siendo fmt() al mostrar. */
+              var cant=parseInt(item.cantidad)||1;
+              var udsEmpVenta=parseInt(item.uds_empaque)||1;
+              var unidadesFisicas=item.es_unidad?cant:cant*udsEmpVenta;
+              var costoUnitarioFisico=udsEmpVenta>1?(prod.precio_costo/udsEmpVenta):prod.precio_costo;
+              costo+=unidadesFisicas*costoUnitarioFisico;
+            }
           });
         }
       }
     }
   }catch(e){console.warn('Error cargando ventas del mes:',e);}
   return {ventas:totalVentas,costo:costo,numVentas:numVentas};
+}
+
+/* HITO 6.18.10 — FUENTE UNICA DE VERDAD FINANCIERA.
+   Unifica la utilidad mostrada en Inicio con la de Contabilidad: ambas deben salir de
+   este mismo calculo, para el mismo periodo. NO cambia ninguna formula financiera:
+   reutiliza getVentasRangoSB() (ingresos + CMV) tal cual, sin tocar una sola linea de esa
+   funcion, y obtenerGastosRangoSB() (mismo filtro por gastos.fecha que ya usaba
+   Contabilidad). El CMV sigue siendo exactamente el mismo — con las mismas limitaciones
+   ya documentadas (empareja por nombre, ignora es_unidad, usa precio_costo actual) — este
+   hito NO las corrige, solo evita que Inicio calcule una utilidad distinta. */
+async function calcularResumenFinanciero(desde,hasta){
+  var vData=await getVentasRangoSB(desde,hasta);
+  var gastosDelPeriodo=await obtenerGastosRangoSB(desde,hasta);
+  var ingresos=vData.ventas, cmv=vData.costo;
+  var gastos=gastosDelPeriodo.reduce(function(s,g){return s+g.valor;},0);
+  var utilidadBruta=ingresos-cmv;
+  var utilidadNeta=utilidadBruta-gastos;
+  return {ingresos:ingresos, cmv:cmv, utilidadBruta:utilidadBruta, gastos:gastos, utilidadNeta:utilidadNeta, numVentas:vData.numVentas, numGastos:gastosDelPeriodo.length};
 }
 
 async function renderEstadoResultados(){
@@ -7264,7 +7854,7 @@ async function renderEstadoResultados(){
   var colorOper=utilOper>=0?'var(--green)':'var(--red)';
   erEl.innerHTML='<div class="er-row header"><span>Concepto</span><span>Valor</span><span>%</span></div>'
     +'<div class="er-row ingresos"><span class="er-label">&#11014; Ingresos por ventas <span style="font-size:10px;color:var(--text3);">('+numVentas+' ventas, sin canjes)</span></span><span class="er-val positive">'+fmt(ventas)+'</span><span class="er-pct">100%</span></div>'
-    +'<div class="er-row costo"><span class="er-label">&#11015; Costo de mercancia vendida (COGS) <span style="font-size:10px;color:var(--text3);">unidades vendidas × precio costo</span></span><span class="er-val negative">-'+fmt(costo)+'</span><span class="er-pct">'+(ventas>0?Math.round(costo/ventas*100):0)+'%</span></div>'
+    +'<div class="er-row costo"><span class="er-label">&#11015; Costo de mercancía vendida (CMV) <span style="font-size:10px;color:var(--text3);">unidades vendidas × precio costo</span></span><span class="er-val negative">-'+fmt(costo)+'</span><span class="er-pct">'+(ventas>0?Math.round(costo/ventas*100):0)+'%</span></div>'
     +'<div class="er-row subtotal"><span class="er-label"><strong>= Utilidad bruta</strong></span><span class="er-val" style="color:var(--green);"><strong>'+fmt(utilBruta)+'</strong></span><span class="er-pct"><strong>'+margenBruto+'%</strong></span></div>'
     +'<div style="height:1px;background:var(--border);margin:4px 0;"></div>'
     +'<div class="er-row gastos"><span class="er-label">&#11015; Gastos operacionales <span style="font-size:10px;color:var(--text3);">(fidelización, admin, etc.)</span></span><span class="er-val negative">-'+fmt(totalGastos)+'</span><span class="er-pct">'+(ventas>0?Math.round(totalGastos/ventas*100):0)+'%</span></div>'
@@ -7272,14 +7862,14 @@ async function renderEstadoResultados(){
     +(comprasMes>0?'<div style="margin-top:12px;background:#EFF6FF;border-left:4px solid #3B82F6;border-radius:0 8px 8px 0;padding:10px 14px;">'
       +'<div style="font-size:12px;font-weight:700;color:#1D4ED8;margin-bottom:2px;">&#128230; Inversión en inventario del período</div>'
       +'<div style="font-size:12px;color:#1D4ED8;">'+fmt(comprasMes)+' en '+numCompras+' compra'+(numCompras!==1?'s':'')+' recibida'+(numCompras!==1?'s':'')+'</div>'
-      +'<div style="font-size:11px;color:#3B82F6;margin-top:3px;">Esta inversión queda en inventario como activo. Solo afecta la utilidad cuando los productos se vendan (ya incluido en el COGS de arriba).</div>'
+      +'<div style="font-size:11px;color:#3B82F6;margin-top:3px;">Esta inversión queda en inventario como activo. Solo afecta la utilidad cuando los productos se vendan (ya incluido en el CMV de arriba).</div>'
       +'</div>':'');
   /* Cards resumen */
   var cards=document.getElementById('contCards');
   if(cards){
     cards.innerHTML=[
       {label:'Ingresos ventas',val:fmt(ventas)+' ('+numVentas+')',color:'var(--blue)',bg:'var(--blue-bg)',icon:'&#11014;'},
-      {label:'COGS (vendido)',val:fmt(costo)+' ('+(ventas>0?Math.round(costo/ventas*100):0)+'%)',color:'var(--yellow)',bg:'var(--yellow-bg)',icon:'&#128230;'},
+      {label:'CMV (vendido)',val:fmt(costo)+' ('+(ventas>0?Math.round(costo/ventas*100):0)+'%)',color:'var(--yellow)',bg:'var(--yellow-bg)',icon:'&#128230;'},
       {label:'Utilidad bruta',val:fmt(utilBruta)+' ('+margenBruto+'%)',color:'var(--green)',bg:'var(--green-bg)',icon:'&#128176;'},
       {label:'Gastos operac.',val:fmt(totalGastos),color:'var(--red)',bg:'var(--red-bg)',icon:'&#11015;'},
       {label:'Utilidad neta',val:fmt(utilOper)+' ('+margenOper+'%)',color:colorOper,bg:utilOper>=0?'var(--green-bg)':'var(--red-bg)',icon:'&#127881;'},
@@ -7470,7 +8060,19 @@ function guardarNuevoProd(){
 }
 
 /* guardarEditProd -- version completa con soporte empaque */
-function guardarEditProd(){
+/* HITO 6.18.11 — REGLA FUNDAMENTAL: guardar los datos generales del producto (nombre,
+   categoria, precio de venta, etc.) NUNCA puede modificar precio_costo como efecto
+   colateral, ni corregir el stock desde este mismo formulario puede hacerlo tampoco.
+   Antes, actualizarProdSB() enviaba nombre+categoria+precio_venta+precio_costo+stock+
+   stock_min+empaque+uds_empaque+uds_sueltas+imagen en UN SOLO PATCH — si el operador
+   solo queria corregir el stock, el costo (cargado en el formulario desde que se abrio)
+   viajaba igual en el mismo request. Ahora se emiten hasta 3 escrituras INDEPENDIENTES:
+   (1) datos generales (nunca incluye stock ni precio_costo), (2) stock — SOLO si cambio,
+   vía el mismo CAS de 6.18.6/6.4 (ajustarStockAtomicoSB), sin precio_costo en el request,
+   (3) precio_costo — SOLO si realmente cambio, en un PATCH separado y con confirmacion
+   explicita ANTES de aplicar nada. actualizarProdSB() queda intacta pero sin uso, igual
+   que el precedente ya establecido de no borrar codigo muerto en este proyecto. */
+async function guardarEditProd(){
   var prod=INVENTARIO.find(function(p){return p.id===editProdId;});if(!prod)return;
   var nombre=document.getElementById('editNombre').value.trim();
   var catSel=document.getElementById('editCategoria').value;
@@ -7496,17 +8098,45 @@ function guardarEditProd(){
     invBar.appendChild(d2);
   }
   var pcAnterior=parseFloat(prod.precio_costo)||0;
-  prod.nombre=nombre;prod.categoria=cat;prod.precio_venta=pv;prod.precio_costo=pc;prod.stock_min=sm;prod.stock=st;
+  var stockAnterior=parseInt(prod.stock)||0;
+  var stockCambio = st!==stockAnterior;
+  var costoCambio = pc>0 && pc!==pcAnterior;
+
+  /* Confirmacion explicita ANTES de aplicar nada — nunca un efecto secundario silencioso */
+  if(costoCambio){
+    if(!confirm('Vas a modificar el COSTO de "'+nombre.split(' ').slice(0,3).join(' ')+'" de '+fmt(pcAnterior)+' a '+fmt(pc)+'.\n\nEsta es una acción independiente del stock.\n\n¿Confirmas el cambio de costo?')) return;
+  }
+
+  prod.nombre=nombre;prod.categoria=cat;prod.precio_venta=pv;prod.stock_min=sm;
   prod.empaque=empaque;prod.uds_empaque=udsEmpaque;
   if(editImagenChanged) prod.imagen=editImagenB64;
-  /* Update Supabase */
-  var editedProd=INVENTARIO.find(function(p){return p.id===editProdId;});
-  if(editedProd) actualizarProdSB(editedProd);
-  /* Shadow write (best-effort, fire-and-forget): costo de la presentacion PRIMARIA, solo si cambio */
-  if(editedProd&&pc>0&&pc!==pcAnterior) shadowWritePrimaria(editedProd,pc,'manual');
+
+  /* (1) Datos generales — NUNCA incluye stock ni precio_costo */
+  await actualizarDatosProductoSB(prod);
+
+  /* (2) Stock — SOLO si cambio, via CAS, en un request que NUNCA incluye precio_costo */
+  var stockOk=true;
+  if(stockCambio){
+    var resStock=await ajustarStockAtomicoSB(editProdId, function(stockAct,sueltasAct,udsEmpAct){
+      return {stock:st, uds_sueltas:sueltasAct};
+    });
+    if(resStock.ok){ sincronizarInvLocal(editProdId, resStock.stock, resStock.uds_sueltas); }
+    else { stockOk=false; toast('Los demás datos se guardaron, pero no se pudo actualizar el stock (otro dispositivo lo modificó) — actualiza e inténtalo de nuevo'); }
+  }
+
+  /* (3) Costo — SOLO si realmente cambio, PATCH separado e independiente del stock */
+  if(costoCambio){
+    prod.precio_costo=pc;
+    await fetch(SB+'/rest/v1/inventario?id=eq.'+editProdId,{method:'PATCH',headers:H,body:JSON.stringify({precio_costo:pc})});
+    shadowWritePrimaria(prod,pc,'manual');
+  }
+
   closeEditProd();renderInvTable();renderInvStats();renderInvAlerts();
   if(document.getElementById('vPOS').style.display==='flex')renderPOS();
-  toast('Producto actualizado: '+nombre.split(' ').slice(0,3).join(' '));
+  var msg='Producto actualizado: '+nombre.split(' ').slice(0,3).join(' ');
+  if(stockOk&&stockCambio&&!costoCambio) msg+=' — stock actualizado, el costo no cambió.';
+  else if(costoCambio) msg+=' — costo actualizado a '+fmt(pc)+', el stock '+(stockCambio?'también se actualizó':'no cambió')+'.';
+  toast(msg);
 }
 
 /* openEditProd -- version completa con soporte empaque */
@@ -7603,10 +8233,14 @@ function actualizarPreviewCompra(){
   var prev=document.getElementById('compraItemPreview');
   if(!prev) return;
   var prodId=document.getElementById('compraAddProd').value;
-  var tipo=tipoCompraActual||'unidad';
+  var tipo=tipoCompraActual;
   var qty=parseInt(document.getElementById('compraAddQty').value)||0;
   var costo=parseFloat(document.getElementById('compraAddCosto').value)||0;
   var prod=prodId?INVENTARIO.find(function(p){return p.id===prodId;}):null;
+  /* HITO 6.18.14-A: sin presentacion elegida no se muestra vista previa — calcularla
+     asumiendo 'unidad' mostraria unidades fisicas y costo de una presentacion que el
+     operador todavia no eligio. */
+  if(!tipo){ prev.style.display='none'; prev.innerHTML=''; return; }
   if(!prod||!qty||!costo){ prev.style.display='none'; prev.innerHTML=''; return; }
   var udsInpVal=parseInt(document.getElementById('tipoCompraUds')?document.getElementById('tipoCompraUds').value:0)||0;
   var udsEmp=(tipo!=='unidad'&&udsInpVal>1)?udsInpVal:(prod.uds_empaque||1);
@@ -7634,7 +8268,10 @@ var _pendingItemCompra=null;
 /* addItemCompra -- version con calculo puro (calcularItemCompra) + confirmacion cuando hay riesgo */
 function addItemCompra(){
   var prodId=document.getElementById('compraAddProd').value;
-  var tipo=tipoCompraActual||'unidad';
+  /* HITO 6.18.14-A: la presentacion es obligatoria y explicita. Ya NO se asume 'unidad'
+     por defecto: sin eleccion, la linea no se puede agregar a la compra. */
+  var tipo=tipoCompraActual;
+  if(!tipo){toast('Selecciona una presentación antes de continuar.');return;}
   var qty=parseInt(document.getElementById('compraAddQty').value)||0;   /* qty = cantidad que el usuario ingresó (empaques o unidades) */
   var costo=parseFloat(document.getElementById('compraAddCosto').value)||0; /* costo = precio que ingresó (por empaque o por unidad) */
   if(!prodId){toast('Selecciona un producto');return;}
@@ -7708,7 +8345,7 @@ function _agregarItemCompraAlCarrito(itemData){
   if(document.getElementById('compraMargen'))document.getElementById('compraMargen').value='';
   if(document.getElementById('compraAddPV'))document.getElementById('compraAddPV').value='';
   if(document.getElementById('compraSearchProd'))document.getElementById('compraSearchProd').value='';
-  setTipoCompra('unidad');
+  setTipoCompra(''); /* HITO 6.18.14-A: cada linea nueva exige elegir presentacion otra vez */
   filtrarProductosCompra();
   renderItemsCompra();
   actualizarPreviewCompra();
@@ -7954,7 +8591,9 @@ function openInvModal(id, tipo){
       ? 'Stock actual: '+prod.stock+' '+prod.empaque+'s = '+stockUds+' unidades totales'
       : 'Stock actual: '+prod.stock+' unidades disponibles';
     document.getElementById('invModalSub').textContent = subText;
-    if(tipo==='ajuste') document.getElementById('invModalPrecio').value = prod.precio_costo||'';
+    /* HITO 6.18.11: ya NO se pre-llena el costo en "Ajuste" — ese campo se oculta por
+       completo para esta pestaña (ver updateInvModalLabels) precisamente para que nunca
+       parezca que hay que "confirmar" un costo al corregir stock. */
 
     /* Show empaque selector only for entrada with multi-unit products */
     var hasEmpaque = udsEmp>1 || (prod.empaque && prod.empaque!=='unidad' && prod.empaque!=='');
@@ -8019,7 +8658,11 @@ function updateInvModalLabels(){
   var empNombre = prod ? (prod.empaque||'und') : 'und';
   var qtyLbl = document.getElementById('invModalQtyLabel');
   var precioLbl = document.getElementById('invModalPrecioLabel');
+  var precioWrap = document.getElementById('invModalPrecioWrap');
+  var infoDiv = document.getElementById('invAjusteCostoInfo');
   if(invTipo==='entrada'){
+    if(precioWrap) precioWrap.style.display='block';
+    if(infoDiv) infoDiv.style.display='none';
     if(udsEmp>1 && invEntradaTipo==='empaque'){
       if(qtyLbl) qtyLbl.textContent = 'Cantidad de '+empNombre+'s';
       if(precioLbl) precioLbl.textContent = 'Costo por '+empNombre+' (lo que pagaste)';
@@ -8031,11 +8674,25 @@ function updateInvModalLabels(){
       if(precioLbl) precioLbl.textContent = 'Costo unitario (lo que pagaste)';
     }
   } else if(invTipo==='salida'){
+    /* HITO 6.18.11: Salida nunca modifico el costo (ya estaba asi); se oculta el campo
+       de precio por completo para que quede inequivoco, en vez de un "Valor ref." que
+       sugeria que algo se guardaba. */
     if(qtyLbl) qtyLbl.textContent = 'Cantidad a retirar';
-    if(precioLbl) precioLbl.textContent = 'Valor ref.';
+    if(precioWrap) precioWrap.style.display='none';
+    if(infoDiv){
+      infoDiv.style.display='block';
+      infoDiv.textContent='Esta salida solo descuenta stock. El costo del producto no se modifica.';
+    }
   } else {
+    /* Ajuste directo — HITO 6.18.11: NUNCA modifica precio_costo. El campo de precio se
+       oculta por completo (ya no se pre-llena ni se envia) y se muestra el costo actual
+       solo como informacion, dejando explicito que no cambiara. */
     if(qtyLbl) qtyLbl.textContent = 'Nuevo stock total';
-    if(precioLbl) precioLbl.textContent = 'Precio costo';
+    if(precioWrap) precioWrap.style.display='none';
+    if(infoDiv){
+      infoDiv.style.display='block';
+      infoDiv.textContent='Este ajuste corrige únicamente el stock físico. Costo actual: '+fmt(prod?prod.precio_costo:0)+' — no se modificará.';
+    }
   }
 }
 
@@ -8101,62 +8758,84 @@ function closeInvModal(){
   document.getElementById('invModalOverlay').classList.remove('open');
 }
 
-function guardarInvAjuste(){
+/* HITO 6.18.11 — REGLA FUNDAMENTAL: un ajuste/salida de stock NUNCA puede modificar
+   precio_costo, sin importar el contenido de ningun campo de precio. Las tres ramas
+   (entrada/salida/ajuste) ahora escriben el stock exclusivamente via ajustarStockAtomicoSB
+   (el MISMO CAS ya validado desde HITO 6.4/6.18.6), nunca via actualizarStockSB (PATCH
+   plano, sin proteccion de concurrencia, que ademas podia mezclar stock y costo en un
+   solo request). El pool se interpreta SIEMPRE con udsEmpAct — el uds_empaque real y
+   fresco del producto leido por el propio CAS — nunca con un valor capturado antes.
+   Solo "entrada" puede terminar tambien escribiendo precio_costo, y lo hace en un PATCH
+   SEPARADO e independiente (igual que aplicarCompraAInventarioPrincipal en 6.18.6),
+   nunca en el mismo request que el stock. */
+async function guardarInvAjuste(){
   var id = invModalId || document.getElementById('invModalProd').value;
   if(!id){toast('Selecciona un producto');return;}
   var qty = parseInt(document.getElementById('invModalQty').value)||0;
-  var precio = parseFloat(document.getElementById('invModalPrecio').value)||0;
   var prod = INVENTARIO.find(function(p){return p.id===id;});
   if(!prod){toast('Producto no encontrado');return;}
-  var pcAnteriorAj=parseFloat(prod.precio_costo)||0;
-  var udsEmp = prod.uds_empaque||1;
   var empNombre = prod.empaque||'und';
+  var nombreCorto = prod.nombre.split(' ').slice(0,3).join(' ');
 
   if(invTipo==='entrada'){
     if(!qty){toast('Ingresa la cantidad');return;}
-    var stockAgregado, costoPack;
-    if(udsEmp>1 && invEntradaTipo==='unidad'){
-      /* Entran unidades individuales, convertir a empaques */
-      var empsNuevos = Math.floor(qty/udsEmp);
-      var sueltas = qty % udsEmp;
-      /* Guardar sueltas aparte */
-      prod.uds_sueltas = (prod.uds_sueltas||0) + sueltas;
-      /* Si hay suficientes sueltas para armar un empaque mas */
-      if(prod.uds_sueltas >= udsEmp){
-        empsNuevos += Math.floor(prod.uds_sueltas/udsEmp);
-        prod.uds_sueltas = prod.uds_sueltas % udsEmp;
-      }
-      stockAgregado = empsNuevos;
-      /* precio ingresado es costo por UNIDAD → convertir a costo por EMPAQUE */
-      costoPack = Math.round(precio * udsEmp);
-      toast('Entrada: '+qty+' unidades ('+empsNuevos+' '+empNombre+'s'+( prod.uds_sueltas>0?' + '+prod.uds_sueltas+' sueltas':'')+')');
+    var precioEntrada = parseFloat(document.getElementById('invModalPrecio').value)||0;
+    var udsEmpEntradaSel = prod.uds_empaque||1;
+    /* unidades fisicas de ESTA entrada: mismo concepto que unidadesFisicasDeCompra (6.18.6) */
+    var unidadesFisicasEntrada = (udsEmpEntradaSel>1 && invEntradaTipo==='unidad') ? qty : qty*udsEmpEntradaSel;
+    var costoPackEntrada = (udsEmpEntradaSel>1 && invEntradaTipo==='unidad') ? Math.round(precioEntrada*udsEmpEntradaSel) : precioEntrada;
+    var labelEntrada = (udsEmpEntradaSel>1 && invEntradaTipo==='unidad') ? (qty+' unidades') : (qty+' '+empNombre+'s');
+
+    var resEnt = await ajustarStockAtomicoSB(id, function(stockAct,sueltasAct,udsEmpAct){
+      var udsEmpProducto=udsEmpAct||1;
+      var poolActual=stockAct*udsEmpProducto+sueltasAct;
+      var poolNuevo=poolActual+unidadesFisicasEntrada;
+      return {stock:Math.floor(poolNuevo/udsEmpProducto), uds_sueltas:poolNuevo%udsEmpProducto};
+    });
+    if(!resEnt.ok){ toast('No se pudo registrar la entrada — actualiza e inténtalo de nuevo'); return; }
+    sincronizarInvLocal(id, resEnt.stock, resEnt.uds_sueltas);
+
+    var pcAnteriorEnt=parseFloat(prod.precio_costo)||0;
+    if(precioEntrada>0 && costoPackEntrada!==pcAnteriorEnt){
+      /* Escritura SEPARADA e independiente del stock — nunca en el mismo PATCH. */
+      await fetch(SB+'/rest/v1/inventario?id=eq.'+id,{method:'PATCH',headers:H,body:JSON.stringify({precio_costo:costoPackEntrada})});
+      prod.precio_costo=costoPackEntrada;
+      shadowWritePrimaria(prod,costoPackEntrada,'manual');
+      toast('Entrada: +'+labelEntrada+' de '+nombreCorto+'. Costo actualizado a '+fmt(costoPackEntrada)+'.');
     } else {
-      stockAgregado = qty;
-      /* precio ingresado es costo por EMPAQUE → guardar tal cual */
-      costoPack = precio;
-      toast('Entrada: +'+qty+' '+empNombre+'s de '+prod.nombre.split(' ').slice(0,3).join(' '));
+      toast('Entrada: +'+labelEntrada+' de '+nombreCorto+'. El costo del producto no se modificó.');
     }
-    prod.stock += stockAgregado;
-    if(precio>0) prod.precio_costo = costoPack;
 
   } else if(invTipo==='salida'){
     if(!qty){toast('Ingresa la cantidad');return;}
-    if(qty>prod.stock){toast('Sin suficiente stock ('+prod.stock+' '+empNombre+'s disponibles)');return;}
-    prod.stock -= qty;
-    toast('Salida: -'+qty+' '+empNombre+'s');
+    var udsEmpSalida = prod.uds_empaque||1;
+    var resSal = await ajustarStockAtomicoSB(id, function(stockAct,sueltasAct,udsEmpAct){
+      var udsEmpProducto=udsEmpAct||1;
+      var poolActual=stockAct*udsEmpProducto+sueltasAct;
+      var unidadesSalida=qty*udsEmpProducto; /* qty expresado en la unidad del producto, igual que antes */
+      if(poolActual<unidadesSalida) return null;
+      var poolNuevo=poolActual-unidadesSalida;
+      return {stock:Math.floor(poolNuevo/udsEmpProducto), uds_sueltas:poolNuevo%udsEmpProducto};
+    });
+    if(!resSal.ok){
+      toast(resSal.motivo==='insuficiente' ? 'Sin suficiente stock disponible para esta salida' : 'No se pudo registrar la salida — actualiza e inténtalo de nuevo');
+      return;
+    }
+    sincronizarInvLocal(id, resSal.stock, resSal.uds_sueltas);
+    toast('Salida: -'+qty+' '+empNombre+'s de '+nombreCorto+'. El costo del producto no se modificó.');
+
   } else {
-    /* Ajuste directo */
-    prod.stock = qty;
-    if(precio>0) prod.precio_costo = precio;
-    toast('Stock ajustado a '+qty+' '+empNombre+'s');
+    /* Ajuste directo — corrige EXCLUSIVAMENTE el stock. precio_costo NUNCA viaja en esta
+       rama: el campo de precio ni siquiera se lee (esta oculto en la UI para esta pestaña). */
+    if(!confirm('Se actualizará únicamente el stock físico de '+nombreCorto+' a '+qty+' '+empNombre+'s.\n\nEl costo del producto ('+fmt(prod.precio_costo)+') NO será modificado.\n\n¿Continuar?')) return;
+    var resAdj = await ajustarStockAtomicoSB(id, function(stockAct,sueltasAct,udsEmpAct){
+      return {stock:qty, uds_sueltas:sueltasAct};
+    });
+    if(!resAdj.ok){ toast('No se pudo ajustar el stock — actualiza e inténtalo de nuevo'); return; }
+    sincronizarInvLocal(id, resAdj.stock, resAdj.uds_sueltas);
+    toast('Stock de '+nombreCorto+' ajustado a '+qty+' '+empNombre+'s. El costo permanece sin cambios ('+fmt(prod.precio_costo)+').');
   }
 
-  /* Sync stock to Supabase */
-  var ajusteProd=INVENTARIO.find(function(p){return p.id===id;});
-  if(ajusteProd) actualizarStockSB(ajusteProd.id, ajusteProd.stock, ajusteProd.precio_costo, ajusteProd.uds_sueltas||0);
-  /* Shadow write (best-effort, fire-and-forget): costo de la presentacion PRIMARIA, solo si cambio */
-  var pcNuevoAj=ajusteProd?(parseFloat(ajusteProd.precio_costo)||0):0;
-  if(ajusteProd&&pcNuevoAj>0&&pcNuevoAj!==pcAnteriorAj) shadowWritePrimaria(ajusteProd,pcNuevoAj,'manual');
   closeInvModal();
   renderInvTable();
   renderInvStats();
@@ -8717,6 +9396,16 @@ async function eliminarCompra(id){
       return;
     }
 
+    /* HITO 6.18.14-B: 'recibiendo' es el estado transicional que puede dejar una recepcion
+       incompleta (ver recibirCompra). Sin este guard, una compra en 'recibiendo' con
+       inventario YA aplicado parcialmente se eliminaria sin revertir nada (el bloque de
+       reversion de abajo solo actua sobre estado==='recibida'), perdiendo el registro de
+       ese inventario sin dejar rastro. Se bloquea igual que 'eliminando', misma filosofia. */
+    if(compraReal.estado==='recibiendo'){
+      toast('Esta compra tiene una recepción en curso o quedó incompleta anteriormente — no se puede eliminar automáticamente para evitar perder el registro del inventario ya aplicado. Contacta soporte para revisarla manualmente.');
+      return;
+    }
+
     if(compraReal.estado==='recibida'&&items.length){
       /* HITO 6.18.7: unidades FISICAS a revertir por producto — misma formula que la
          entrada (unidadesFisicasDeCompra), nunca la cantidad cruda de la compra. */
@@ -8934,14 +9623,87 @@ async function actualizarProdSB(prod){
   }
 }
 
+/* HITO 6.18.11 — actualiza EXCLUSIVAMENTE los datos generales del producto. NUNCA incluye
+   stock ni precio_costo: esos dos campos siempre viajan en escrituras separadas y
+   explicitas (ver guardarEditProd), para que corregir uno nunca pueda modificar el otro
+   por accidente en el mismo PATCH. */
+async function actualizarDatosProductoSB(prod){
+  try{
+    var r = await fetch(SB+'/rest/v1/inventario?id=eq.'+prod.id,{
+      method:'PATCH',
+      headers:H,
+      body:JSON.stringify({
+        nombre: prod.nombre,
+        categoria: prod.categoria,
+        precio_venta: prod.precio_venta,
+        stock_min: prod.stock_min,
+        empaque: prod.empaque||'unidad',
+        uds_empaque: prod.uds_empaque||1,
+        imagen: prod.imagen!==undefined?prod.imagen:null
+      })
+    });
+    if(!r.ok) throw new Error(await r.text());
+  }catch(e){
+    console.error('Error actualizando datos del producto:', e);
+    toast('Error al actualizar en base de datos');
+  }
+}
+
 /* Eliminar producto */
+/* HITO 6.18.14-E — AUDITORIA DE DEPENDENCIAS ANTES DE ELIMINAR UN PRODUCTO.
+   "stock=0" en inventario principal NUNCA es suficiente por si solo (confirmado con
+   datos reales: existen productos con stock=0/uds_sueltas=0 en principal que SI tienen
+   stock fisico en inventario_bodega). Se auditan, con lectura fresca de Supabase, las
+   4 tablas que realmente referencian un producto por prod_id:
+     - inventario_bodega: stock fisico en cualquier bodega (bloquea si stock>0 o
+       uds_sueltas>0 en CUALQUIER fila).
+     - compras_items: historial de compras — CUALQUIER fila bloquea (perder esto rompe
+       el "Detalle de compra" de 6.18.14-C, que muestra nombre/cantidad/presentacion/
+       costo/subtotal usando el nombre GUARDADO en compras_items, no el producto vivo).
+     - detalle_ventas: historial de ventas — CUALQUIER fila bloquea (perder esto rompe
+       reportes historicos y el CMV de getVentasRangoSB(), que empareja por nombre
+       contra INVENTARIO; un producto eliminado deja de tener match, pero las filas de
+       detalle_ventas en si mismas deben preservarse siempre).
+     - traslados_inventario: historial de traslados — CUALQUIER fila bloquea.
+   producto_presentaciones NO es historial transaccional: es una cache derivada
+   (sistema:shadow-write) que solo alimenta costoEquivalente()/margen en Inventario. No
+   bloquea la eliminacion — se limpia junto con el producto (ver eliminarProducto),
+   unica excepcion explicitamente evaluada por la auditoria (HITO 6.18.14-E, FASE E37).
+   NO se consulta ninguna tabla de esquema (information_schema) — el anon key no tiene
+   acceso (confirmado: GET /rest/v1/ devuelve 401 "solo service_role") — por eso esta
+   auditoria verifica dependencias reales por consulta directa, no por metadatos de FK. */
+async function auditarDependenciasProducto(id){
+  var GH={'apikey':SK,'Authorization':'Bearer '+SK};
+  var pid=encodeURIComponent(id);
+  var out={bodegaConStock:0, compras:0, ventas:0, traslados:0, presentaciones:0, error:false};
+  try{
+    var rBod=await fetch(SB+'/rest/v1/inventario_bodega?prod_id=eq.'+pid+'&select=stock,uds_sueltas',{headers:GH});
+    var bod=rBod.ok?await rBod.json():[];
+    out.bodegaConStock=bod.filter(function(b){return (parseInt(b.stock)||0)>0||(parseInt(b.uds_sueltas)||0)>0;}).length;
+
+    var rCompras=await fetch(SB+'/rest/v1/compras_items?prod_id=eq.'+pid+'&select=id&limit=1',{headers:GH});
+    var compras=rCompras.ok?await rCompras.json():[];
+    out.compras=compras.length;
+
+    var rVentas=await fetch(SB+'/rest/v1/detalle_ventas?prod_id=eq.'+pid+'&select=id&limit=1',{headers:GH});
+    var ventas=rVentas.ok?await rVentas.json():[];
+    out.ventas=ventas.length;
+
+    var rTras=await fetch(SB+'/rest/v1/traslados_inventario?prod_id=eq.'+pid+'&select=id&limit=1',{headers:GH});
+    var tras=rTras.ok?await rTras.json():[];
+    out.traslados=tras.length;
+
+    if(!rBod.ok||!rCompras.ok||!rVentas.ok||!rTras.ok) out.error=true;
+  }catch(e){ out.error=true; }
+  return out;
+}
+
 async function eliminarProducto(id){
   var prod=INVENTARIO.find(function(p){return p.id===id;});
   if(!prod)return;
-  if(!confirm('¿Eliminar "'+prod.nombre+'"?\nEsta accion no se puede deshacer.'))return;
   try{
-    /* Verificar existencia REAL en Supabase antes de eliminar — el array local
-       INVENTARIO es solo una foto para la UI, nunca la autoridad para decidir. */
+    /* Verificar existencia y stock REAL en Supabase — el array local INVENTARIO es
+       solo una foto para la UI, nunca la autoridad para decidir. */
     var rChk=await fetch(SB+'/rest/v1/inventario?id=eq.'+id+'&select=id,stock,uds_sueltas',
       {headers:{'apikey':SK,'Authorization':'Bearer '+SK}});
     if(!rChk.ok){
@@ -8959,14 +9721,51 @@ async function eliminarProducto(id){
     var stockReal=parseInt(filas[0].stock)||0;
     var sueltasReal=parseInt(filas[0].uds_sueltas)||0;
     if(stockReal>0){
-      toast('⚠️ No puedes eliminar este producto porque todavía tiene unidades en inventario.');
+      toast('⚠️ Este producto no puede eliminarse porque todavía tiene inventario físico (stock en el inventario principal).');
       return;
     }
     if(sueltasReal>0){
-      toast('⚠️ No puedes eliminar este producto porque todavía tiene unidades sueltas en inventario.');
+      toast('⚠️ Este producto no puede eliminarse porque todavía tiene unidades sueltas en el inventario principal.');
       return;
     }
-    var r=await fetch(SB+'/rest/v1/inventario?id=eq.'+id,{method:'DELETE',headers:H});
+
+    /* Auditoria de dependencias — solo tras confirmar stock=0/sueltas=0 en principal,
+       para no gastar 4 consultas extra en el caso mas comun (producto con stock). */
+    var dep=await auditarDependenciasProducto(id);
+    if(dep.error){
+      toast('❌ No se pudo verificar completamente el historial de este producto. El producto no se eliminará — inténtalo de nuevo.');
+      return;
+    }
+    if(dep.bodegaConStock>0){
+      toast('⚠️ Este producto no puede eliminarse porque todavía tiene inventario físico en una bodega secundaria.');
+      return;
+    }
+    if(dep.compras>0&&dep.ventas>0){
+      toast('Este producto no puede eliminarse porque conserva historial de compras y ventas.');
+      return;
+    }
+    if(dep.compras>0){
+      toast('Este producto no puede eliminarse porque conserva historial de compras.');
+      return;
+    }
+    if(dep.ventas>0){
+      toast('Este producto no puede eliminarse porque conserva historial de ventas.');
+      return;
+    }
+    if(dep.traslados>0){
+      toast('Este producto no puede eliminarse porque conserva historial de traslados entre inventarios.');
+      return;
+    }
+
+    /* Solo llega aqui un producto realmente eliminable: sin stock en ningun inventario
+       y sin ninguna dependencia historica. Confirmacion especifica, no ambigua. */
+    if(!confirm('¿Eliminar "'+prod.nombre+'"?\n\nEsta acción eliminará definitivamente el producto porque no tiene inventario ni dependencias históricas.\n\nEsta acción no se puede deshacer.'))return;
+
+    /* DELETE condicionado — nunca solo un chequeo previo. Si el stock cambio entre la
+       lectura y este DELETE (venta/ajuste/recepcion concurrente en otro dispositivo),
+       la condicion no coincide y Supabase devuelve 0 filas: no se borra nada. Mismo
+       principio CAS ya usado por ajustarStockAtomicoSB/recibirCompra/eliminarCompra. */
+    var r=await fetch(SB+'/rest/v1/inventario?id=eq.'+id+'&id_licencia=eq.'+CID+'&stock=eq.0&uds_sueltas=eq.0',{method:'DELETE',headers:H});
     if(!r.ok){
       console.error('Error eliminando producto:',await r.text());
       toast('Error al eliminar el producto');
@@ -8974,9 +9773,17 @@ async function eliminarProducto(id){
     }
     var eliminadas=await r.json();
     if(!eliminadas||!eliminadas.length){
-      toast('❌ No se pudo verificar el inventario. El producto no se eliminará.');
+      toast('⚠️ El inventario de este producto cambió justo antes de eliminarlo (otra venta, ajuste o recepción) — no se eliminó. Actualiza e inténtalo de nuevo.');
+      await cargarInventarioSB();renderInvTable();renderInvStats();renderInvAlerts();
       return;
     }
+
+    /* Limpieza best-effort de producto_presentaciones — NUNCA historial transaccional,
+       solo cache derivada (ver comentario de auditarDependenciasProducto). Se hace
+       DESPUES de confirmar que el producto ya se elimino de verdad, y nunca bloquea ni
+       revierte el resultado principal si falla (mismo espiritu que shadowWrite*). */
+    fetch(SB+'/rest/v1/producto_presentaciones?id_producto=eq.'+encodeURIComponent(id),{method:'DELETE',headers:H}).catch(function(){});
+
     /* Solo tras confirmacion real de Supabase se actualiza la UI */
     INVENTARIO=INVENTARIO.filter(function(p){return p.id!==id;});
     renderInvTable();renderInvStats();renderInvAlerts();
@@ -9489,7 +10296,7 @@ async function renderRepInventario(){
     html+='</tr>';
   });
   html+='</tbody></table></div>';
-  if(sinCosto.length>0) html+='<div style="padding:10px 14px;font-size:11px;color:var(--red);background:var(--red-bg);">&#9888;&#65039; '+sinCosto.length+' producto'+(sinCosto.length!==1?'s':'')+' sin precio de costo — el COGS en contabilidad puede estar subestimado.</div>';
+  if(sinCosto.length>0) html+='<div style="padding:10px 14px;font-size:11px;color:var(--red);background:var(--red-bg);">&#9888;&#65039; '+sinCosto.length+' producto'+(sinCosto.length!==1?'s':'')+' sin precio de costo — el CMV en contabilidad puede estar subestimado.</div>';
   html+='</div>';
   cont.innerHTML=html;
 }
