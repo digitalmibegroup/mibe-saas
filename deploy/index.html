@@ -3980,7 +3980,28 @@ async function doVenta(){
       throw new Error(errVenta);
     }
     var varr=await vr.json();var v=varr[0];
-    await fetch(SB+'/rest/v1/detalle_ventas',{method:'POST',headers:H,body:JSON.stringify(cart.map(function(it){return {venta_id:v.id,prod_id:it.id,producto_nombre:it.nombre,categoria:it.cat,cantidad:it.qty,precio_unitario:it.precio,precio_total:it.total,es_unidad:it.esUnidad?true:false,uds_empaque:it.uds_empaque||1};}))});
+    /* PASO 3 — Detalle de la venta. HITO PAQUETE 3: antes este POST no verificaba
+       exito — si fallaba, la venta ya creada (con stock ya descontado) quedaba
+       registrada SIN ninguna linea de producto, sin ningun aviso (asi se originaron
+       las 110 ventas historicas sin detalle_ventas, Paquete 2). Ahora se verifica
+       igual que el resto de escrituras criticas de esta funcion: si falla, se
+       revierte el stock con el MISMO mecanismo ya existente (revertirDescuentosSB,
+       identico al usado si "ventas" falla mas arriba) y se detiene el flujo antes
+       de cartera/puntos/domicilio/limpieza — nunca se continua como si la venta
+       estuviera completa. La fila de "ventas" ya escrita NO se elimina aqui (eso
+       requeriria pasar por eliminarVenta() y sus propias validaciones, fuera de
+       alcance de este hito) — queda como un caso detectable que requiere revision
+       manual, mismo criterio que "recibiendo"/"eliminando" en Compras. */
+    var rDet=await fetch(SB+'/rest/v1/detalle_ventas',{method:'POST',headers:H,body:JSON.stringify(cart.map(function(it){return {venta_id:v.id,prod_id:it.id,producto_nombre:it.nombre,categoria:it.cat,cantidad:it.qty,precio_unitario:it.precio,precio_total:it.total,es_unidad:it.esUnidad?true:false,uds_empaque:it.uds_empaque||1};}))});
+    if(!rDet.ok){
+      var errDet=await rDet.text();
+      console.error('Error al guardar detalle_ventas:',errDet);
+      await revertirDescuentosSB(descuentosAplicados);
+      renderPOS();
+      toast('⚠ La venta #'+(v.numero_venta||'')+' quedó registrada pero sus productos NO se guardaron. El stock fue revertido. Esta venta requiere revisión manual — contacta soporte antes de continuar.');
+      btn.disabled=false;btn.textContent='Registrar venta';
+      return;
+    }
     /* El stock ya fue descontado atomicamente en el PASO 1 y el array local
        quedo sincronizado con el valor confirmado por Supabase. */
     /* HITO 6.17.2 (ajuste domicilios): gasto automatico DOMICILIOS, secundario
@@ -3990,7 +4011,13 @@ async function doVenta(){
       var resGasto=await crearGastoDomicilioSB(v,domicilio);
       if(!resGasto.ok) toast('Venta registrada correctamente, pero el gasto de domicilio no se pudo registrar. Debes registrarlo manualmente.');
     }
-    if(esCartera&&saldoVal>0){saveCarteraLocal(v.id,cn,cw,total,abonoVal,saldoVal,fechaVence,v.numero_venta,pago);}
+    /* HITO PAQUETE 3: antes esta llamada no se esperaba — doVenta() continuaba
+       (limpiaba el carrito, cerraba el modal) sin saber si cartera realmente se
+       habia guardado, dejando creditos historicos sin fila en cartera de forma
+       invisible (90 casos saneados en Paquete 2). saveCarteraLocal() ya maneja su
+       propio error internamente (toast + log) sin lanzar — aqui solo se espera su
+       resultado antes de seguir, sin cambiar su logica interna. */
+    if(esCartera&&saldoVal>0){await saveCarteraLocal(v.id,cn,cw,total,abonoVal,saldoVal,fechaVence,v.numero_venta,pago);}
     await upsertCli(cn,cw,cdir,cdet,total,pts,cid);
     if(cw&&pts>0)procesarPuntosPorVenta(v,total,pts,cn,cw);
     lastVenta={id:v.id,numero:v.numero_venta,total:total,subtotal:subtotal,domicilio:domicilio,descuento:descFactura,cliente:cn,wa:cw,puntos:pts,pago:pago,items:cart.slice(),dir:cdir,det:cdet};
@@ -7026,11 +7053,30 @@ async function recibirCompra(id){
   }catch(e){console.error(e);toast('Error al actualizar compra');}
 }
 
+/* HITO PAQUETE 3: antes hacia un PATCH incondicional, sin verificar exito ni
+   estado — unica funcion de Compras sin el patron CAS "toma de posesion" que ya
+   usan recibirCompra()/eliminarCompra()/guardarEdicionCompra(). Solo 'pendiente'
+   puede cancelarse (una compra 'recibida' no se cancela, se elimina). Condicionar
+   el PATCH a estado=eq.pendiente evita que cancelarCompra() pueda pisar en
+   silencio una compra que recibirCompra()/eliminarCompra()/guardarEdicionCompra()
+   ya reclamaron (movida a 'recibiendo'/'eliminando'/'editando'): en ese caso el
+   PATCH afecta 0 filas y se reporta como conflicto, nunca como exito. */
 async function cancelarCompra(id){
   var compra=COMPRAS.find(function(c){return c.id===id;});
   if(!compra) return;
   try{
-    await fetch(SB+'/rest/v1/compras?id=eq.'+id,{method:'PATCH',headers:H,body:JSON.stringify({estado:'cancelada'})});
+    var r=await fetch(SB+'/rest/v1/compras?id=eq.'+id+'&estado=eq.pendiente',{method:'PATCH',headers:H,body:JSON.stringify({estado:'cancelada'})});
+    if(!r.ok){
+      console.error('Error al cancelar compra:',await r.text());
+      toast('Error al cancelar la compra — no se canceló');
+      return;
+    }
+    var afectadas=await r.json();
+    if(!afectadas||!afectadas.length){
+      toast('No se pudo cancelar: esta compra ya no está pendiente (otro proceso la modificó) — actualiza e inténtalo de nuevo.');
+      await cargarComprasSB();renderComprasList();updateComprasBadge();
+      return;
+    }
     compra.estado='cancelada';
     renderComprasList();
     updateComprasBadge();
@@ -8440,25 +8486,51 @@ function shadowAudit(modulo,entidad,entidadId,accion,resultado,motivo,diffObj){
 }
 
 /* Upsert sombra por (id_producto, tipo_presentacion). NUNCA lanza. */
+/* HITO PAQUETE 3 — busca primero la fila PRIMARIA (es_predeterminada=true) antes
+   de buscar por tipo_presentacion. Antes, esta funcion buscaba EXCLUSIVAMENTE por
+   tipo_presentacion: si una compra llegaba con un tipo que ya no coincidia con el
+   de la primaria existente (ej. producto reconfigurado de 'unidad' a 'sixpack'
+   despues de creada su presentacion — exactamente el caso ya corregido en
+   Paquete 1), el lookup por tipo no encontraba nada y esta funcion intentaba CREAR
+   una segunda fila es_predeterminada=true, que choca contra la restriccion de una
+   sola predeterminada por producto y falla en silencio — dejando costo_vigente de
+   la primaria real congelado (causa raiz confirmada de la divergencia de Aguila
+   original 473ml, auditoria Paquete 3). Ahora: si ya existe una primaria, SIEMPRE
+   se actualiza esa (nunca se crea una segunda predeterminada mientras exista una).
+   Solo si no hay primaria se cae al comportamiento anterior (buscar por tipo, o
+   crear si tampoco existe eso). Mismo shadow-write best-effort de siempre. */
 async function shadowWritePresentacion(prodId,tipo,udsEmp,costo,origen,esPredeterminada){
   try{
     if(!prodId)return;
     var costoN=(costo>0)?costo:null; /* costo 0 => costo_vigente NULL (pendiente de captura) */
     var tipoN=tipo||'unidad';
     var udsN=(udsEmp&&udsEmp>=1)?udsEmp:1;
-    var rGet=await fetch(SB+'/rest/v1/producto_presentaciones?id_producto=eq.'+encodeURIComponent(prodId)+'&tipo_presentacion=eq.'+encodeURIComponent(tipoN)+'&select=id&limit=1',{headers:{'apikey':SK,'Authorization':'Bearer '+SK}});
-    if(!rGet.ok)throw new Error('lookup HTTP '+rGet.status);
-    var rows=await rGet.json();
+    var GH={'apikey':SK,'Authorization':'Bearer '+SK};
+
+    var rPrimaria=await fetch(SB+'/rest/v1/producto_presentaciones?id_producto=eq.'+encodeURIComponent(prodId)+'&es_predeterminada=is.true&select=id&limit=1',{headers:GH});
+    if(!rPrimaria.ok)throw new Error('lookup primaria HTTP '+rPrimaria.status);
+    var filaPrimaria=await rPrimaria.json();
+
+    var filaExistente=(filaPrimaria&&filaPrimaria.length)?filaPrimaria[0]:null;
+    if(!filaExistente){
+      var rGet=await fetch(SB+'/rest/v1/producto_presentaciones?id_producto=eq.'+encodeURIComponent(prodId)+'&tipo_presentacion=eq.'+encodeURIComponent(tipoN)+'&select=id&limit=1',{headers:GH});
+      if(!rGet.ok)throw new Error('lookup tipo HTTP '+rGet.status);
+      var rows=await rGet.json();
+      if(rows&&rows.length) filaExistente=rows[0];
+    }
+
     var w;
-    if(rows&&rows.length){
-      /* Existe: actualizar SOLO costo_vigente, origen_costo, fecha y usuario (nunca anular un costo existente) */
+    if(filaExistente){
+      /* Existe (primaria o por tipo): actualizar SOLO costo_vigente, origen_costo,
+         fecha y usuario (nunca anular un costo existente, nunca crear una segunda
+         predeterminada). */
       if(costoN===null)return;
-      w=await fetch(SB+'/rest/v1/producto_presentaciones?id=eq.'+rows[0].id,{method:'PATCH',headers:H,body:JSON.stringify({
+      w=await fetch(SB+'/rest/v1/producto_presentaciones?id=eq.'+filaExistente.id,{method:'PATCH',headers:H,body:JSON.stringify({
         costo_vigente:costoN,origen_costo:origen||'compra',
         fecha_actualizacion:new Date().toISOString(),usuario_actualizacion:'sistema:shadow-write'
       })});
     } else {
-      /* No existe: crearla (nace de una compra real o de la creacion del producto — regla HITO 7A.1) */
+      /* No existe ninguna presentacion utilizable: crearla (nace de una compra real o de la creacion del producto — regla HITO 7A.1) */
       w=await fetch(SB+'/rest/v1/producto_presentaciones',{method:'POST',headers:H,body:JSON.stringify({
         tenant_id:TENANT_LACAVA,id_licencia:CID,id_producto:prodId,tipo_presentacion:tipoN,
         uds_empaque:udsN,es_predeterminada:!!esPredeterminada,activo:true,
