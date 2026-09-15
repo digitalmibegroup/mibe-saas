@@ -6002,7 +6002,18 @@ function costoEquivalente(prod){
   var ventaUds=parseFloat(prod.uds_empaque)||1;
   var primaria=filas.find(function(f){return f.es_predeterminada;});
   if(primaria&&parseFloat(primaria.costo_vigente)>0){
-    return {costo:parseFloat(primaria.costo_vigente),estado:'directo',tipo:primaria.tipo_presentacion,udsOrigen:parseFloat(primaria.uds_empaque)||1,costoOrigen:parseFloat(primaria.costo_vigente),fecha:primaria.fecha_actualizacion};
+    var primariaUds=parseFloat(primaria.uds_empaque)||1;
+    if(primariaUds===ventaUds){
+      return {costo:parseFloat(primaria.costo_vigente),estado:'directo',tipo:primaria.tipo_presentacion,udsOrigen:primariaUds,costoOrigen:parseFloat(primaria.costo_vigente),fecha:primaria.fecha_actualizacion};
+    }
+    /* PAQUETE 1 — CIERRE: la predeterminada existe pero su uds_empaque ya no corresponde al
+       uds_empaque real del producto (quedo desalineada, ej. tras un cambio de empaque que no
+       se propago aqui). No se puede devolver costo_vigente tal cual (asi se origino el caso
+       "Aguila original 473ml" en la auditoria). Se reutiliza la MISMA formula de conversion de
+       la rama "convertido" de mas abajo, tratando la propia primaria como presentacion de
+       origen — nunca se inventa un valor nuevo. */
+    var costoEquivPrimaria=Math.round((parseFloat(primaria.costo_vigente)/primariaUds)*ventaUds);
+    return {costo:costoEquivPrimaria,estado:'convertido',tipo:primaria.tipo_presentacion,udsOrigen:primariaUds,costoOrigen:parseFloat(primaria.costo_vigente),fecha:primaria.fecha_actualizacion};
   }
   var candidata=filas.find(function(f){return parseFloat(f.costo_vigente)>0;});
   if(candidata){
@@ -8101,6 +8112,11 @@ async function guardarEditProd(){
   var stockAnterior=parseInt(prod.stock)||0;
   var stockCambio = st!==stockAnterior;
   var costoCambio = pc>0 && pc!==pcAnterior;
+  /* PAQUETE 1 — CIERRE: capturado ANTES de mutar prod, para saber si empaque/uds_empaque
+     realmente cambiaron y decidir si hay que sincronizar la presentacion predeterminada. */
+  var empaqueAnterior=prod.empaque||'unidad';
+  var udsEmpaqueAnterior=parseInt(prod.uds_empaque)||1;
+  var empaqueCambio = (empaque!==empaqueAnterior) || (udsEmpaque!==udsEmpaqueAnterior);
 
   /* Confirmacion explicita ANTES de aplicar nada — nunca un efecto secundario silencioso.
      BUGFIX (incidente Noule Cream): declinar esta confirmacion debe cancelar UNICAMENTE
@@ -8122,6 +8138,11 @@ async function guardarEditProd(){
 
   /* (1) Datos generales — NUNCA incluye stock ni precio_costo */
   await actualizarDatosProductoSB(prod);
+
+  /* (1b) PAQUETE 1 — CIERRE: si empaque/uds_empaque cambiaron, alinear la presentacion
+     predeterminada (si existe) para que costoEquivalente() no vuelva a mostrar un costo
+     desalineado. Best-effort, nunca bloquea el resto del guardado. */
+  if(empaqueCambio){ await sincronizarMetadataPresentacionPrimaria(prod); }
 
   /* (2) Stock — SOLO si cambio, via CAS, en un request que NUNCA incluye precio_costo */
   var stockOk=true;
@@ -8415,6 +8436,33 @@ async function shadowWritePresentacion(prodId,tipo,udsEmp,costo,origen,esPredete
 
 /* Upsert sombra de la presentacion PRIMARIA (Editar Producto — SPRINT 2 / HITO 9.2).
    Localiza por es_predeterminada=true (diseno HITO 8B). NUNCA lanza. */
+/* PAQUETE 1 — CIERRE: cuando "Editar producto" cambia empaque/uds_empaque, la fila
+   predeterminada de producto_presentaciones (si ya existe) debe seguir describiendo la MISMA
+   presentacion fisica del producto — si no, costoEquivalente() ya no puede confiar en su
+   costo_vigente sin verificar (ver la validacion agregada en costoEquivalente()). Corrige
+   EXCLUSIVAMENTE uds_empaque/tipo_presentacion; nunca toca costo_vigente (eso sigue siendo
+   responsabilidad unica del bloque (3) de guardarEditProd, via shadowWritePrimaria). Mismo
+   patron best-effort que el resto de shadow-writes: un fallo aqui nunca bloquea el guardado
+   real de datos generales/stock/costo. */
+async function sincronizarMetadataPresentacionPrimaria(prod){
+  try{
+    var rGet=await fetch(SB+'/rest/v1/producto_presentaciones?id_producto=eq.'+encodeURIComponent(prod.id)+'&es_predeterminada=is.true&select=id,uds_empaque,tipo_presentacion&limit=1',{headers:{'apikey':SK,'Authorization':'Bearer '+SK}});
+    if(!rGet.ok)throw new Error('lookup HTTP '+rGet.status);
+    var rows=await rGet.json();
+    if(!rows||!rows.length)return;
+    var fila=rows[0];
+    var udsNuevo=parseInt(prod.uds_empaque)||1;
+    var tipoNuevo=prod.empaque||'unidad';
+    if(parseInt(fila.uds_empaque)===udsNuevo && fila.tipo_presentacion===tipoNuevo)return;
+    var w=await fetch(SB+'/rest/v1/producto_presentaciones?id=eq.'+fila.id,{method:'PATCH',headers:H,body:JSON.stringify({uds_empaque:udsNuevo,tipo_presentacion:tipoNuevo})});
+    if(!w.ok)throw new Error('write HTTP '+w.status);
+    shadowAudit('inventario','producto_presentaciones',prod.id,'update','exito',null,{campo:'uds_empaque/tipo_presentacion',tipo:'primaria',valor_nuevo:tipoNuevo+'/'+udsNuevo});
+  }catch(e){
+    console.warn('[shadow-write] fallo silencioso (no afecta la operacion):',e&&e.message);
+    shadowAudit('inventario','producto_presentaciones',prod&&prod.id,'update','fallo',String(e&&e.message||e),null);
+  }
+}
+
 async function shadowWritePrimaria(prod,costo,origen){
   try{
     if(!prod||!prod.id||!(costo>0))return;
