@@ -6803,8 +6803,13 @@ async function guardarCompra(estadoDeseado){
     var compraDB=cdata[0];
 
     /* PASO 2 — Items */
+    /* HITO 3.6.1: sueltas ahora se persiste (compras_items.sueltas, integer NOT NULL
+       DEFAULT 0). Antes se calculaba en calcularItemCompra() pero se descartaba aqui, asi
+       que una compra guardada como 'pendiente' y recibida despues (recibirCompra relee
+       compras_items) perdia las unidades sueltas. unidadesFisicasDeCompra() ya lee
+       item.sueltas — solo necesitaba que el dato existiera al releer. */
     var itemsBody=itemsCompra.map(function(i){
-      return {compra_id:compraDB.id,prod_id:i.prod_id,nombre:i.nombre,qty:i.qty,costo:i.costo,subtotal:i.subtotal,tipo:i.tipo||'empaque',uds_empaque:i.uds_empaque||1};
+      return {compra_id:compraDB.id,prod_id:i.prod_id,nombre:i.nombre,qty:i.qty,costo:i.costo,subtotal:i.subtotal,tipo:i.tipo||'empaque',uds_empaque:i.uds_empaque||1,sueltas:parseInt(i.sueltas)||0};
     });
     var rItems=await fetch(SB+'/rest/v1/compras_items',{method:'POST',headers:H,body:JSON.stringify(itemsBody)});
     if(!rItems.ok){
@@ -7336,7 +7341,7 @@ async function abrirEdicionCompra(id){
     _editCompraModo=pol.modo;
     _editCompraEstadoOriginal=c.estado;
     _editCompraItems=(c.compras_items||[]).map(function(it){
-      return {prod_id:it.prod_id, nombre:it.nombre, qty:it.qty, costo:parseFloat(it.costo)||0, subtotal:parseFloat(it.subtotal)||0, tipo:it.tipo||'unidad', uds_empaque:it.uds_empaque||1};
+      return {prod_id:it.prod_id, nombre:it.nombre, qty:it.qty, costo:parseFloat(it.costo)||0, subtotal:parseFloat(it.subtotal)||0, tipo:it.tipo||'unidad', uds_empaque:it.uds_empaque||1, sueltas:parseInt(it.sueltas)||0};
     });
 
     document.getElementById('editCompraProveedor').innerHTML='<option value="">Sin proveedor</option>'
@@ -7409,7 +7414,7 @@ function editRenderItems(){
         return '<tr style="border-bottom:1px solid var(--border);">'
           +'<td style="padding:8px;font-size:12px;font-weight:600;">'+it.nombre+'</td>'
           +'<td style="padding:8px;font-size:11px;color:var(--text2);">'+etiquetaTipoPresentacion(it.tipo)+(it.uds_empaque>1?' (x'+it.uds_empaque+')':'')+'</td>'
-          +'<td style="padding:8px;text-align:center;font-size:12px;">'+it.qty+'</td>'
+          +'<td style="padding:8px;text-align:center;font-size:12px;">'+it.qty+(it.sueltas>0?' <span style="font-size:10px;color:var(--text3);">+'+it.sueltas+' sueltas</span>':'')+'</td>'
           +'<td style="padding:8px;text-align:right;font-size:12px;font-weight:700;">'+fmt(it.subtotal)+'</td>'
           +'<td style="padding:8px;text-align:center;"><span onclick="editQuitarItem('+idx+')" style="cursor:pointer;color:var(--red);font-size:14px;" title="Quitar">&#10060;</span></td>'
         +'</tr>';
@@ -7454,8 +7459,9 @@ function editAgregarItem(){
     existing.qty+=res.qtyEmpaques;
     existing.costo=res.costoPorEmpaque;
     existing.subtotal+=res.subtotal;
+    existing.sueltas=(existing.sueltas||0)+(res.sueltas||0); /* HITO 3.6.1: no descartar las sueltas de la linea fusionada */
   } else {
-    _editCompraItems.push({prod_id:prodId, nombre:prod.nombre, qty:res.qtyEmpaques, costo:res.costoPorEmpaque, subtotal:res.subtotal, tipo:tipo, uds_empaque:udsEmp});
+    _editCompraItems.push({prod_id:prodId, nombre:prod.nombre, qty:res.qtyEmpaques, costo:res.costoPorEmpaque, subtotal:res.subtotal, tipo:tipo, uds_empaque:udsEmp, sueltas:res.sueltas||0});
   }
   document.getElementById('editCompraAddQty').value='';
   document.getElementById('editCompraAddCosto').value='';
@@ -7501,8 +7507,9 @@ async function guardarEdicionCompra(){
         await cargarComprasSB();renderComprasList();
         return;
       }
+      /* HITO 3.6.1: igual que guardarCompra() — persiste sueltas al reemplazar los items. */
       var itemsBody=_editCompraItems.map(function(i){
-        return {compra_id:_editCompraId,prod_id:i.prod_id,nombre:i.nombre,qty:i.qty,costo:i.costo,subtotal:i.subtotal,tipo:i.tipo||'unidad',uds_empaque:i.uds_empaque||1};
+        return {compra_id:_editCompraId,prod_id:i.prod_id,nombre:i.nombre,qty:i.qty,costo:i.costo,subtotal:i.subtotal,tipo:i.tipo||'unidad',uds_empaque:i.uds_empaque||1,sueltas:parseInt(i.sueltas)||0};
       });
       var rIns=await fetch(SB+'/rest/v1/compras_items',{method:'POST',headers:H,body:JSON.stringify(itemsBody)});
       if(!rIns.ok){
@@ -8450,6 +8457,7 @@ function _agregarItemCompraAlCarrito(itemData){
     existing.qty+=itemData.qty;
     existing.costo=itemData.costo;   /* actualiza al costo más reciente */
     existing.subtotal+=itemData.subtotal;
+    existing.sueltas=(existing.sueltas||0)+(itemData.sueltas||0); /* HITO 3.6.1: no descartar las sueltas de la linea fusionada */
     var tipoLabel=itemData.tipo==='unidad'?'und':itemData.tipo==='sixpack'?'six':itemData.tipo==='caja'?'caja':'emp';
     existing.label_qty=existing.qty+' '+tipoLabel+(itemData.uds_empaque>1&&itemData.tipo!=='unidad'?' empaques':'');
   } else {
