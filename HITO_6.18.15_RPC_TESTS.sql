@@ -1,9 +1,15 @@
 -- ============================================================================
 -- HITO 6.18.15 (Fase 2) — Pruebas SQL para las 3 RPC transaccionales
 -- ============================================================================
--- ⚠ NO EJECUTADO EN ESTE HITO. Este archivo es un ENTREGABLE de diseño de
--- pruebas, redactado y auditado, pero NUNCA ejecutado contra Supabase real
--- desde este entorno (sin psql/CLI/service_role — ver cabecera de
+-- ESTADO (HITO 3.7): ejecutado en un PostgreSQL 17.11 LOCAL de pruebas
+-- (base "lacava_staging", nunca en Supabase): bloques 1-10 y S1-S7 => 17/17 PASS
+-- contra las 3 RPC corregidas para compras_items.sueltas. S5-S6 (HITO 3.7):
+-- el subtotal de editar_compra_atomica incluye el valor de las sueltas. S7: una
+-- línea de editar_compra_atomica es válida si qty > 0 OR sueltas > 0 (qty=0 con
+-- sueltas>0 = solo unidades sueltas).
+-- Texto original de este hito, conservado: ⚠ este archivo es un ENTREGABLE de
+-- diseño de pruebas y NO debe ejecutarse contra Supabase real (sin
+-- psql/CLI/service_role desde el entorno de trabajo — ver cabecera de
 -- HITO_6.18.15_RPC_RECIBIR_COMPRA.sql).
 --
 -- ⚠ REGLA ABSOLUTA: si en el futuro el propietario decide ejecutar este
@@ -414,6 +420,448 @@ BEGIN
 END $$;
 
 -- ============================================================================
+-- HITO 3.7 — BLOQUES S1-S4: compras_items.sueltas (integer NOT NULL DEFAULT 0).
+-- Cada bloque crea su propio producto (uds_empaque=6), así que no depende del
+-- estado que hayan dejado los bloques anteriores dentro de esta transacción.
+-- Requieren que compras_items.sueltas exista (HITO_3.6.1_MIGRACION_SUELTAS.sql).
+-- ============================================================================
+
+-- BLOQUE S1 — SUELTAS A: qty=6, uds_empaque=6, sueltas=4 => 40 unidades físicas.
+--             Recepción: +40. Eliminación: -40 (vuelve exactamente al inicio).
+DO $$
+DECLARE
+  v_compra_id uuid := gen_random_uuid();
+  v_pool_antes integer; v_pool_rec integer; v_pool_elim integer;
+  v_stock integer; v_sueltas integer;
+BEGIN
+  INSERT INTO inventario (id, nombre, categoria, precio_venta, precio_costo, stock, stock_min, empaque, uds_empaque, uds_sueltas, id_licencia)
+  VALUES ('TEST_PROD_SUE_A_618150', 'Producto Test Sueltas A', 'Test', 1000, 1000, 10, 2, 'unidad', 6, 1, 'TEST_TENANT_618150');
+  INSERT INTO compras (id, id_licencia, proveedor_nombre, fecha, nota, total, estado, destino)
+  VALUES (v_compra_id, 'TEST_TENANT_618150', 'Proveedor Test', CURRENT_DATE, '', 800000, 'pendiente', 'principal');
+  INSERT INTO compras_items (compra_id, prod_id, nombre, qty, costo, subtotal, tipo, uds_empaque, sueltas)
+  VALUES (v_compra_id, 'TEST_PROD_SUE_A_618150', 'Producto Test Sueltas A', 6, 120000, 800000, 'unidad', 6, 4);
+
+  SELECT stock*uds_empaque+uds_sueltas INTO v_pool_antes FROM inventario WHERE id='TEST_PROD_SUE_A_618150';  -- 61
+  PERFORM recibir_compra_atomica(v_compra_id, 'TEST_TENANT_618150');
+  SELECT stock*uds_empaque+uds_sueltas, stock, uds_sueltas INTO v_pool_rec, v_stock, v_sueltas FROM inventario WHERE id='TEST_PROD_SUE_A_618150';
+  ASSERT v_pool_rec - v_pool_antes = 40, format('S1: recepcion esperada +40, real +%s', v_pool_rec - v_pool_antes);
+  ASSERT v_stock = 16 AND v_sueltas = 5, format('S1: stock/sueltas esperado 16/5, real %s/%s', v_stock, v_sueltas);
+  ASSERT (SELECT estado FROM compras WHERE id=v_compra_id) = 'recibida', 'S1: la compra debe quedar recibida';
+
+  PERFORM eliminar_compra_atomica(v_compra_id, 'TEST_TENANT_618150');
+  SELECT stock*uds_empaque+uds_sueltas, stock, uds_sueltas INTO v_pool_elim, v_stock, v_sueltas FROM inventario WHERE id='TEST_PROD_SUE_A_618150';
+  ASSERT v_pool_rec - v_pool_elim = 40, format('S1: eliminacion esperada -40, real -%s', v_pool_rec - v_pool_elim);
+  ASSERT v_pool_elim = v_pool_antes AND v_stock = 10 AND v_sueltas = 1, format('S1: debe volver EXACTAMENTE al inicio (10/1), real %s/%s', v_stock, v_sueltas);
+  ASSERT NOT EXISTS (SELECT 1 FROM compras WHERE id=v_compra_id), 'S1: la compra debia eliminarse';
+
+  RAISE NOTICE 'BLOQUE S1 (sueltas A: qty=6,uds=6,sueltas=4 => +40 / -40): PASS';
+END $$;
+
+-- BLOQUE S2 — SUELTAS B: qty=5, uds_empaque=6, sueltas=2 => 32 unidades físicas.
+--             Recepción: +32. Eliminación: -32.
+DO $$
+DECLARE
+  v_compra_id uuid := gen_random_uuid();
+  v_pool_antes integer; v_pool_rec integer; v_pool_elim integer;
+  v_stock integer; v_sueltas integer;
+BEGIN
+  INSERT INTO inventario (id, nombre, categoria, precio_venta, precio_costo, stock, stock_min, empaque, uds_empaque, uds_sueltas, id_licencia)
+  VALUES ('TEST_PROD_SUE_B_618150', 'Producto Test Sueltas B', 'Test', 1000, 1000, 10, 2, 'unidad', 6, 1, 'TEST_TENANT_618150');
+  INSERT INTO compras (id, id_licencia, proveedor_nombre, fecha, nota, total, estado, destino)
+  VALUES (v_compra_id, 'TEST_TENANT_618150', 'Proveedor Test', CURRENT_DATE, '', 640000, 'pendiente', 'principal');
+  INSERT INTO compras_items (compra_id, prod_id, nombre, qty, costo, subtotal, tipo, uds_empaque, sueltas)
+  VALUES (v_compra_id, 'TEST_PROD_SUE_B_618150', 'Producto Test Sueltas B', 5, 120000, 640000, 'unidad', 6, 2);
+
+  SELECT stock*uds_empaque+uds_sueltas INTO v_pool_antes FROM inventario WHERE id='TEST_PROD_SUE_B_618150';  -- 61
+  PERFORM recibir_compra_atomica(v_compra_id, 'TEST_TENANT_618150');
+  SELECT stock*uds_empaque+uds_sueltas, stock, uds_sueltas INTO v_pool_rec, v_stock, v_sueltas FROM inventario WHERE id='TEST_PROD_SUE_B_618150';
+  ASSERT v_pool_rec - v_pool_antes = 32, format('S2: recepcion esperada +32, real +%s', v_pool_rec - v_pool_antes);
+  ASSERT v_stock = 15 AND v_sueltas = 3, format('S2: stock/sueltas esperado 15/3, real %s/%s', v_stock, v_sueltas);
+
+  PERFORM eliminar_compra_atomica(v_compra_id, 'TEST_TENANT_618150');
+  SELECT stock*uds_empaque+uds_sueltas, stock, uds_sueltas INTO v_pool_elim, v_stock, v_sueltas FROM inventario WHERE id='TEST_PROD_SUE_B_618150';
+  ASSERT v_pool_rec - v_pool_elim = 32, format('S2: eliminacion esperada -32, real -%s', v_pool_rec - v_pool_elim);
+  ASSERT v_pool_elim = v_pool_antes AND v_stock = 10 AND v_sueltas = 1, format('S2: debe volver EXACTAMENTE al inicio (10/1), real %s/%s', v_stock, v_sueltas);
+
+  RAISE NOTICE 'BLOQUE S2 (sueltas B: qty=5,uds=6,sueltas=2 => +32 / -32): PASS';
+END $$;
+
+-- BLOQUE S3 — ELIMINACIÓN: la VALIDACIÓN previa también considera sueltas.
+--             Compra recibida de 40 unidades físicas (qty=6, sueltas=4). El
+--             inventario tiene solo 38 (más que 36 = qty*uds_empaque, menos
+--             que 40): con la fórmula anterior (sin sueltas) la validación
+--             pasaba y se revertía de menos; ahora debe rechazarse con P0005
+--             sin tocar nada.
+DO $$
+DECLARE
+  v_compra_id uuid := gen_random_uuid();
+  v_fallo boolean := false;
+  v_stock integer; v_sueltas integer;
+BEGIN
+  INSERT INTO inventario (id, nombre, categoria, precio_venta, precio_costo, stock, stock_min, empaque, uds_empaque, uds_sueltas, id_licencia)
+  VALUES ('TEST_PROD_SUE_C_618150', 'Producto Test Sueltas C', 'Test', 1000, 1000, 6, 2, 'unidad', 6, 2, 'TEST_TENANT_618150');  -- pool = 38
+  INSERT INTO compras (id, id_licencia, proveedor_nombre, fecha, nota, total, estado, destino)
+  VALUES (v_compra_id, 'TEST_TENANT_618150', 'Proveedor Test', CURRENT_DATE, '', 800000, 'recibida', 'principal');
+  INSERT INTO compras_items (compra_id, prod_id, nombre, qty, costo, subtotal, tipo, uds_empaque, sueltas)
+  VALUES (v_compra_id, 'TEST_PROD_SUE_C_618150', 'Producto Test Sueltas C', 6, 120000, 800000, 'unidad', 6, 4);
+
+  BEGIN
+    PERFORM eliminar_compra_atomica(v_compra_id, 'TEST_TENANT_618150');
+  EXCEPTION WHEN SQLSTATE 'P0005' THEN
+    v_fallo := true;
+  END;
+
+  ASSERT v_fallo = true, 'S3: se esperaba P0005 (38 < 40 unidades fisicas a revertir)';
+  SELECT stock, uds_sueltas INTO v_stock, v_sueltas FROM inventario WHERE id='TEST_PROD_SUE_C_618150';
+  ASSERT v_stock = 6 AND v_sueltas = 2, format('S3: el inventario NO debia tocarse (6/2), real %s/%s', v_stock, v_sueltas);
+  ASSERT (SELECT estado FROM compras WHERE id=v_compra_id) = 'recibida', 'S3: la compra debe permanecer recibida';
+  ASSERT EXISTS (SELECT 1 FROM compras_items WHERE compra_id=v_compra_id), 'S3: los items NO debian borrarse';
+
+  RAISE NOTICE 'BLOQUE S3 (eliminacion: la validacion previa considera sueltas, 38 < 40 => rechazada): PASS';
+END $$;
+
+-- BLOQUE S4 — EDICIÓN: persiste sueltas. (a) sueltas=5 se guarda tal cual;
+--             (b) un item SIN la clave "sueltas" sigue funcionando y queda en
+--             0 (compatibilidad); (c) sueltas negativa se rechaza (LC005) y
+--             los items originales se conservan; (d) el inventario no se toca.
+DO $$
+DECLARE
+  v_compra_id uuid := gen_random_uuid();
+  v_pool_antes integer; v_pool_despues integer;
+  v_fallo boolean := false;
+BEGIN
+  INSERT INTO inventario (id, nombre, categoria, precio_venta, precio_costo, stock, stock_min, empaque, uds_empaque, uds_sueltas, id_licencia)
+  VALUES ('TEST_PROD_SUE_D_618150', 'Producto Test Sueltas D', 'Test', 1000, 1000, 10, 2, 'unidad', 6, 1, 'TEST_TENANT_618150');
+  INSERT INTO compras (id, id_licencia, proveedor_nombre, fecha, nota, total, estado, destino)
+  VALUES (v_compra_id, 'TEST_TENANT_618150', 'Proveedor Test', CURRENT_DATE, '', 0, 'pendiente', 'principal');
+  INSERT INTO compras_items (compra_id, prod_id, nombre, qty, costo, subtotal, tipo, uds_empaque)
+  VALUES (v_compra_id, 'TEST_PROD_SUE_D_618150', 'Producto Test Sueltas D', 6, 120000, 720000, 'unidad', 6);
+  ASSERT (SELECT sueltas FROM compras_items WHERE compra_id=v_compra_id) = 0, 'S4: un INSERT sin sueltas debe quedar en 0 (DEFAULT)';
+
+  SELECT stock*uds_empaque+uds_sueltas INTO v_pool_antes FROM inventario WHERE id='TEST_PROD_SUE_D_618150';
+
+  -- (a) sueltas = 5
+  PERFORM editar_compra_atomica(v_compra_id, 'TEST_TENANT_618150', 'completa', NULL, CURRENT_DATE, '', 'principal',
+    '[{"prod_id":"TEST_PROD_SUE_D_618150","nombre":"Producto Test Sueltas D","qty":13,"costo":120000,"tipo":"unidad","uds_empaque":6,"sueltas":5}]'::jsonb);
+  ASSERT (SELECT sueltas FROM compras_items WHERE compra_id=v_compra_id) = 5, 'S4a: compras_items.sueltas debia quedar en 5';
+  ASSERT (SELECT qty FROM compras_items WHERE compra_id=v_compra_id) = 13, 'S4a: qty debia quedar en 13';
+  ASSERT (SELECT estado FROM compras WHERE id=v_compra_id) = 'pendiente', 'S4a: la compra sigue pendiente';
+
+  -- (b) item sin la clave "sueltas" => 0
+  PERFORM editar_compra_atomica(v_compra_id, 'TEST_TENANT_618150', 'completa', NULL, CURRENT_DATE, '', 'principal',
+    '[{"prod_id":"TEST_PROD_SUE_D_618150","nombre":"Producto Test Sueltas D","qty":7,"costo":120000,"tipo":"unidad","uds_empaque":6}]'::jsonb);
+  ASSERT (SELECT sueltas FROM compras_items WHERE compra_id=v_compra_id) = 0, 'S4b: sin la clave sueltas debia quedar en 0';
+  ASSERT (SELECT qty FROM compras_items WHERE compra_id=v_compra_id) = 7, 'S4b: qty debia quedar en 7';
+
+  -- (c) sueltas negativa => LC005, items previos intactos
+  BEGIN
+    PERFORM editar_compra_atomica(v_compra_id, 'TEST_TENANT_618150', 'completa', NULL, CURRENT_DATE, '', 'principal',
+      '[{"prod_id":"TEST_PROD_SUE_D_618150","nombre":"Producto Test Sueltas D","qty":9,"costo":120000,"tipo":"unidad","uds_empaque":6,"sueltas":-1}]'::jsonb);
+  EXCEPTION WHEN SQLSTATE 'LC005' THEN
+    v_fallo := true;
+  END;
+  ASSERT v_fallo = true, 'S4c: se esperaba LC005 por sueltas negativa';
+  ASSERT (SELECT qty FROM compras_items WHERE compra_id=v_compra_id) = 7 AND (SELECT count(*) FROM compras_items WHERE compra_id=v_compra_id) = 1,
+    'S4c: los items originales debian conservarse (qty=7, 1 fila)';
+
+  -- (d) el inventario no se toca en ningun modo de edicion
+  SELECT stock*uds_empaque+uds_sueltas INTO v_pool_despues FROM inventario WHERE id='TEST_PROD_SUE_D_618150';
+  ASSERT v_pool_antes = v_pool_despues, 'S4d: editar NO debe modificar inventario';
+
+  RAISE NOTICE 'BLOQUE S4 (edicion: sueltas=5 persiste, sin clave => 0, negativa rechazada, inventario intacto): PASS';
+END $$;
+
+-- BLOQUE S5 — SUBTOTAL DE editar_compra_atomica INCLUYE EL VALOR DE LAS SUELTAS
+--             subtotal = qty × costo + sueltas × costo / uds_empaque
+--             (sin redondeo; el subtotal se compara como TEXTO para detectar
+--             también ceros de relleno tipo 800000.0000000000000000).
+--             T1 sueltas=0 (regla vieja, idéntica)       T5 uds_empaque=1 (caso defensivo)
+--             T2 sueltas=4, costo redondo                T6 sueltas negativa => LC005
+--             T3 costo NO divisible por uds_empaque      T7 sueltas ausente / null => 0
+--             T4 costo con división exacta a 806000      T8 total = suma de items (mixto)
+DO $$
+DECLARE
+  v_compra_id uuid := gen_random_uuid();
+  v_pool_antes integer; v_pool_despues integer;
+  v_fallo boolean := false;
+  v_st text; v_tot text; v_sue integer; v_ret text;
+BEGIN
+  INSERT INTO inventario (id, nombre, categoria, precio_venta, precio_costo, stock, stock_min, empaque, uds_empaque, uds_sueltas, id_licencia)
+  VALUES ('TEST_PROD_SUB_618150', 'Producto Test Subtotal', 'Test', 1000, 1000, 10, 2, 'unidad', 6, 1, 'TEST_TENANT_618150'),
+         ('TEST_PROD_SUB2_618150', 'Producto Test Subtotal 2', 'Test', 1000, 1000, 10, 2, 'unidad', 1, 0, 'TEST_TENANT_618150');
+  INSERT INTO compras (id, id_licencia, proveedor_nombre, fecha, nota, total, estado, destino)
+  VALUES (v_compra_id, 'TEST_TENANT_618150', 'Proveedor Test', CURRENT_DATE, '', 0, 'pendiente', 'principal');
+  INSERT INTO compras_items (compra_id, prod_id, nombre, qty, costo, subtotal, tipo, uds_empaque)
+  VALUES (v_compra_id, 'TEST_PROD_SUB_618150', 'Producto Test Subtotal', 1, 1000, 1000, 'unidad', 6);
+
+  SELECT stock*uds_empaque+uds_sueltas INTO v_pool_antes FROM inventario WHERE id='TEST_PROD_SUB_618150';
+
+  -- T1: sueltas=0 => 6 x 120000 = 720000 (idéntico a la regla anterior qty × costo)
+  v_ret := editar_compra_atomica(v_compra_id, 'TEST_TENANT_618150', 'completa', NULL, CURRENT_DATE, '', 'principal',
+    '[{"prod_id":"TEST_PROD_SUB_618150","nombre":"Producto Test Subtotal","qty":6,"costo":120000,"tipo":"unidad","uds_empaque":6,"sueltas":0}]'::jsonb)->>'total';
+  SELECT subtotal::text, sueltas INTO v_st, v_sue FROM compras_items WHERE compra_id=v_compra_id;
+  SELECT total::text INTO v_tot FROM compras WHERE id=v_compra_id;
+  ASSERT v_st = '720000', format('S5-T1: subtotal esperado 720000, obtenido %s', v_st);
+  ASSERT v_tot = '720000' AND v_ret = '720000', format('S5-T1: total esperado 720000, obtenido %s (RPC %s)', v_tot, v_ret);
+  ASSERT v_sue = 0, 'S5-T1: sueltas debia quedar en 0';
+
+  -- T2: qty=6, uds=6, sueltas=4, costo=120000 => 720000 + 4×120000/6 = 800000
+  v_ret := editar_compra_atomica(v_compra_id, 'TEST_TENANT_618150', 'completa', NULL, CURRENT_DATE, '', 'principal',
+    '[{"prod_id":"TEST_PROD_SUB_618150","nombre":"Producto Test Subtotal","qty":6,"costo":120000,"tipo":"unidad","uds_empaque":6,"sueltas":4}]'::jsonb)->>'total';
+  SELECT subtotal::text, sueltas INTO v_st, v_sue FROM compras_items WHERE compra_id=v_compra_id;
+  SELECT total::text INTO v_tot FROM compras WHERE id=v_compra_id;
+  ASSERT v_st = '800000', format('S5-T2: subtotal esperado 800000, obtenido %s', v_st);
+  ASSERT v_tot = '800000' AND v_ret = '800000', format('S5-T2: total esperado 800000, obtenido %s (RPC %s)', v_tot, v_ret);
+  ASSERT v_sue = 4, 'S5-T2: sueltas debia quedar en 4';
+
+  -- T3: qty=5, uds=6, sueltas=2, costo=119946 => 599730 + 2×119946/6 = 639712
+  v_ret := editar_compra_atomica(v_compra_id, 'TEST_TENANT_618150', 'completa', NULL, CURRENT_DATE, '', 'principal',
+    '[{"prod_id":"TEST_PROD_SUB_618150","nombre":"Producto Test Subtotal","qty":5,"costo":119946,"tipo":"unidad","uds_empaque":6,"sueltas":2}]'::jsonb)->>'total';
+  SELECT subtotal::text, sueltas INTO v_st, v_sue FROM compras_items WHERE compra_id=v_compra_id;
+  SELECT total::text INTO v_tot FROM compras WHERE id=v_compra_id;
+  ASSERT v_st = '639712', format('S5-T3: subtotal esperado 639712, obtenido %s', v_st);
+  ASSERT v_tot = '639712' AND v_ret = '639712', format('S5-T3: total esperado 639712, obtenido %s (RPC %s)', v_tot, v_ret);
+  ASSERT v_sue = 2, 'S5-T3: sueltas debia quedar en 2';
+
+  -- T4: qty=6, uds=6, sueltas=4, costo=120900 => 725400 + 4×120900/6 = 806000
+  v_ret := editar_compra_atomica(v_compra_id, 'TEST_TENANT_618150', 'completa', NULL, CURRENT_DATE, '', 'principal',
+    '[{"prod_id":"TEST_PROD_SUB_618150","nombre":"Producto Test Subtotal","qty":6,"costo":120900,"tipo":"unidad","uds_empaque":6,"sueltas":4}]'::jsonb)->>'total';
+  SELECT subtotal::text, sueltas INTO v_st, v_sue FROM compras_items WHERE compra_id=v_compra_id;
+  SELECT total::text INTO v_tot FROM compras WHERE id=v_compra_id;
+  ASSERT v_st = '806000', format('S5-T4: subtotal esperado 806000, obtenido %s', v_st);
+  ASSERT v_tot = '806000' AND v_ret = '806000', format('S5-T4: total esperado 806000, obtenido %s (RPC %s)', v_tot, v_ret);
+  ASSERT v_sue = 4, 'S5-T4: sueltas debia quedar en 4';
+
+  -- T5: uds_empaque=1 (caso defensivo/general; el frontend actual no genera
+  --     sueltas con uds_empaque=1): qty=10, costo=20000, sueltas=3 => 200000 + 3×20000/1 = 260000
+  v_ret := editar_compra_atomica(v_compra_id, 'TEST_TENANT_618150', 'completa', NULL, CURRENT_DATE, '', 'principal',
+    '[{"prod_id":"TEST_PROD_SUB2_618150","nombre":"Producto Test Subtotal 2","qty":10,"costo":20000,"tipo":"unidad","uds_empaque":1,"sueltas":3}]'::jsonb)->>'total';
+  SELECT subtotal::text, sueltas INTO v_st, v_sue FROM compras_items WHERE compra_id=v_compra_id;
+  SELECT total::text INTO v_tot FROM compras WHERE id=v_compra_id;
+  ASSERT v_st = '260000', format('S5-T5: subtotal esperado 260000, obtenido %s', v_st);
+  ASSERT v_tot = '260000' AND v_ret = '260000', format('S5-T5: total esperado 260000, obtenido %s (RPC %s)', v_tot, v_ret);
+  ASSERT v_sue = 3, 'S5-T5: sueltas debia quedar en 3';
+
+  -- T6: sueltas = -1 => LC005 y los items previos (T5) se conservan intactos
+  BEGIN
+    PERFORM editar_compra_atomica(v_compra_id, 'TEST_TENANT_618150', 'completa', NULL, CURRENT_DATE, '', 'principal',
+      '[{"prod_id":"TEST_PROD_SUB_618150","nombre":"Producto Test Subtotal","qty":6,"costo":120000,"tipo":"unidad","uds_empaque":6,"sueltas":-1}]'::jsonb);
+  EXCEPTION WHEN SQLSTATE 'LC005' THEN
+    v_fallo := true;
+  END;
+  ASSERT v_fallo = true, 'S5-T6: se esperaba LC005 por sueltas = -1';
+  ASSERT (SELECT count(*) FROM compras_items WHERE compra_id=v_compra_id) = 1
+     AND (SELECT subtotal::text FROM compras_items WHERE compra_id=v_compra_id) = '260000'
+     AND (SELECT total::text FROM compras WHERE id=v_compra_id) = '260000',
+    'S5-T6: tras el rechazo debia conservarse el item previo (260000) y el total (260000)';
+
+  -- T7a: clave "sueltas" AUSENTE => sueltas=0 y subtotal = qty × costo
+  v_ret := editar_compra_atomica(v_compra_id, 'TEST_TENANT_618150', 'completa', NULL, CURRENT_DATE, '', 'principal',
+    '[{"prod_id":"TEST_PROD_SUB_618150","nombre":"Producto Test Subtotal","qty":6,"costo":120000,"tipo":"unidad","uds_empaque":6}]'::jsonb)->>'total';
+  SELECT subtotal::text, sueltas INTO v_st, v_sue FROM compras_items WHERE compra_id=v_compra_id;
+  ASSERT v_sue = 0, 'S5-T7a: sin la clave sueltas debia quedar en 0';
+  ASSERT v_st = '720000' AND v_ret = '720000', format('S5-T7a: subtotal esperado 720000 (qty×costo), obtenido %s', v_st);
+
+  -- T7b: "sueltas": null => tratado como 0
+  v_ret := editar_compra_atomica(v_compra_id, 'TEST_TENANT_618150', 'completa', NULL, CURRENT_DATE, '', 'principal',
+    '[{"prod_id":"TEST_PROD_SUB_618150","nombre":"Producto Test Subtotal","qty":6,"costo":120000,"tipo":"unidad","uds_empaque":6,"sueltas":null}]'::jsonb)->>'total';
+  SELECT subtotal::text, sueltas INTO v_st, v_sue FROM compras_items WHERE compra_id=v_compra_id;
+  ASSERT v_sue = 0, 'S5-T7b: "sueltas":null debia quedar en 0';
+  ASSERT v_st = '720000' AND v_ret = '720000', format('S5-T7b: subtotal esperado 720000, obtenido %s', v_st);
+
+  -- T8: varias líneas (una con sueltas, otra sin) => total = suma de subtotales
+  v_ret := editar_compra_atomica(v_compra_id, 'TEST_TENANT_618150', 'completa', NULL, CURRENT_DATE, '', 'principal',
+    '[{"prod_id":"TEST_PROD_SUB_618150","nombre":"Producto Test Subtotal","qty":5,"costo":119946,"tipo":"unidad","uds_empaque":6,"sueltas":2},
+      {"prod_id":"TEST_PROD_SUB2_618150","nombre":"Producto Test Subtotal 2","qty":2,"costo":50000,"tipo":"unidad","uds_empaque":1,"sueltas":0}]'::jsonb)->>'total';
+  SELECT total::text INTO v_tot FROM compras WHERE id=v_compra_id;
+  ASSERT v_tot = '739712' AND v_ret = '739712', format('S5-T8: total esperado 739712 (639712 + 100000), obtenido %s (RPC %s)', v_tot, v_ret);
+  ASSERT (SELECT SUM(subtotal) FROM compras_items WHERE compra_id=v_compra_id) = (SELECT total FROM compras WHERE id=v_compra_id),
+    'S5-T8: compras.total debia ser exactamente la suma de compras_items.subtotal';
+
+  -- La edición nunca toca inventario
+  SELECT stock*uds_empaque+uds_sueltas INTO v_pool_despues FROM inventario WHERE id='TEST_PROD_SUB_618150';
+  ASSERT v_pool_antes = v_pool_despues, 'S5: editar NO debe modificar inventario';
+
+  RAISE NOTICE 'BLOQUE S5 (subtotal editar con sueltas: 720000 / 800000 / 639712 / 806000 / 260000 / LC005 / sueltas ausente=0 / total mixto 739712): PASS';
+END $$;
+
+-- BLOQUE S6 — EDICIÓN "VACÍA": una compra ya guardada por el frontend con
+--             qty=6, uds=6, sueltas=4, costo=120000 y subtotal=800000 se
+--             re-envía SIN CAMBIAR NADA. El subtotal y el total deben seguir
+--             en 800000 (antes de HITO 3.7 el RPC los bajaba a 720000 y
+--             perdía silenciosamente 80000). Se repite dos veces (idempotencia).
+DO $$
+DECLARE
+  v_compra_id uuid := gen_random_uuid();
+  v_ret text; v_st text; v_tot text; v_sue integer;
+  v_items jsonb := '[{"prod_id":"TEST_PROD_VAC_618150","nombre":"Producto Test Vacia","qty":6,"costo":120000,"tipo":"unidad","uds_empaque":6,"sueltas":4}]'::jsonb;
+BEGIN
+  INSERT INTO inventario (id, nombre, categoria, precio_venta, precio_costo, stock, stock_min, empaque, uds_empaque, uds_sueltas, id_licencia)
+  VALUES ('TEST_PROD_VAC_618150', 'Producto Test Vacia', 'Test', 1000, 1000, 10, 2, 'unidad', 6, 1, 'TEST_TENANT_618150');
+  INSERT INTO compras (id, id_licencia, proveedor_nombre, fecha, nota, total, estado, destino)
+  VALUES (v_compra_id, 'TEST_TENANT_618150', 'Proveedor Test', CURRENT_DATE, '', 800000, 'pendiente', 'principal');
+  INSERT INTO compras_items (compra_id, prod_id, nombre, qty, costo, subtotal, tipo, uds_empaque, sueltas)
+  VALUES (v_compra_id, 'TEST_PROD_VAC_618150', 'Producto Test Vacia', 6, 120000, 800000, 'unidad', 6, 4);
+
+  FOR i IN 1..2 LOOP
+    v_ret := editar_compra_atomica(v_compra_id, 'TEST_TENANT_618150', 'completa', NULL, CURRENT_DATE, '', 'principal', v_items)->>'total';
+    SELECT subtotal::text, sueltas INTO v_st, v_sue FROM compras_items WHERE compra_id=v_compra_id;
+    SELECT total::text INTO v_tot FROM compras WHERE id=v_compra_id;
+    ASSERT v_st = '800000', format('S6 (pasada %s): subtotal esperado 800000, obtenido %s', i, v_st);
+    ASSERT v_tot = '800000' AND v_ret = '800000', format('S6 (pasada %s): total esperado 800000, obtenido %s (RPC %s)', i, v_tot, v_ret);
+    ASSERT v_sue = 4, format('S6 (pasada %s): sueltas debia seguir en 4, obtenido %s', i, v_sue);
+  END LOOP;
+
+  RAISE NOTICE 'BLOQUE S6 (edicion vacia 6/6/4/120000: subtotal y total siguen en 800000, 2 pasadas): PASS';
+END $$;
+
+-- BLOQUE S7 — VALIDACIÓN DE CANTIDAD EN editar_compra_atomica (HITO 3.7):
+--             una línea es válida si qty > 0 OR sueltas > 0. qty=0 con sueltas>0
+--             es una compra de SOLO unidades sueltas (p.ej. 3 unidades de un
+--             six-pack): el frontend la genera y recibir/eliminar ya la soportan.
+--             Se rechaza (LC005): qty=0 sin sueltas, sueltas < 0, y qty NULL o
+--             negativa (esto último igual que antes de este cambio).
+--             V1 qty=0,sueltas=3 => OK             V5 qty=0,sueltas=-1 => LC005
+--             V2 qty=5,sueltas=0 => OK             V6 qty=5,sueltas=-1 => LC005
+--             V3 qty=5,sueltas=2 => OK             V7 qty=0,uds=6,sueltas=3,costo=120000 => 60000
+--             V4 qty=0,sueltas=0 => LC005          V8 qty=-2,sueltas=3 y qty ausente => LC005
+--             V9 línea solo-sueltas: edición vacía, línea mixta, recibir y eliminar coherentes.
+DO $$
+DECLARE
+  v_compra_id  uuid := gen_random_uuid();
+  v_compra2_id uuid := gen_random_uuid();
+  v_rechazo boolean;
+  v_st text; v_tot text; v_ret text; v_qty numeric; v_sue integer;
+  v_pool0 integer; v_pool1 integer; v_pool2 integer;
+BEGIN
+  INSERT INTO inventario (id, nombre, categoria, precio_venta, precio_costo, stock, stock_min, empaque, uds_empaque, uds_sueltas, id_licencia)
+  VALUES ('TEST_PROD_Q0_618150',  'Producto Test Qty0',   'Test', 1000, 1000, 10, 2, 'unidad', 6, 1, 'TEST_TENANT_618150'),
+         ('TEST_PROD_Q0B_618150', 'Producto Test Qty0 B', 'Test', 1000, 1000, 10, 2, 'unidad', 1, 0, 'TEST_TENANT_618150');
+  INSERT INTO compras (id, id_licencia, proveedor_nombre, fecha, nota, total, estado, destino)
+  VALUES (v_compra_id, 'TEST_TENANT_618150', 'Proveedor Test', CURRENT_DATE, '', 0, 'pendiente', 'principal');
+  INSERT INTO compras_items (compra_id, prod_id, nombre, qty, costo, subtotal, tipo, uds_empaque)
+  VALUES (v_compra_id, 'TEST_PROD_Q0_618150', 'Producto Test Qty0', 1, 1000, 1000, 'unidad', 6);
+
+  -- V2: qty=5, sueltas=0 => se acepta; subtotal = 5 x 120000
+  v_ret := editar_compra_atomica(v_compra_id, 'TEST_TENANT_618150', 'completa', NULL, CURRENT_DATE, '', 'principal',
+    '[{"prod_id":"TEST_PROD_Q0_618150","nombre":"Producto Test Qty0","qty":5,"costo":120000,"tipo":"unidad","uds_empaque":6,"sueltas":0}]'::jsonb)->>'total';
+  SELECT qty, sueltas, subtotal::text INTO v_qty, v_sue, v_st FROM compras_items WHERE compra_id = v_compra_id;
+  ASSERT v_qty = 5 AND v_sue = 0 AND v_st = '600000' AND v_ret = '600000',
+    format('S7-V2: qty=5,sueltas=0 debia aceptarse con subtotal 600000 (qty=%s sueltas=%s subtotal=%s total=%s)', v_qty, v_sue, v_st, v_ret);
+
+  -- V3: qty=5, sueltas=2 => se acepta; subtotal = 5 x 120000 + 2 x 120000 / 6 = 640000
+  v_ret := editar_compra_atomica(v_compra_id, 'TEST_TENANT_618150', 'completa', NULL, CURRENT_DATE, '', 'principal',
+    '[{"prod_id":"TEST_PROD_Q0_618150","nombre":"Producto Test Qty0","qty":5,"costo":120000,"tipo":"unidad","uds_empaque":6,"sueltas":2}]'::jsonb)->>'total';
+  SELECT qty, sueltas, subtotal::text INTO v_qty, v_sue, v_st FROM compras_items WHERE compra_id = v_compra_id;
+  ASSERT v_qty = 5 AND v_sue = 2 AND v_st = '640000' AND v_ret = '640000',
+    format('S7-V3: qty=5,sueltas=2 debia aceptarse con subtotal 640000 (qty=%s sueltas=%s subtotal=%s total=%s)', v_qty, v_sue, v_st, v_ret);
+
+  -- V1: qty=0, sueltas=3 (SOLO sueltas) => se acepta y se persiste tal cual;
+  --     costo=90000, uds=6 => subtotal = 3 x 90000 / 6 = 45000
+  v_ret := editar_compra_atomica(v_compra_id, 'TEST_TENANT_618150', 'completa', NULL, CURRENT_DATE, '', 'principal',
+    '[{"prod_id":"TEST_PROD_Q0_618150","nombre":"Producto Test Qty0","qty":0,"costo":90000,"tipo":"unidad","uds_empaque":6,"sueltas":3}]'::jsonb)->>'total';
+  SELECT qty, sueltas, subtotal::text INTO v_qty, v_sue, v_st FROM compras_items WHERE compra_id = v_compra_id;
+  ASSERT v_qty = 0 AND v_sue = 3 AND v_st = '45000' AND v_ret = '45000',
+    format('S7-V1: qty=0,sueltas=3 debia aceptarse y persistirse con subtotal 45000 (qty=%s sueltas=%s subtotal=%s total=%s)', v_qty, v_sue, v_st, v_ret);
+
+  -- V7: qty=0, uds=6, sueltas=3, costo=120000 => subtotal = 3 x (120000 / 6) = 60000
+  v_ret := editar_compra_atomica(v_compra_id, 'TEST_TENANT_618150', 'completa', NULL, CURRENT_DATE, '', 'principal',
+    '[{"prod_id":"TEST_PROD_Q0_618150","nombre":"Producto Test Qty0","qty":0,"costo":120000,"tipo":"unidad","uds_empaque":6,"sueltas":3}]'::jsonb)->>'total';
+  SELECT qty, sueltas, subtotal::text INTO v_qty, v_sue, v_st FROM compras_items WHERE compra_id = v_compra_id;
+  SELECT total::text INTO v_tot FROM compras WHERE id = v_compra_id;
+  ASSERT v_qty = 0 AND v_sue = 3 AND v_st = '60000' AND v_tot = '60000' AND v_ret = '60000',
+    format('S7-V7: qty=0,sueltas=3,costo=120000,uds=6 debia dar subtotal 60000 (subtotal=%s total=%s RPC=%s)', v_st, v_tot, v_ret);
+
+  -- V4: qty=0, sueltas=0 => LINEA VACIA, se rechaza (LC005)
+  v_rechazo := false;
+  BEGIN
+    PERFORM editar_compra_atomica(v_compra_id, 'TEST_TENANT_618150', 'completa', NULL, CURRENT_DATE, '', 'principal',
+      '[{"prod_id":"TEST_PROD_Q0_618150","nombre":"Producto Test Qty0","qty":0,"costo":120000,"tipo":"unidad","uds_empaque":6,"sueltas":0}]'::jsonb);
+  EXCEPTION WHEN SQLSTATE 'LC005' THEN v_rechazo := true;
+  END;
+  ASSERT v_rechazo, 'S7-V4: qty=0,sueltas=0 debia rechazarse con LC005';
+
+  -- V5: qty=0, sueltas=-1 => LC005
+  v_rechazo := false;
+  BEGIN
+    PERFORM editar_compra_atomica(v_compra_id, 'TEST_TENANT_618150', 'completa', NULL, CURRENT_DATE, '', 'principal',
+      '[{"prod_id":"TEST_PROD_Q0_618150","nombre":"Producto Test Qty0","qty":0,"costo":120000,"tipo":"unidad","uds_empaque":6,"sueltas":-1}]'::jsonb);
+  EXCEPTION WHEN SQLSTATE 'LC005' THEN v_rechazo := true;
+  END;
+  ASSERT v_rechazo, 'S7-V5: qty=0,sueltas=-1 debia rechazarse con LC005';
+
+  -- V6: qty=5, sueltas=-1 => LC005 (sueltas negativa se rechaza aunque qty sea valida)
+  v_rechazo := false;
+  BEGIN
+    PERFORM editar_compra_atomica(v_compra_id, 'TEST_TENANT_618150', 'completa', NULL, CURRENT_DATE, '', 'principal',
+      '[{"prod_id":"TEST_PROD_Q0_618150","nombre":"Producto Test Qty0","qty":5,"costo":120000,"tipo":"unidad","uds_empaque":6,"sueltas":-1}]'::jsonb);
+  EXCEPTION WHEN SQLSTATE 'LC005' THEN v_rechazo := true;
+  END;
+  ASSERT v_rechazo, 'S7-V6: qty=5,sueltas=-1 debia rechazarse con LC005';
+
+  -- V8a: qty=-2, sueltas=3 => LC005. La qty NEGATIVA se rechazaba antes de este
+  --      cambio y sigue rechazandose aunque haya sueltas (restaria inventario).
+  v_rechazo := false;
+  BEGIN
+    PERFORM editar_compra_atomica(v_compra_id, 'TEST_TENANT_618150', 'completa', NULL, CURRENT_DATE, '', 'principal',
+      '[{"prod_id":"TEST_PROD_Q0_618150","nombre":"Producto Test Qty0","qty":-2,"costo":120000,"tipo":"unidad","uds_empaque":6,"sueltas":3}]'::jsonb);
+  EXCEPTION WHEN SQLSTATE 'LC005' THEN v_rechazo := true;
+  END;
+  ASSERT v_rechazo, 'S7-V8a: qty=-2,sueltas=3 debia rechazarse con LC005 (qty negativa)';
+
+  -- V8b: qty ausente (NULL), sueltas=3 => LC005 (como antes: qty NULL se rechaza)
+  v_rechazo := false;
+  BEGIN
+    PERFORM editar_compra_atomica(v_compra_id, 'TEST_TENANT_618150', 'completa', NULL, CURRENT_DATE, '', 'principal',
+      '[{"prod_id":"TEST_PROD_Q0_618150","nombre":"Producto Test Qty0","costo":120000,"tipo":"unidad","uds_empaque":6,"sueltas":3}]'::jsonb);
+  EXCEPTION WHEN SQLSTATE 'LC005' THEN v_rechazo := true;
+  END;
+  ASSERT v_rechazo, 'S7-V8b: qty ausente debia rechazarse con LC005';
+
+  -- Tras TODOS los rechazos, la linea del V7 sigue intacta (rollback completo)
+  SELECT qty, sueltas, subtotal::text INTO v_qty, v_sue, v_st FROM compras_items WHERE compra_id = v_compra_id;
+  SELECT total::text INTO v_tot FROM compras WHERE id = v_compra_id;
+  ASSERT (SELECT count(*) FROM compras_items WHERE compra_id = v_compra_id) = 1
+     AND v_qty = 0 AND v_sue = 3 AND v_st = '60000' AND v_tot = '60000',
+    format('S7: tras los rechazos debia conservarse la linea qty=0,sueltas=3,subtotal=60000 (qty=%s sueltas=%s subtotal=%s total=%s)', v_qty, v_sue, v_st, v_tot);
+
+  -- V9a: EDICION VACIA de una linea solo-sueltas (dos pasadas): subtotal y total no cambian
+  FOR i IN 1..2 LOOP
+    v_ret := editar_compra_atomica(v_compra_id, 'TEST_TENANT_618150', 'completa', NULL, CURRENT_DATE, '', 'principal',
+      '[{"prod_id":"TEST_PROD_Q0_618150","nombre":"Producto Test Qty0","qty":0,"costo":120000,"tipo":"unidad","uds_empaque":6,"sueltas":3}]'::jsonb)->>'total';
+    SELECT qty, sueltas, subtotal::text INTO v_qty, v_sue, v_st FROM compras_items WHERE compra_id = v_compra_id;
+    ASSERT v_qty = 0 AND v_sue = 3 AND v_st = '60000' AND v_ret = '60000',
+      format('S7-V9a (pasada %s): la edicion vacia debia dejar subtotal 60000 (qty=%s sueltas=%s subtotal=%s total=%s)', i, v_qty, v_sue, v_st, v_ret);
+  END LOOP;
+
+  -- V9b: linea mixta: solo-sueltas (60000) + linea normal 2 x 50000 (100000) => total 160000
+  v_ret := editar_compra_atomica(v_compra_id, 'TEST_TENANT_618150', 'completa', NULL, CURRENT_DATE, '', 'principal',
+    '[{"prod_id":"TEST_PROD_Q0_618150","nombre":"Producto Test Qty0","qty":0,"costo":120000,"tipo":"unidad","uds_empaque":6,"sueltas":3},
+      {"prod_id":"TEST_PROD_Q0B_618150","nombre":"Producto Test Qty0 B","qty":2,"costo":50000,"tipo":"unidad","uds_empaque":1,"sueltas":0}]'::jsonb)->>'total';
+  ASSERT v_ret = '160000' AND (SELECT total::text FROM compras WHERE id = v_compra_id) = '160000'
+     AND (SELECT SUM(subtotal) FROM compras_items WHERE compra_id = v_compra_id) = 160000,
+    format('S7-V9b: total esperado 160000 (60000 + 100000), obtenido %s', v_ret);
+
+  -- V9c: coherencia con recibir/eliminar: compra de SOLO 3 sueltas, creada por editar,
+  --      suma +3 unidades al recibirse y las resta al eliminarse.
+  INSERT INTO compras (id, id_licencia, proveedor_nombre, fecha, nota, total, estado, destino)
+  VALUES (v_compra2_id, 'TEST_TENANT_618150', 'Proveedor Test', CURRENT_DATE, '', 0, 'pendiente', 'principal');
+  INSERT INTO compras_items (compra_id, prod_id, nombre, qty, costo, subtotal, tipo, uds_empaque)
+  VALUES (v_compra2_id, 'TEST_PROD_Q0_618150', 'Producto Test Qty0', 1, 1000, 1000, 'unidad', 6);
+  PERFORM editar_compra_atomica(v_compra2_id, 'TEST_TENANT_618150', 'completa', NULL, CURRENT_DATE, '', 'principal',
+    '[{"prod_id":"TEST_PROD_Q0_618150","nombre":"Producto Test Qty0","qty":0,"costo":120000,"tipo":"unidad","uds_empaque":6,"sueltas":3}]'::jsonb);
+  SELECT stock*uds_empaque+uds_sueltas INTO v_pool0 FROM inventario WHERE id = 'TEST_PROD_Q0_618150';   -- 10 x 6 + 1 = 61
+  PERFORM recibir_compra_atomica(v_compra2_id, 'TEST_TENANT_618150');
+  SELECT stock*uds_empaque+uds_sueltas INTO v_pool1 FROM inventario WHERE id = 'TEST_PROD_Q0_618150';
+  ASSERT v_pool1 = v_pool0 + 3, format('S7-V9c: recibir una compra de solo 3 sueltas debia sumar +3 (antes %s, despues %s)', v_pool0, v_pool1);
+  PERFORM eliminar_compra_atomica(v_compra2_id, 'TEST_TENANT_618150');
+  SELECT stock*uds_empaque+uds_sueltas INTO v_pool2 FROM inventario WHERE id = 'TEST_PROD_Q0_618150';
+  ASSERT v_pool2 = v_pool0, format('S7-V9c: eliminar debia devolver el inventario exacto (antes %s, despues %s)', v_pool0, v_pool2);
+
+  RAISE NOTICE 'BLOQUE S7 (qty=0 con sueltas: acepta 0/3, 5/0, 5/2, subtotal 60000; rechaza 0/0, 0/-1, 5/-1, qty<0, qty NULL; edicion vacia, linea mixta y recibir/eliminar coherentes): PASS';
+END $$;
+
+-- ============================================================================
 -- NOTA SOBRE PRUEBAS DE CONCURRENCIA REAL (bloques 11-13 del plan de pruebas
 -- de Fase 1, sección 23): un script SQL de una sola sesión/conexión NO puede
 -- ejercitar "dos llamadas verdaderamente simultáneas" — eso requiere dos
@@ -434,7 +882,7 @@ END $$;
 
 DO $$
 BEGIN
-    RAISE NOTICE '=== TODOS LOS BLOQUES DE PRUEBA (1-10) COMPLETADOS ===';
+    RAISE NOTICE '=== TODOS LOS BLOQUES DE PRUEBA (1-10 y S1-S7) COMPLETADOS ===';
 END $$;
 
 ROLLBACK;

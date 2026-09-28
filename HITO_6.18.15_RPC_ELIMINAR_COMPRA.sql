@@ -127,10 +127,14 @@ BEGIN
   -- ---- PASADA 1: bloquear cada producto (FOR UPDATE) y VALIDAR que hay
   --      pool suficiente para revertir — SIN modificar nada todavía. Orden
   --      determinístico (ORDER BY prod_id) para prevenir deadlocks contra
-  --      otras RPC de este batch que también bloqueen productos. ----
+  --      otras RPC de este batch que también bloqueen productos.
+  --      HITO 3.7: las unidades a validar incluyen compras_items.sueltas
+  --      (misma fórmula que la reversión de la PASADA 2 — si la validación la
+  --      ignorara, una compra con sueltas pasaría la validación con menos
+  --      inventario del necesario y fallaría/revertiría de menos después). ----
   FOR v_item IN
     SELECT ci.prod_id AS prod_id,
-           SUM(ci.qty * COALESCE(ci.uds_empaque, 1)) AS unidades_fisicas,
+           SUM(ci.qty * COALESCE(ci.uds_empaque, 1) + COALESCE(ci.sueltas, 0)) AS unidades_fisicas,
            MIN(ci.nombre) AS nombre
     FROM compras_items ci
     WHERE ci.compra_id = p_compra_id
@@ -189,10 +193,11 @@ BEGIN
   END LOOP;
 
   -- ---- PASADA 2: todos los productos ya se validaron como revertibles.
-  --      Ahora sí se aplican las reversiones, mismo orden determinístico. ----
+  --      Ahora sí se aplican las reversiones, mismo orden determinístico.
+  --      HITO 3.7: misma fórmula que la PASADA 1, incluyendo sueltas. ----
   FOR v_item IN
     SELECT ci.prod_id AS prod_id,
-           SUM(ci.qty * COALESCE(ci.uds_empaque, 1)) AS unidades_fisicas,
+           SUM(ci.qty * COALESCE(ci.uds_empaque, 1) + COALESCE(ci.sueltas, 0)) AS unidades_fisicas,
            MIN(ci.nombre) AS nombre
     FROM compras_items ci
     WHERE ci.compra_id = p_compra_id

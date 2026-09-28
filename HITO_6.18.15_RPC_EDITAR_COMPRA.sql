@@ -81,6 +81,8 @@ DECLARE
   v_qty             numeric;
   v_costo           numeric;
   v_uds_empaque     numeric;
+  v_sueltas         integer;   -- HITO 3.7: compras_items.sueltas (integer NOT NULL DEFAULT 0)
+  v_subtotal        numeric;   -- HITO 3.7: dinero de la línea, incluye el valor de las sueltas
   v_tipo            text;
   v_nombre_prod     text;
   v_nombre_final    text;
@@ -151,6 +153,7 @@ BEGIN
       v_costo       := (v_item->>'costo')::numeric;
       v_uds_empaque := COALESCE((v_item->>'uds_empaque')::numeric, 1);
       v_tipo        := COALESCE(v_item->>'tipo', 'unidad');
+      v_sueltas     := COALESCE((v_item->>'sueltas')::integer, 0);  -- HITO 3.7: ausente/null => 0
 
       IF v_prod_id IS NULL OR v_prod_id = '' THEN
         RAISE EXCEPTION 'Uno de los productos de la edición no tiene un identificador válido.'
@@ -166,8 +169,14 @@ BEGIN
           USING ERRCODE = 'LC013';
       END IF;
 
-      IF v_qty IS NULL OR v_qty <= 0 THEN
-        RAISE EXCEPTION 'La cantidad de "%" no es válida (debe ser mayor que 0).', v_nombre_prod
+      -- HITO 3.7: una línea puede ser SOLO unidades sueltas (0 empaques completos
+      -- + N sueltas, p.ej. 3 unidades de un six-pack: qty=0, sueltas=3). El
+      -- frontend genera esas líneas y recibir/eliminar ya las soportan, así que
+      -- es válida si qty > 0 OR sueltas > 0. Se sigue rechazando qty NULL o
+      -- NEGATIVA (igual que antes: restaría inventario) y la línea vacía
+      -- (qty = 0 sin sueltas). La sueltas NEGATIVA se rechaza más abajo (LC005).
+      IF v_qty IS NULL OR v_qty < 0 OR (v_qty = 0 AND v_sueltas <= 0) THEN
+        RAISE EXCEPTION 'La cantidad de "%" no es válida (debe tener al menos 1 empaque o 1 unidad suelta, y no puede ser negativa).', v_nombre_prod
           USING ERRCODE = 'LC005';
       END IF;
 
@@ -179,6 +188,13 @@ BEGIN
       IF v_uds_empaque <= 0 THEN
         RAISE EXCEPTION 'La presentación de "%" no es válida (uds_empaque <= 0).', v_nombre_prod
           USING ERRCODE = 'LC003';
+      END IF;
+
+      -- HITO 3.7: única validación nueva, exclusiva del campo nuevo — una
+      -- sueltas negativa restaría inventario al recibir la compra.
+      IF v_sueltas < 0 THEN
+        RAISE EXCEPTION 'Las unidades sueltas de "%" no son válidas (no pueden ser negativas).', v_nombre_prod
+          USING ERRCODE = 'LC005';
       END IF;
 
       IF v_tipo NOT IN ('unidad', 'sixpack', 'caja', 'empaque') THEN
@@ -200,9 +216,31 @@ BEGIN
       v_uds_empaque := COALESCE((v_item->>'uds_empaque')::numeric, 1);
       v_tipo        := COALESCE(v_item->>'tipo', 'unidad');
       v_nombre_final := COALESCE(v_item->>'nombre', v_prod_id);
+      v_sueltas     := COALESCE((v_item->>'sueltas')::integer, 0);  -- HITO 3.7
 
-      INSERT INTO compras_items (compra_id, prod_id, nombre, qty, costo, subtotal, tipo, uds_empaque)
-        VALUES (p_compra_id, v_prod_id, v_nombre_final, v_qty, v_costo, v_qty * v_costo, v_tipo, v_uds_empaque);
+      -- HITO 3.7 — SUBTOTAL = dinero pagado por la línea. `costo` es el costo de
+      -- UNA presentación completa (uds_empaque unidades físicas) y `sueltas` son
+      -- unidades físicas adicionales, así que:
+      --     subtotal = qty × costo  +  sueltas × costo / uds_empaque
+      -- Es la misma regla económica que calcularItemCompra() del frontend
+      -- ("dinero = unidades físicas × precio por unidad") y que reproducen
+      -- exactamente las compras históricas con sueltas (p.ej. 5×119946 +
+      -- 2×119946/6 = 639712).
+      -- REDONDEO: el frontend NUNCA redondea el subtotal (solo redondea
+      -- costoPorEmpaque = Math.round(costo × uds) al guardar el costo, y ese ya es
+      -- el `costo` que llega aquí). Por eso aquí tampoco se redondea: se
+      -- multiplica primero y se divide una sola vez, y trim_scale() (PostgreSQL
+      -- >= 13) solo quita los ceros de relleno que deja la división numeric
+      -- (80000.0000000000000000 -> 80000). Con costos por unidad enteros, o con
+      -- decimales exactos, el resultado es idéntico al del frontend.
+      -- sueltas = 0 (o ausente) => no se suma nada: resultado idéntico a qty × costo.
+      v_subtotal := v_qty * v_costo;
+      IF v_sueltas > 0 THEN
+        v_subtotal := v_subtotal + trim_scale(v_sueltas * v_costo / v_uds_empaque);
+      END IF;
+
+      INSERT INTO compras_items (compra_id, prod_id, nombre, qty, costo, subtotal, tipo, uds_empaque, sueltas)
+        VALUES (p_compra_id, v_prod_id, v_nombre_final, v_qty, v_costo, v_subtotal, v_tipo, v_uds_empaque, v_sueltas);
     END LOOP;
 
     -- Total SIEMPRE derivado de los items ya persistidos — nunca de un
@@ -268,7 +306,7 @@ REVOKE EXECUTE ON FUNCTION editar_compra_atomica(uuid, text, text, uuid, date, t
 --       p_nota: nota,
 --       p_destino: _editCompraModo==='completa' ? destino : null,
 --       p_items: _editCompraModo==='completa'
---         ? _editCompraItems.map(function(i){return {prod_id:i.prod_id,nombre:i.nombre,qty:i.qty,costo:i.costo,tipo:i.tipo,uds_empaque:i.uds_empaque};})
+--         ? _editCompraItems.map(function(i){return {prod_id:i.prod_id,nombre:i.nombre,qty:i.qty,costo:i.costo,tipo:i.tipo,uds_empaque:i.uds_empaque,sueltas:i.sueltas||0};})
 --         : null
 --     })
 --   });

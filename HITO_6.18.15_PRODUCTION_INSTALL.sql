@@ -1,6 +1,16 @@
 -- ============================================================================
 -- HITO 6.18.15 (Fase 8.5) — ARTEFACTO DE INSTALACION PARA PRODUCCION
 -- ============================================================================
+-- HITO 3.7: las 3 funciones fueron corregidas para incorporar
+-- compras_items.sueltas (idénticas a las de los 3 archivos individuales) y este
+-- instalador exige ahora que esa columna exista y que PostgreSQL sea >= 13
+-- (PASO 0). editar_compra_atomica calcula además el subtotal incluyendo el valor
+-- de las sueltas (qty × costo + sueltas × costo / uds_empaque) y acepta líneas de
+-- SOLO sueltas (qty = 0 con sueltas > 0; se rechaza la línea vacía, qty negativa
+-- y sueltas negativa). Validado en un PostgreSQL 17.11 LOCAL de pruebas (no
+-- Supabase): 17 bloques SQL + 30 + 24 comprobaciones de concurrencia/rollback/
+-- aislamiento, todo PASS. NO se ha ejecutado en Supabase producción.
+--
 -- NO EJECUTAR ESTE ARCHIVO TODAVIA. Es un ENTREGABLE preparado para que el
 -- propietario del proyecto lo revise y, SOLO tras autorizacion explicita, lo
 -- ejecute manualmente en el SQL Editor del proyecto Supabase de PRODUCCION.
@@ -56,6 +66,12 @@ BEGIN
   IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='compras_items' AND column_name='compra_id') THEN
     v_missing := v_missing || 'compras_items.compra_id ';
   END IF;
+  -- HITO 3.7: las 3 RPC leen/escriben compras_items.sueltas. Sin esta columna las
+  -- funciones se crearían pero fallarían en su primer uso (plpgsql resuelve
+  -- columnas en tiempo de ejecución), así que se exige aquí.
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='compras_items' AND column_name='sueltas') THEN
+    v_missing := v_missing || 'compras_items.sueltas ';
+  END IF;
   IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='inventario' AND column_name='uds_empaque') THEN
     v_missing := v_missing || 'inventario.uds_empaque ';
   END IF;
@@ -64,6 +80,12 @@ BEGIN
   END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_extension WHERE extname='pgcrypto') THEN
     v_missing := v_missing || 'extension:pgcrypto ';
+  END IF;
+  -- HITO 3.7: editar_compra_atomica usa trim_scale() (PostgreSQL >= 13) para el
+  -- subtotal con sueltas. En una versión anterior la función se crearía pero
+  -- fallaría en su primer uso con sueltas > 0, así que se exige aquí.
+  IF current_setting('server_version_num')::integer < 130000 THEN
+    v_missing := v_missing || 'postgresql>=13 ';
   END IF;
   IF v_missing <> '' THEN
     RAISE EXCEPTION 'PRECONDICION NO CUMPLIDA -- faltan: %. Instalacion detenida, no se creo ninguna funcion.', v_missing;
@@ -158,13 +180,11 @@ BEGIN
   --    deadlocks contra otras RPC que también bloqueen productos), las
   --    unidades físicas REALES de la compra.
   --    unidades_fisicas = qty × uds_empaque(de la compra) + COALESCE(sueltas,0).
-  --    NOTA — LIMITACIÓN YA DOCUMENTADA (no corregida aquí, fuera de alcance
-  --    de 6.18.15): compras_items NO tiene columna "sueltas" en el esquema
-  --    real (confirmado en Fase 1 y re-confirmado en Fase 2). Por tanto el
-  --    término "+ sueltas" es conceptualmente correcto pero hoy SIEMPRE
-  --    aporta 0 — exactamente la misma limitación que ya tiene el código JS
-  --    actual al releer una compra guardada. Si en el futuro se agrega esa
-  --    columna, esta consulta debe actualizarse a SUM(ci.qty * COALESCE(ci.uds_empaque,1) + COALESCE(ci.sueltas,0)).
+  --    HITO 3.7: compras_items.sueltas (integer NOT NULL DEFAULT 0) ya existe
+  --    en producción (HITO 3.6.1) y el frontend la persiste (caf02fa). Esta
+  --    consulta es la ÚNICA ruta de esta función que calcula unidades físicas,
+  --    y ahora la incorpora; las filas históricas tienen sueltas=0, así que su
+  --    resultado no cambia.
   -- NOTA sobre costo_ultimo: si un mismo prod_id aparece en más de una línea
   -- de la misma compra (poco frecuente — el frontend actual fusiona líneas
   -- del mismo producto al agregar, pero una compra_items histórica podría
@@ -174,7 +194,7 @@ BEGIN
   -- representativo entre los positivos — decisión documentada, no un olvido.
   FOR v_item IN
     SELECT ci.prod_id AS prod_id,
-           SUM(ci.qty * COALESCE(ci.uds_empaque, 1)) AS unidades_fisicas,
+           SUM(ci.qty * COALESCE(ci.uds_empaque, 1) + COALESCE(ci.sueltas, 0)) AS unidades_fisicas,
            MAX(ci.costo) FILTER (WHERE ci.costo > 0) AS costo_ultimo,
            MIN(ci.nombre) AS nombre,
            MIN(ci.tipo) AS tipo,
@@ -343,6 +363,8 @@ DECLARE
   v_qty             numeric;
   v_costo           numeric;
   v_uds_empaque     numeric;
+  v_sueltas         integer;   -- HITO 3.7: compras_items.sueltas (integer NOT NULL DEFAULT 0)
+  v_subtotal        numeric;   -- HITO 3.7: dinero de la línea, incluye el valor de las sueltas
   v_tipo            text;
   v_nombre_prod     text;
   v_nombre_final    text;
@@ -413,6 +435,7 @@ BEGIN
       v_costo       := (v_item->>'costo')::numeric;
       v_uds_empaque := COALESCE((v_item->>'uds_empaque')::numeric, 1);
       v_tipo        := COALESCE(v_item->>'tipo', 'unidad');
+      v_sueltas     := COALESCE((v_item->>'sueltas')::integer, 0);  -- HITO 3.7: ausente/null => 0
 
       IF v_prod_id IS NULL OR v_prod_id = '' THEN
         RAISE EXCEPTION 'Uno de los productos de la edición no tiene un identificador válido.'
@@ -428,8 +451,14 @@ BEGIN
           USING ERRCODE = 'LC013';
       END IF;
 
-      IF v_qty IS NULL OR v_qty <= 0 THEN
-        RAISE EXCEPTION 'La cantidad de "%" no es válida (debe ser mayor que 0).', v_nombre_prod
+      -- HITO 3.7: una línea puede ser SOLO unidades sueltas (0 empaques completos
+      -- + N sueltas, p.ej. 3 unidades de un six-pack: qty=0, sueltas=3). El
+      -- frontend genera esas líneas y recibir/eliminar ya las soportan, así que
+      -- es válida si qty > 0 OR sueltas > 0. Se sigue rechazando qty NULL o
+      -- NEGATIVA (igual que antes: restaría inventario) y la línea vacía
+      -- (qty = 0 sin sueltas). La sueltas NEGATIVA se rechaza más abajo (LC005).
+      IF v_qty IS NULL OR v_qty < 0 OR (v_qty = 0 AND v_sueltas <= 0) THEN
+        RAISE EXCEPTION 'La cantidad de "%" no es válida (debe tener al menos 1 empaque o 1 unidad suelta, y no puede ser negativa).', v_nombre_prod
           USING ERRCODE = 'LC005';
       END IF;
 
@@ -441,6 +470,13 @@ BEGIN
       IF v_uds_empaque <= 0 THEN
         RAISE EXCEPTION 'La presentación de "%" no es válida (uds_empaque <= 0).', v_nombre_prod
           USING ERRCODE = 'LC003';
+      END IF;
+
+      -- HITO 3.7: única validación nueva, exclusiva del campo nuevo — una
+      -- sueltas negativa restaría inventario al recibir la compra.
+      IF v_sueltas < 0 THEN
+        RAISE EXCEPTION 'Las unidades sueltas de "%" no son válidas (no pueden ser negativas).', v_nombre_prod
+          USING ERRCODE = 'LC005';
       END IF;
 
       IF v_tipo NOT IN ('unidad', 'sixpack', 'caja', 'empaque') THEN
@@ -462,9 +498,31 @@ BEGIN
       v_uds_empaque := COALESCE((v_item->>'uds_empaque')::numeric, 1);
       v_tipo        := COALESCE(v_item->>'tipo', 'unidad');
       v_nombre_final := COALESCE(v_item->>'nombre', v_prod_id);
+      v_sueltas     := COALESCE((v_item->>'sueltas')::integer, 0);  -- HITO 3.7
 
-      INSERT INTO compras_items (compra_id, prod_id, nombre, qty, costo, subtotal, tipo, uds_empaque)
-        VALUES (p_compra_id, v_prod_id, v_nombre_final, v_qty, v_costo, v_qty * v_costo, v_tipo, v_uds_empaque);
+      -- HITO 3.7 — SUBTOTAL = dinero pagado por la línea. `costo` es el costo de
+      -- UNA presentación completa (uds_empaque unidades físicas) y `sueltas` son
+      -- unidades físicas adicionales, así que:
+      --     subtotal = qty × costo  +  sueltas × costo / uds_empaque
+      -- Es la misma regla económica que calcularItemCompra() del frontend
+      -- ("dinero = unidades físicas × precio por unidad") y que reproducen
+      -- exactamente las compras históricas con sueltas (p.ej. 5×119946 +
+      -- 2×119946/6 = 639712).
+      -- REDONDEO: el frontend NUNCA redondea el subtotal (solo redondea
+      -- costoPorEmpaque = Math.round(costo × uds) al guardar el costo, y ese ya es
+      -- el `costo` que llega aquí). Por eso aquí tampoco se redondea: se
+      -- multiplica primero y se divide una sola vez, y trim_scale() (PostgreSQL
+      -- >= 13) solo quita los ceros de relleno que deja la división numeric
+      -- (80000.0000000000000000 -> 80000). Con costos por unidad enteros, o con
+      -- decimales exactos, el resultado es idéntico al del frontend.
+      -- sueltas = 0 (o ausente) => no se suma nada: resultado idéntico a qty × costo.
+      v_subtotal := v_qty * v_costo;
+      IF v_sueltas > 0 THEN
+        v_subtotal := v_subtotal + trim_scale(v_sueltas * v_costo / v_uds_empaque);
+      END IF;
+
+      INSERT INTO compras_items (compra_id, prod_id, nombre, qty, costo, subtotal, tipo, uds_empaque, sueltas)
+        VALUES (p_compra_id, v_prod_id, v_nombre_final, v_qty, v_costo, v_subtotal, v_tipo, v_uds_empaque, v_sueltas);
     END LOOP;
 
     -- Total SIEMPRE derivado de los items ya persistidos — nunca de un
@@ -587,10 +645,14 @@ BEGIN
   -- ---- PASADA 1: bloquear cada producto (FOR UPDATE) y VALIDAR que hay
   --      pool suficiente para revertir — SIN modificar nada todavía. Orden
   --      determinístico (ORDER BY prod_id) para prevenir deadlocks contra
-  --      otras RPC de este batch que también bloqueen productos. ----
+  --      otras RPC de este batch que también bloqueen productos.
+  --      HITO 3.7: las unidades a validar incluyen compras_items.sueltas
+  --      (misma fórmula que la reversión de la PASADA 2 — si la validación la
+  --      ignorara, una compra con sueltas pasaría la validación con menos
+  --      inventario del necesario y fallaría/revertiría de menos después). ----
   FOR v_item IN
     SELECT ci.prod_id AS prod_id,
-           SUM(ci.qty * COALESCE(ci.uds_empaque, 1)) AS unidades_fisicas,
+           SUM(ci.qty * COALESCE(ci.uds_empaque, 1) + COALESCE(ci.sueltas, 0)) AS unidades_fisicas,
            MIN(ci.nombre) AS nombre
     FROM compras_items ci
     WHERE ci.compra_id = p_compra_id
@@ -649,10 +711,11 @@ BEGIN
   END LOOP;
 
   -- ---- PASADA 2: todos los productos ya se validaron como revertibles.
-  --      Ahora sí se aplican las reversiones, mismo orden determinístico. ----
+  --      Ahora sí se aplican las reversiones, mismo orden determinístico.
+  --      HITO 3.7: misma fórmula que la PASADA 1, incluyendo sueltas. ----
   FOR v_item IN
     SELECT ci.prod_id AS prod_id,
-           SUM(ci.qty * COALESCE(ci.uds_empaque, 1)) AS unidades_fisicas,
+           SUM(ci.qty * COALESCE(ci.uds_empaque, 1) + COALESCE(ci.sueltas, 0)) AS unidades_fisicas,
            MIN(ci.nombre) AS nombre
     FROM compras_items ci
     WHERE ci.compra_id = p_compra_id

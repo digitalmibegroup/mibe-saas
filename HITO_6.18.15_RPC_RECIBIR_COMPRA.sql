@@ -166,13 +166,11 @@ BEGIN
   --    deadlocks contra otras RPC que también bloqueen productos), las
   --    unidades físicas REALES de la compra.
   --    unidades_fisicas = qty × uds_empaque(de la compra) + COALESCE(sueltas,0).
-  --    NOTA — LIMITACIÓN YA DOCUMENTADA (no corregida aquí, fuera de alcance
-  --    de 6.18.15): compras_items NO tiene columna "sueltas" en el esquema
-  --    real (confirmado en Fase 1 y re-confirmado en Fase 2). Por tanto el
-  --    término "+ sueltas" es conceptualmente correcto pero hoy SIEMPRE
-  --    aporta 0 — exactamente la misma limitación que ya tiene el código JS
-  --    actual al releer una compra guardada. Si en el futuro se agrega esa
-  --    columna, esta consulta debe actualizarse a SUM(ci.qty * COALESCE(ci.uds_empaque,1) + COALESCE(ci.sueltas,0)).
+  --    HITO 3.7: compras_items.sueltas (integer NOT NULL DEFAULT 0) ya existe
+  --    en producción (HITO 3.6.1) y el frontend la persiste (caf02fa). Esta
+  --    consulta es la ÚNICA ruta de esta función que calcula unidades físicas,
+  --    y ahora la incorpora; las filas históricas tienen sueltas=0, así que su
+  --    resultado no cambia.
   -- NOTA sobre costo_ultimo: si un mismo prod_id aparece en más de una línea
   -- de la misma compra (poco frecuente — el frontend actual fusiona líneas
   -- del mismo producto al agregar, pero una compra_items histórica podría
@@ -182,7 +180,7 @@ BEGIN
   -- representativo entre los positivos — decisión documentada, no un olvido.
   FOR v_item IN
     SELECT ci.prod_id AS prod_id,
-           SUM(ci.qty * COALESCE(ci.uds_empaque, 1)) AS unidades_fisicas,
+           SUM(ci.qty * COALESCE(ci.uds_empaque, 1) + COALESCE(ci.sueltas, 0)) AS unidades_fisicas,
            MAX(ci.costo) FILTER (WHERE ci.costo > 0) AS costo_ultimo,
            MIN(ci.nombre) AS nombre,
            MIN(ci.tipo) AS tipo,
