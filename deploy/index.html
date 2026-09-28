@@ -4017,7 +4017,17 @@ async function doVenta(){
        invisible (90 casos saneados en Paquete 2). saveCarteraLocal() ya maneja su
        propio error internamente (toast + log) sin lanzar — aqui solo se espera su
        resultado antes de seguir, sin cambiar su logica interna. */
-    if(esCartera&&saldoVal>0){await saveCarteraLocal(v.id,cn,cw,total,abonoVal,saldoVal,fechaVence,v.numero_venta,pago);}
+    if(esCartera&&saldoVal>0){
+      /* BLOQUE 2.5-A: un fallo de cartera o del abono inicial ya no pasa en silencio.
+         La venta ya existe (sin transaccion real no se puede deshacer aqui): se avisa
+         de forma bloqueante para que no se cobre sobre una cuenta incompleta. */
+      var resCart=await saveCarteraLocal(v.id,cn,cw,total,abonoVal,saldoVal,fechaVence,v.numero_venta,pago);
+      if(!resCart||!resCart.ok){
+        alert('⚠ ATENCIÓN — Venta #'+String(v.numero_venta||'').padStart(3,'0')+' registrada, pero su CARTERA quedó incompleta ('+
+          (resCart&&resCart.motivo==='abono_inicial'?'el abono inicial de '+fmt(abonoVal)+' no se guardó':'la cuenta por cobrar no se creó')+
+          ').\n\nNo registres abonos sobre esta venta y repórtala para revisión antes de continuar.');
+      }
+    }
     await upsertCli(cn,cw,cdir,cdet,total,pts,cid);
     if(cw&&pts>0)procesarPuntosPorVenta(v,total,pts,cn,cw);
     lastVenta={id:v.id,numero:v.numero_venta,total:total,subtotal:subtotal,domicilio:domicilio,descuento:descFactura,cliente:cn,wa:cw,puntos:pts,pago:pago,items:cart.slice(),dir:cdir,det:cdet};
@@ -12420,9 +12430,13 @@ async function confirmarCorreccionCierre(){
 var editVentaId = null;
 var editVentaItemsArr = [];
 var editVentaOriginal = null;
+/* BLOQUE 2.5-A: si el detalle no se pudo leer, guardar se bloquea (con items vacios el
+   nuevo total caeria a ~$0 y la cartera quedaria falsamente pagada). */
+var editVentaCargaFallida = false;
 
 async function abrirEditarVenta(id){
   editVentaId = id;
+  editVentaCargaFallida = true;
   editVentaOriginal = VENTAS_MES.find(function(v){return v.id===id;});
   if(!editVentaOriginal)return;
   document.getElementById('editVentaTitulo').textContent='Editar Venta #'+String(editVentaOriginal.numero_venta||'---').padStart(3,'0');
@@ -12433,6 +12447,8 @@ async function abrirEditarVenta(id){
   try{
     var r=await fetch(SB+'/rest/v1/detalle_ventas?venta_id=eq.'+id+'&select=*',{headers:{'apikey':SK,'Authorization':'Bearer '+SK}});
     editVentaItemsArr=r.ok?await r.json():[];
+    editVentaCargaFallida=!r.ok||!Array.isArray(editVentaItemsArr);
+    if(editVentaCargaFallida) editVentaItemsArr=[];
     editVentaItemsArr=editVentaItemsArr.map(function(it){return Object.assign({},it,{_qty_orig:it.cantidad,_deleted:false});});
     renderEditVentaItems();
     renderEditVentaCartera();
@@ -12514,7 +12530,23 @@ function editVentaAgregarItem(){
 
 async function guardarEdicionVenta(){
   if(!editVentaId||!editVentaOriginal)return;
+  if(editVentaCargaFallida){toast('No se pudo cargar el detalle de esta venta — no se guardó ningún cambio. Cierra y vuelve a abrir la edición.');return;}
   try{
+    /* BLOQUE 2.5-A — ANTES de tocar stock, detalle o la venta: lectura fresca de
+       cartera + venta + abonos. Si algo no se puede leer se aborta sin escribir; si la
+       edicion reviviria deuda, dejaria el total bajo lo abonado o la cuenta esta pendiente
+       de conciliacion, se bloquea; cualquier otro cambio de total exige confirmacion.
+       Nunca se usan abonos en memoria (CARTERA_SB) como fuente de verdad. */
+    var nuevoTotalPrevio=Math.max(0,editVentaItemsArr.filter(function(it){return !it._deleted;}).reduce(function(s,it){return s+(it.precio_total||0);},0)
+      +(parseFloat(editVentaOriginal.domicilio)||0)-(parseFloat(editVentaOriginal.descuento)||0));
+    var lecCart=await leerCarteraFrescaSB({ventaId:editVentaId});
+    if(!lecCart.ok){toast(mensajeLecturaCartera(lecCart.motivo));return;}
+    var planCartera=null;
+    if(lecCart.cartera){
+      planCartera=planificarEdicionCartera(lecCart, nuevoTotalPrevio);
+      if(planCartera.bloquear){alert(planCartera.mensaje);return;}
+      if(planCartera.requiereConfirmacion&&!confirm(planCartera.mensaje)){toast('Edición cancelada — no se guardó ningún cambio');return;}
+    }
     /* Ajuste de stock por diferencia, atomico contra Supabase */
     for(var gi=0;gi<editVentaItemsArr.length;gi++){
       var itEd=editVentaItemsArr[gi];
@@ -12562,21 +12594,22 @@ async function guardarEdicionVenta(){
     var ventaIdx=VENTAS_MES.findIndex(function(v){return v.id===editVentaId;});
     if(ventaIdx>=0){VENTAS_MES[ventaIdx].total=nuevoTotal;VENTAS_MES[ventaIdx].subtotal=nuevoSubtotal;VENTAS_MES[ventaIdx].puntos_ganados=nuevoPts;}
 
-    /* Sincronizar total en Supabase (public.cartera) si la venta tiene entrada de cartera */
-    var carteraEntradaEdit=CARTERA_SB.find(function(c){return c.id==editVentaId;});
-    if(carteraEntradaEdit){
-      var totalAbonadoCalc=(carteraEntradaEdit.abonos_hist||[]).reduce(function(s,a){return s+(a.monto||0);},0);
-      var nuevoSaldoCartera=Math.max(0,nuevoTotal-totalAbonadoCalc);
-      var nuevoEstadoCartera=nuevoSaldoCartera<=0?'pagada':'activa';
+    /* Sincronizar cartera (BLOQUE 2.5-A): solo si el total cambio y con el plan ya
+       validado y confirmado arriba. CAS sobre total, saldo y estado leidos: si otro
+       dispositivo cambio la cartera entretanto, no se sobrescribe y se avisa. Sin
+       transaccion real, la venta ya quedo actualizada en ese caso (pendiente RPC). */
+    if(planCartera&&planCartera.accion==='actualizar'){
       try{
-        var rCartEdit=await fetch(SB+'/rest/v1/cartera?id=eq.'+carteraEntradaEdit._sbId,{method:'PATCH',headers:H,body:JSON.stringify({total:nuevoTotal,saldo_pendiente:nuevoSaldoCartera,estado_cartera:nuevoEstadoCartera})});
-        if(rCartEdit.ok){
+        var rCartEdit=await fetch(SB+'/rest/v1/cartera?id=eq.'+lecCart.cartera.id+'&total=eq.'+planCartera.totalLeido+'&saldo_pendiente=eq.'+planCartera.saldoLeido+'&estado_cartera=eq.'+planCartera.estadoLeido,
+          {method:'PATCH',headers:H,body:JSON.stringify({total:nuevoTotal,saldo_pendiente:planCartera.nuevoSaldo,estado_cartera:planCartera.nuevoEstado})});
+        var cartEditArr=rCartEdit.ok?await rCartEdit.json():null;
+        if(rCartEdit.ok&&Array.isArray(cartEditArr)&&cartEditArr.length){
           await cargarCarteraCompletaSB();
         } else {
-          console.error('Error al sincronizar cartera tras editar venta:', await rCartEdit.text());
-          toast('⚠ La venta se actualizó, pero Cartera no se pudo sincronizar — revísala manualmente');
+          if(!rCartEdit.ok) console.error('Error al sincronizar cartera tras editar venta:', await rCartEdit.text());
+          alert('⚠ La venta se actualizó, pero Cartera NO se sincronizó (la cuenta cambió mientras editabas o Supabase no respondió). Revísala manualmente antes de registrar abonos.');
         }
-      }catch(e){ console.error(e); toast('⚠ La venta se actualizó, pero Cartera no se pudo sincronizar — revísala manualmente'); }
+      }catch(e){ console.error(e); alert('⚠ La venta se actualizó, pero Cartera NO se sincronizó — revísala manualmente antes de registrar abonos.'); }
       var vCart=document.getElementById('vCartera');
       if(vCart&&vCart.style.display!=='none')renderCarteraList();
     }
@@ -13319,59 +13352,150 @@ async function cargarCarteraCompletaSB(){
   aplicarAbonosACartera();
   return okC&&okA;
 }
-/* ===== HITO 4 — Registro de abono con concurrencia segura =====
-   1) INSERT en cartera_abonos: operacion ADITIVA — dos dispositivos insertando al
-      mismo tiempo nunca compiten entre si, ambas filas quedan (correcto: es dinero
-      real recibido por ambos). Si esto falla, NO se escribe nada mas.
-   2) saldo_pendiente se recalcula SIEMPRE como total - SUM(todos los abonos reales
-      de esta cartera), nunca como una resta incremental sobre un valor que pudo
-      quedar obsoleto. Esto la hace auto-reparable ante drift historico.
-   3) El PATCH del saldo usa CAS (WHERE saldo_pendiente=eq.<valor recien leido>) con
-      reintentos acotados: si otro dispositivo ya cambio el saldo entre la lectura y
-      la escritura, se relee y se reintenta con el sumatorio actualizado.
-   Si el abono ya quedo insertado pero el CAS agota los reintentos (concurrencia muy
-   alta), NUNCA se borra el abono ni se inventa un rollback: se devuelve
-   saldoConfirmado:false para que el llamador lo documente y el usuario actualice
-   Cartera — el siguiente abono (o refresco) volvera a recalcular el saldo real. */
-async function registrarAbonoCarteraSB(carteraSbId, ventaId, monto, fechaISO, medioPago){
+/* ===== BLOQUE 2.5-A — Contencion de cartera =====
+   Reglas que protegen todo flujo que escriba en cartera desde ahora (no toca historicos):
+   R1 una cartera pagada nunca vuelve sola a activa; R2 un abono nunca sube el saldo;
+   R3 el saldo nunca es negativo; R4/R5 si cartera, venta o cartera_abonos no se pueden
+   leer, se ABORTA sin escribir (una lectura fallida nunca equivale a "no hay abonos").
+   El abono inicial de una venta a credito vive en ventas.abono y, desde saveCarteraLocal,
+   tambien como fila "espejo" en cartera_abonos (mismo monto, mismo instante de creacion
+   de la cartera). Una cartera cuyo abono inicial NO tiene espejo, o cuyo saldo guardado no
+   coincide con su historial, queda "pendiente de conciliacion historica": no admite abonos
+   ni ediciones hasta la recuperacion. Asi se identifican las cuentas afectadas (BLOQUE 2.5)
+   por una regla objetiva, sin listas de ids escritas en el codigo. ventas.saldo_pendiente
+   NO se usa como fuente de deuda vigente (es la foto del momento de la venta). */
+var MSG_ABONOS_NO_VALIDADOS='NO SE PUDO VALIDAR EL HISTORIAL DE ABONOS. LA OPERACIÓN NO FUE REALIZADA.';
+var MSG_CARTERA_CONCILIACION='Esta cartera está pendiente de conciliación histórica. No registrar un nuevo abono hasta validar el estado del pago.';
+var TOL_CARTERA=0.5;
+
+function _mismoInstanteCartera(a,b,tolMs){
+  if(!a||!b) return false;
+  var ta=Date.parse(a), tb=Date.parse(b);
+  return !isNaN(ta)&&!isNaN(tb)&&Math.abs(ta-tb)<=tolMs;
+}
+
+/* Puro. Dinero recibido por una cartera contando el abono inicial UNA sola vez. */
+function evaluarDineroCartera(cartera, venta, abonos){
+  var total=parseFloat(cartera.total)||0;
+  var abonoVenta=parseFloat(venta&&venta.abono)||0;
+  var suma=abonos.reduce(function(s,a){return s+(parseFloat(a.monto)||0);},0);
+  var espejo=abonoVenta>0 && abonos.some(function(a){
+    return Math.round(parseFloat(a.monto)||0)===Math.round(abonoVenta) &&
+      (a.fecha===cartera.fecha_creacion ||
+       _mismoInstanteCartera(a.fecha,cartera.fecha_creacion,60000) ||
+       _mismoInstanteCartera(a.created_at,cartera.created_at,60000));
+  });
+  var inicialFuera=abonoVenta>0&&!espejo;
+  var recibido=suma+(inicialFuera?abonoVenta:0);
+  return {total:total, abonoVenta:abonoVenta, sumaAbonos:suma, espejoInicial:espejo,
+    inicialFueraDeLibro:inicialFuera, recibido:recibido,
+    saldoCalculado:Math.max(0,total-recibido), excedente:Math.max(0,recibido-total)};
+}
+
+/* Puro. estado: 'ok' (activa y coherente) | 'pagada' | 'conciliacion'. */
+function diagnosticarCartera(cartera, venta, abonos){
+  var calc=evaluarDineroCartera(cartera, venta, abonos);
+  var saldo=parseFloat(cartera.saldo_pendiente)||0;
+  var motivo=null;
+  if(!venta) motivo='la venta asociada no existe';
+  else if(venta.estado!=='credito') motivo='la venta asociada no es una venta a crédito';
+  else if(Math.abs((parseFloat(venta.total)||0)-calc.total)>TOL_CARTERA) motivo='el total de la cartera no coincide con el de la venta';
+  else if(calc.inicialFueraDeLibro) motivo='el abono inicial de la venta no está en el historial de abonos';
+  else if(calc.excedente>TOL_CARTERA) motivo='los abonos registrados superan el total de la venta';
+  else if(Math.abs(saldo-calc.saldoCalculado)>TOL_CARTERA) motivo='el saldo guardado no coincide con el historial de abonos';
+  else if(cartera.estado_cartera!==(saldo<=TOL_CARTERA?'pagada':'activa')) motivo='el estado no coincide con el saldo';
+  if(motivo) return {estado:'conciliacion', motivo:motivo, calc:calc};
+  return {estado:saldo<=TOL_CARTERA?'pagada':'ok', motivo:null, calc:calc};
+}
+
+/* Lectura FRESCA desde Supabase de cartera + venta + TODOS sus abonos. Cualquier fallo
+   de lectura devuelve ok:false: el llamador debe abortar sin escribir nada.
+   opts.carteraId (la cartera debe existir) u opts.ventaId (puede no tener cartera). */
+async function leerCarteraFrescaSB(opts){
   var GH={'apikey':SK,'Authorization':'Bearer '+SK};
-  /* HITO 6.17.1: persiste el medio de pago original (efectivo/transferencia/nequi/daviplata)
-     ya recolectado y validado en confirmarAbonoModal() — antes se descartaba aqui mismo. NO
-     se guarda un "destino financiero" (EFECTIVO/BANCO): ese mapeo se deriva centralizadamente
-     en un sub-hito posterior, nunca se persiste. */
-  var rA=await fetch(SB+'/rest/v1/cartera_abonos',{method:'POST',headers:H,body:JSON.stringify({
-    id_licencia:CID,cartera_id:carteraSbId,venta_id:ventaId,monto:monto,fecha:fechaISO,registrado_por:'pos',medio_pago:medioPago
-  })});
-  if(!rA.ok){ console.error('Error al registrar abono en Supabase:', await rA.text()); return {ok:false,motivo:'insert'}; }
-  var abonoArr=await rA.json();
-  if(!abonoArr||!abonoArr.length) return {ok:false,motivo:'insert_sin_confirmar'};
-  var abono=abonoArr[0];
-
-  var saldoConfirmado=false, nuevoSaldo=null;
-  for(var intento=0;intento<5 && !saldoConfirmado;intento++){
-    var rCF=await fetch(SB+'/rest/v1/cartera?id=eq.'+carteraSbId+'&select=total,saldo_pendiente',{headers:GH});
-    if(!rCF.ok) break;
-    var cfArr=await rCF.json();
-    if(!cfArr.length) break;
-    var saldoLeido=parseFloat(cfArr[0].saldo_pendiente)||0;
-    var total=parseFloat(cfArr[0].total)||0;
-
-    var rSum=await fetch(SB+'/rest/v1/cartera_abonos?cartera_id=eq.'+carteraSbId+'&select=monto',{headers:GH});
-    if(!rSum.ok) break;
-    var sumArr=await rSum.json();
-    var sumaTotal=sumArr.reduce(function(s,a){return s+(parseFloat(a.monto)||0);},0);
-    nuevoSaldo=Math.max(0,total-sumaTotal);
-    var nuevoEstado=nuevoSaldo<=0?'pagada':'activa';
-
-    var rP=await fetch(SB+'/rest/v1/cartera?id=eq.'+carteraSbId+'&saldo_pendiente=eq.'+saldoLeido,{
-      method:'PATCH',headers:H,body:JSON.stringify({saldo_pendiente:nuevoSaldo,estado_cartera:nuevoEstado})
-    });
-    if(rP.ok){
-      var pArr=await rP.json();
-      if(pArr&&pArr.length) saldoConfirmado=true;
-    }
+  try{
+    var qC=opts.carteraId?'id=eq.'+opts.carteraId:'venta_id=eq.'+opts.ventaId;
+    var rC=await fetch(SB+'/rest/v1/cartera?'+qC+'&id_licencia=eq.'+CID+'&select=*',{headers:GH});
+    if(!rC.ok) return {ok:false,motivo:'lectura_cartera'};
+    var cArr=await rC.json();
+    if(!Array.isArray(cArr)) return {ok:false,motivo:'lectura_cartera'};
+    if(cArr.length>1) return {ok:false,motivo:'integridad_cartera'};
+    if(!cArr.length) return opts.carteraId?{ok:false,motivo:'cartera_no_existe'}:{ok:true,cartera:null};
+    var cartera=cArr[0];
+    var rV=await fetch(SB+'/rest/v1/ventas?id=eq.'+cartera.venta_id+'&id_cliente=eq.'+CID+'&select=id,total,abono,estado,numero_venta',{headers:GH});
+    if(!rV.ok) return {ok:false,motivo:'lectura_venta'};
+    var vArr=await rV.json();
+    if(!Array.isArray(vArr)) return {ok:false,motivo:'lectura_venta'};
+    var rA=await fetch(SB+'/rest/v1/cartera_abonos?cartera_id=eq.'+cartera.id+'&select=*',{headers:GH});
+    if(!rA.ok) return {ok:false,motivo:'lectura_abonos'};
+    var abonos=await rA.json();
+    if(!Array.isArray(abonos)) return {ok:false,motivo:'lectura_abonos'};
+    var venta=vArr.length===1?vArr[0]:null;
+    return {ok:true,cartera:cartera,venta:venta,abonos:abonos,diag:diagnosticarCartera(cartera,venta,abonos)};
+  }catch(e){
+    console.error('[cartera] lectura fresca fallida:',e);
+    return {ok:false,motivo:'lectura_excepcion'};
   }
-  return {ok:true, abono:abono, saldoConfirmado:saldoConfirmado, nuevoSaldo:nuevoSaldo};
+}
+
+/* Puro. Que hacer con la cartera al editar una venta a credito. */
+function planificarEdicionCartera(lectura, nuevoTotal){
+  var c=lectura.cartera, d=lectura.diag;
+  if(d.estado==='conciliacion') return {bloquear:true, mensaje:'Esta venta tiene una cartera pendiente de conciliación histórica ('+d.motivo+'). No se puede editar hasta validar el estado del pago. No se guardó ningún cambio.'};
+  var totalLeido=parseFloat(c.total)||0;
+  if(Math.abs(nuevoTotal-totalLeido)<=TOL_CARTERA) return {accion:'sin_cambio'};
+  var saldoNuevo=nuevoTotal-d.calc.recibido;
+  if(saldoNuevo< -TOL_CARTERA) return {bloquear:true, mensaje:'El nuevo total ('+fmt(nuevoTotal)+') es menor que lo ya abonado ('+fmt(d.calc.recibido)+'). Este caso requiere revisión — no se guardó ningún cambio.'};
+  if(d.estado==='pagada'&&saldoNuevo>TOL_CARTERA) return {bloquear:true, mensaje:'Esta venta ya está pagada (PAZ Y SALVO). Aumentar su total volvería a generar deuda, y eso no se permite desde la edición. No se guardó ningún cambio.'};
+  saldoNuevo=Math.max(0,saldoNuevo);
+  var saldoLeido=parseFloat(c.saldo_pendiente)||0;
+  return {accion:'actualizar', requiereConfirmacion:true,
+    mensaje:'Esta venta tiene cartera. El cambio afecta lo que el cliente debe:\n\nTotal: '+fmt(totalLeido)+' → '+fmt(nuevoTotal)+'\nSaldo pendiente: '+fmt(saldoLeido)+' → '+fmt(saldoNuevo)+'\n\n¿Confirmas el cambio?',
+    totalLeido:totalLeido, saldoLeido:saldoLeido, estadoLeido:c.estado_cartera,
+    nuevoSaldo:saldoNuevo, nuevoEstado:saldoNuevo<=TOL_CARTERA?'pagada':'activa'};
+}
+
+function mensajeLecturaCartera(motivo){
+  if(motivo==='cartera_no_existe') return 'Esta cuenta ya no existe en Supabase — actualiza Cartera. La operación no fue realizada.';
+  if(motivo==='integridad_cartera') return 'Error de integridad: la venta tiene más de una cartera. La operación no fue realizada.';
+  return MSG_ABONOS_NO_VALIDADOS;
+}
+
+/* ===== BLOQUE 2.5-B — Registro de abono ATOMICO (RPC registrar_abono_cartera_atomico) =====
+   Todo el movimiento financiero ocurre en UNA transaccion de Postgres: bloquea la
+   cartera (FOR UPDATE), relee venta y TODOS los abonos, valida (incluida la regla de
+   conciliacion historica del BLOQUE 2.5-A), inserta el abono y actualiza saldo/estado.
+   Si cualquier paso falla, rollback completo. Dos abonos simultaneos sobre la misma
+   cartera se ejecutan en fila y el segundo se evalua con el saldo ya actualizado.
+   El frontend NO calcula el saldo final ni hace PATCH, INSERT o escrituras
+   compensatorias: solo envia los datos y muestra lo que responde la base.
+   medio_pago: efectivo/transferencia/nequi/daviplata (HITO 6.17.1), validado tambien
+   en la RPC. ventaId se conserva en la firma por compatibilidad: la RPC toma la venta
+   de la propia cartera bloqueada, nunca del navegador. */
+var MOTIVO_POR_CODIGO_ABONO={LC020:'monto_invalido',LC021:'cartera_no_existe',LC022:'conciliacion',LC023:'conciliacion',
+  LC024:'pagada',LC025:'excede_saldo',LC026:'verificacion',LC027:'bloqueo',LC028:'fecha_invalida',LC029:'medio_invalido'};
+async function registrarAbonoCarteraSB(carteraSbId, ventaId, monto, fechaISO, medioPago){
+  var r;
+  try{
+    r=await fetch(SB+'/rest/v1/rpc/registrar_abono_cartera_atomico',{method:'POST',headers:H,body:JSON.stringify({
+      p_cartera_id:carteraSbId, p_id_licencia:CID, p_monto:monto, p_fecha:fechaISO, p_medio_pago:medioPago
+    })});
+  }catch(e){
+    console.error('[cartera] RPC de abono sin respuesta:',e);
+    return {ok:false,motivo:'red',mensaje:'No hubo respuesta de Supabase. El abono NO se registró; verifica en Cartera antes de reintentar.'};
+  }
+  var cuerpo=null;
+  try{ cuerpo=await r.json(); }catch(e){ cuerpo=null; }
+  if(!r.ok){
+    var codigo=cuerpo&&cuerpo.code;
+    if(codigo==='PGRST202'||r.status===404) return {ok:false,motivo:'rpc_no_instalada',mensaje:'El registro de abonos no está disponible todavía (falta instalar la función en Supabase). No se registró nada.'};
+    return {ok:false,motivo:MOTIVO_POR_CODIGO_ABONO[codigo]||'error',codigo:codigo||null,mensaje:(cuerpo&&cuerpo.message)||'Error al registrar el abono — no se guardó, el saldo no cambió'};
+  }
+  if(!cuerpo||cuerpo.ok!==true||!cuerpo.abono_id){
+    return {ok:false,motivo:'respuesta_invalida',mensaje:'Supabase no confirmó el abono. Verifica en Cartera antes de reintentar.'};
+  }
+  return {ok:true, abono:{id:cuerpo.abono_id},
+    saldoAnterior:parseFloat(cuerpo.saldo_anterior), nuevoSaldo:parseFloat(cuerpo.saldo_nuevo), estado:cuerpo.estado_nuevo};
 }
 
 var _abonoModalCarteraId=null;
@@ -13388,19 +13512,24 @@ async function abrirModalAbono(carteraSbId){
   document.getElementById('abonoValor').value='';
   var btn=document.getElementById('btnConfirmarAbono');btn.disabled=false;btn.textContent='Confirmar abono';
   document.getElementById('modalAbono').style.display='flex';
-  var GH={'apikey':SK,'Authorization':'Bearer '+SK};
   try{
-    /* Siempre se relee Supabase al abrir el modal — nunca se confia en CARTERA_SB. */
-    var r=await fetch(SB+'/rest/v1/cartera?id=eq.'+carteraSbId+'&id_licencia=eq.'+CID+'&select=*',{headers:GH});
-    if(!r.ok) throw new Error('query_failed');
-    var arr=await r.json();
-    if(!arr.length){
-      document.getElementById('abonoInfoBox').innerHTML='<div style="text-align:center;color:var(--red);padding:20px 0;">No se pudo confirmar esta cuenta en Supabase.</div>';
+    /* Siempre se relee Supabase al abrir el modal — nunca se confia en CARTERA_SB.
+       BLOQUE 2.5-A: cartera + venta + abonos; si algo no se puede leer o la cuenta
+       esta pendiente de conciliacion historica, el boton queda deshabilitado. */
+    var lec=await leerCarteraFrescaSB({carteraId:carteraSbId});
+    if(!lec.ok){
+      document.getElementById('abonoInfoBox').innerHTML='<div style="text-align:center;color:var(--red);padding:20px 0;font-weight:700;">'+mensajeLecturaCartera(lec.motivo)+'</div>';
       btn.disabled=true;
       return;
     }
-    var c=arr[0];
-    if(c.saldo_pendiente<=0||c.estado_cartera==='pagada'){
+    var c=lec.cartera;
+    if(lec.diag.estado==='conciliacion'){
+      document.getElementById('abonoInfoBox').innerHTML='<div style="text-align:center;color:var(--red);padding:16px 0;font-weight:700;">&#9888; '+MSG_CARTERA_CONCILIACION+'</div>'
+        +'<div style="text-align:center;color:var(--text3);font-size:12px;">Venta #'+String(c.numero_venta||'').padStart(3,'0')+' · '+(c.cliente_nombre||'Cliente')+' · Motivo: '+lec.diag.motivo+'</div>';
+      btn.disabled=true;
+      return;
+    }
+    if(lec.diag.estado==='pagada'){
       document.getElementById('abonoInfoBox').innerHTML='<div style="text-align:center;color:var(--green);padding:20px 0;font-weight:700;">&#9989; Esta cuenta ya está en PAZ Y SALVO</div>';
       btn.disabled=true;
       return;
@@ -13436,37 +13565,41 @@ async function confirmarAbonoModal(){
 
   var btn=document.getElementById('btnConfirmarAbono');
   btn.disabled=true;btn.textContent='Procesando...';
-  var GH={'apikey':SK,'Authorization':'Bearer '+SK};
   try{
-    /* PASO 1 — Releer la cartera REAL desde Supabase justo antes de escribir.
-       Nunca se confia en el saldo mostrado cuando se abrio el modal. */
-    var rC=await fetch(SB+'/rest/v1/cartera?id=eq.'+carteraId+'&id_licencia=eq.'+CID+'&select=*',{headers:GH});
-    if(!rC.ok){toast('No se pudo verificar la cuenta — inténtalo de nuevo');btn.disabled=false;btn.textContent='Confirmar abono';return;}
-    var cArr=await rC.json();
-    if(!cArr.length){
-      toast('Esta cuenta ya no existe en Supabase — actualiza Cartera');
-      btn.disabled=false;btn.textContent='Confirmar abono';
+    /* PASO 1 — Releer cartera + venta + abonos REALES justo antes de escribir.
+       Nunca se confia en el saldo mostrado cuando se abrio el modal (BLOQUE 2.5-A). */
+    var lec=await leerCarteraFrescaSB({carteraId:carteraId});
+    if(!lec.ok){toast(mensajeLecturaCartera(lec.motivo));btn.disabled=false;btn.textContent='Confirmar abono';return;}
+    var cartera=lec.cartera;
+    if(lec.diag.estado==='conciliacion'){
+      toast(MSG_CARTERA_CONCILIACION);
+      btn.disabled=true;
       return;
     }
-    var cartera=cArr[0];
-    if(cartera.estado_cartera==='pagada'||cartera.saldo_pendiente<=0){
+    if(lec.diag.estado==='pagada'){
       toast('Esta cuenta ya está en PAZ Y SALVO — no se registró ningún abono');
       btn.disabled=false;btn.textContent='Confirmar abono';
       await cargarCarteraCompletaSB();renderCarteraList();
       return;
     }
-    if(monto>cartera.saldo_pendiente){
-      toast('El abono ('+fmt(monto)+') no puede superar el saldo pendiente real ('+fmt(cartera.saldo_pendiente)+')');
+    if(monto>lec.diag.calc.saldoCalculado+TOL_CARTERA){
+      toast('El abono ('+fmt(monto)+') no puede superar el saldo pendiente real ('+fmt(lec.diag.calc.saldoCalculado)+')');
       btn.disabled=false;btn.textContent='Confirmar abono';
       return;
     }
 
-    /* PASO 2+3 — Registrar el abono y actualizar el saldo (concurrencia segura) */
+    /* PASO 2+3 — Registrar el abono (BLOQUE 2.5-B: RPC atomica; la base vuelve a
+       validar todo bajo bloqueo y es la unica fuente del saldo resultante). */
     var fechaISO=new Date(fechaInp+'T12:00:00').toISOString();
     var res=await registrarAbonoCarteraSB(carteraId, cartera.venta_id, monto, fechaISO, medioPago);
     if(!res.ok){
-      toast('Error al registrar el abono — no se guardó, el saldo no cambió');
+      var msgFallo=res.motivo==='conciliacion'?MSG_CARTERA_CONCILIACION
+        :res.motivo==='pagada'?'Esta cuenta ya está en PAZ Y SALVO — no se registró ningún abono'
+        :(res.mensaje||'Error al registrar el abono — no se guardó, el saldo no cambió');
+      toast(msgFallo);
       btn.disabled=false;btn.textContent='Confirmar abono';
+      await cargarCarteraCompletaSB();
+      if(document.getElementById('vCartera')&&document.getElementById('vCartera').style.display!=='none') renderCarteraList();
       return;
     }
 
@@ -13481,12 +13614,11 @@ async function confirmarAbonoModal(){
     document.getElementById('abonoFormView').style.display='none';
     document.getElementById('abonoSuccessView').style.display='block';
     var msgEl=document.getElementById('abonoSuccessMsg');
-    if(!res.saldoConfirmado){
-      msgEl.innerHTML='El abono de <strong>'+fmt(monto)+'</strong> quedó registrado, pero el saldo no se pudo confirmar automáticamente por alta concurrencia.<br>Actualiza Cartera para ver el saldo definitivo.';
-    } else if(entradaFinal && entradaFinal.saldo_pendiente<=0){
+    /* Saldo y estado confirmados por la propia transaccion de la RPC (BLOQUE 2.5-B). */
+    if(res.estado==='pagada'){
       msgEl.innerHTML='Abono de <strong>'+fmt(monto)+'</strong> registrado.<br><span style="color:var(--green);font-weight:800;">&#9989; PAZ Y SALVO</span>';
     } else {
-      msgEl.innerHTML='Abono de <strong>'+fmt(monto)+'</strong> registrado.<br>Saldo pendiente: <strong style="color:var(--red);">'+fmt(entradaFinal?entradaFinal.saldo_pendiente:res.nuevoSaldo)+'</strong>';
+      msgEl.innerHTML='Abono de <strong>'+fmt(monto)+'</strong> registrado.<br>Saldo pendiente: <strong style="color:var(--red);">'+fmt(res.nuevoSaldo)+'</strong>';
     }
   }catch(e){
     console.error(e);
@@ -13667,7 +13799,12 @@ function _construirPDFComprobanteAbono(cartera,abono,abonadoAntes,totalAbonadoHa
 }
 
 async function saveCarteraLocal(ventaId, cliente, wa, total, abono, saldo, fechaVence, numero, medioPago){
-  /* Best-effort: no bloquea ni altera el flujo de doVenta() si Supabase falla. */
+  /* No revierte la venta si Supabase falla (no hay transaccion real desde el frontend),
+     pero BLOQUE 2.5-A: devuelve {ok,motivo} para que doVenta() muestre el fallo de forma
+     bloqueante. Si la cartera se crea y el abono inicial NO, esa cartera queda sin su
+     fila espejo y diagnosticarCartera() la marca "pendiente de conciliacion": no admite
+     abonos ni ediciones hasta revisarla. La atomicidad real exige una RPC transaccional. */
+  var resultado={ok:true};
   try{
     var fechaCreacion=new Date().toISOString();
     var estadoInicial=saldo<=0?'pagada':'activa';
@@ -13675,19 +13812,25 @@ async function saveCarteraLocal(ventaId, cliente, wa, total, abono, saldo, fecha
       id_licencia:CID,venta_id:ventaId,numero_venta:numero,cliente_nombre:cliente,cliente_whatsapp:wa||null,
       total:total,saldo_pendiente:saldo,fecha_creacion:fechaCreacion,fecha_vencimiento:fechaVence||null,estado_cartera:estadoInicial
     })});
-    if(!r.ok){ console.error('Error al crear cartera en Supabase:', await r.text()); toast('⚠ La venta a crédito no quedó registrada en Cartera — revísala manualmente'); return; }
+    if(!r.ok){ console.error('Error al crear cartera en Supabase:', await r.text()); toast('⚠ La venta a crédito no quedó registrada en Cartera — revísala manualmente'); return {ok:false,motivo:'cartera'}; }
     var created=await r.json();
+    if(!Array.isArray(created)||!created.length||!created[0].id){ toast('⚠ La venta a crédito no quedó confirmada en Cartera — revísala manualmente'); return {ok:false,motivo:'cartera_sin_confirmar'}; }
     var sbId=created[0].id;
     if(abono>0){
       /* medio_pago heredado del metodo de pago de la venta: el abono inicial
          se recibe siempre por el mismo medio con el que se registro la venta. */
       var rA=await fetch(SB+'/rest/v1/cartera_abonos',{method:'POST',headers:H,body:JSON.stringify({id_licencia:CID,cartera_id:sbId,venta_id:ventaId,monto:abono,fecha:fechaCreacion,registrado_por:'pos',medio_pago:medioPago||null})});
-      if(!rA.ok) console.error('Error al registrar abono inicial en Supabase:', await rA.text());
+      if(!rA.ok){
+        console.error('Error al registrar abono inicial en Supabase:', await rA.text());
+        toast('⚠ El abono inicial ('+fmt(abono)+') NO quedó registrado en Cartera — la cuenta quedó bloqueada para revisión');
+        resultado={ok:false,motivo:'abono_inicial'};
+      }
     }
     await cargarCarteraCompletaSB();
     var vCart=document.getElementById('vCartera');
     if(vCart&&vCart.style.display!=='none')renderCarteraList();
-  }catch(e){ console.error(e); toast('⚠ La venta a crédito no quedó registrada en Cartera — revísala manualmente'); }
+    return resultado;
+  }catch(e){ console.error(e); toast('⚠ La venta a crédito no quedó registrada en Cartera — revísala manualmente'); return {ok:false,motivo:'excepcion'}; }
 }
 
 function toggleCarteraSection(){
@@ -13792,6 +13935,11 @@ async function eliminarCarteraEntrada(carteraId){
   if(!entrada){toast('Registro no encontrado');return;}
   if(!confirm('¿Eliminar el registro de Cartera de la venta #'+String(entrada.numero||'').padStart(3,'0')+' ('+entrada.cliente+')?\n\nLa venta NO se elimina, solo deja de aparecer como crédito pendiente.\nDespués podrás eliminar la venta desde Ventas si lo necesitas.'))return;
   try{
+    /* BLOQUE 2.5-A: una cuenta pendiente de conciliacion historica no se elimina — es
+       evidencia necesaria para la recuperacion. Si no se puede validar, tampoco. */
+    var lecDel=await leerCarteraFrescaSB({carteraId:entrada._sbId});
+    if(!lecDel.ok){toast(mensajeLecturaCartera(lecDel.motivo));return;}
+    if(lecDel.diag.estado==='conciliacion'){alert(MSG_CARTERA_CONCILIACION+'\n\nTampoco se puede eliminar mientras esté pendiente de recuperación.');return;}
     /* Re-verificar en Supabase (no confiar solo en el array local) que sigue sin abonos */
     var rChk=await fetch(SB+'/rest/v1/cartera_abonos?cartera_id=eq.'+entrada._sbId+'&select=id',
       {headers:{'apikey':SK,'Authorization':'Bearer '+SK}});
