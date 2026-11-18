@@ -1,5 +1,5 @@
 /* Service Worker - La Cava Oficial v1.0 */
-var CACHE = 'lacava-v1';
+var CACHE = 'lacava-v2';
 var ASSETS = [
   '/',
   '/index.html',

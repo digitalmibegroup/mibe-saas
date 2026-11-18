@@ -813,6 +813,7 @@ body.pos-sb-off .pos-sb-btn{background:var(--gold-s);border-color:var(--gold-b);
       <div class="tb-d" id="tbd"></div>
       <button class="tb-btn" onclick="goView('pos',document.getElementById('niPOS'))">+ Nueva Venta</button>
     </div>
+    <div id="convIncompletaBanner" onclick="goView('cotizaciones',document.getElementById('niCotizaciones'))" style="display:none;margin:8px 16px 0;padding:9px 12px;border-radius:10px;background:var(--red-bg,#fef2f2);border:1.5px solid var(--red-b,#fecaca);color:var(--red,#dc2626);font-size:12px;cursor:pointer;"></div>
 
     <!-- INICIO -->
     <div id="vInicio">
@@ -3033,6 +3034,7 @@ async function iniciarApp(){
   initExpandCart();
   setupCajaAutoSync();
   setupCajaRealtime();
+  try{await refrescarConvIncompletas();}catch(eCI){}
 }
 
 async function init(){
@@ -4068,35 +4070,75 @@ async function upsertCli(n,w,dir,det,t,pts,eid){
         await fetch(SB+'/rest/v1/clientes_frecuentes?id=eq.'+c3.id,{method:'PATCH',headers:H,body:JSON.stringify(update)});
       } else {
         update.id_licencia=CID;update.puntos=pts;update.total_compras=t;update.num_pedidos=1;
-        var chkMayNew=document.getElementById('chkMayorista');
-        update.es_mayorista=!!(chkMayNew&&chkMayNew.checked);
+        /* HOTFIX COTIZACIONES: es_mayorista no existe en clientes_frecuentes; enviarlo
+           hacia fallar el alta del cliente nuevo desde el POS. La casilla Mayorista
+           sigue aplicando a la venta actual (puntos), como antes. */
         await fetch(SB+'/rest/v1/clientes_frecuentes',{method:'POST',headers:H,body:JSON.stringify(update)});
       }
     }
   }catch(e){console.warn(e);}
 }
 
+/* HOTFIX COTIZACIONES — alta compartida de clientes (modulo Clientes y Cotizaciones).
+   - Ya no envia es_mayorista: la columna no existe en clientes_frecuentes (catalogo de
+     produccion 16-nov-2026) y PostgREST rechazaba el alta completa.
+   - Un fallo de la busqueda de duplicados se informa como fallo: ya no se interpreta
+     como "no hay duplicado".
+   - Mismo criterio de duplicado de siempre: por WhatsApp exacto si se escribio, si no
+     por nombre (sin distinguir mayusculas ni espacios repetidos).
+   - LIMITE: sin indice unico en la base, dos dispositivos que crean el mismo cliente a
+     la vez pueden dejar dos fichas. El bloqueo de envio repetido solo cubre esta pestaña. */
+var _creandoClienteNuevo=false;
+function normNombreCli(s){return String(s||'').trim().replace(/\s+/g,' ').toLowerCase();}
+/* Patron ilike que solo puede coincidir DE MAS (nunca de menos); el filtro exacto se
+   hace despues en el navegador. Los comodines del texto se vuelven '_' (un caracter). */
+function patronNombreCliIlike(nombre){return String(nombre||'').trim().replace(/[\\%_*]/g,'_').replace(/\s+/g,'*');}
+async function buscarClientesDuplicados(nombre,whatsapp){
+  var LIM=50;
+  var q=SB+'/rest/v1/clientes_frecuentes?id_licencia=eq.'+encodeURIComponent(CID);
+  q+=whatsapp?'&whatsapp=eq.'+encodeURIComponent(whatsapp):'&nombre=ilike.'+encodeURIComponent(patronNombreCliIlike(nombre));
+  var r=await fetch(q+'&select=*&limit='+LIM,{headers:{'apikey':SK,'Authorization':'Bearer '+SK}});
+  if(!r.ok)return{ok:false};
+  var filas=await r.json();
+  if(!Array.isArray(filas)||filas.length>=LIM)return{ok:false};
+  if(!whatsapp){var n=normNombreCli(nombre);filas=filas.filter(function(c){return normNombreCli(c.nombre)===n;});}
+  return{ok:true,filas:filas};
+}
 async function crearClienteNuevo(nombre,whatsapp,direccion,detalle){
   nombre=(nombre||'').trim();whatsapp=(whatsapp||'').trim();direccion=(direccion||'').trim();detalle=(detalle||'').trim();
   if(!nombre)return{ok:false,motivo:'nombre'};
+  if(_creandoClienteNuevo)return{ok:false,motivo:'en_curso'};
+  _creandoClienteNuevo=true;
   try{
-    var q=SB+'/rest/v1/clientes_frecuentes?id_licencia=eq.'+CID;
-    q+=whatsapp?'&whatsapp=eq.'+encodeURIComponent(whatsapp):'&nombre=ilike.'+encodeURIComponent(nombre);
-    var rDup=await fetch(q+'&select=*&limit=1',{headers:{'apikey':SK,'Authorization':'Bearer '+SK}});
-    var dDup=rDup.ok?await rDup.json():[];
-    if(dDup&&dDup.length)return{ok:false,motivo:'duplicado',cliente:dDup[0]};
-    var body={id_licencia:CID,nombre:nombre,puntos:0,total_compras:0,num_pedidos:0,es_mayorista:false};
+    var dup;
+    try{dup=await buscarClientesDuplicados(nombre,whatsapp);}catch(e1){console.warn(e1);dup={ok:false};}
+    if(!dup.ok)return{ok:false,motivo:'error_busqueda'};
+    if(dup.filas.length)return{ok:false,motivo:'duplicado',cliente:dup.filas[0],candidatos:dup.filas};
+    var body={id_licencia:CID,nombre:nombre,puntos:0,total_compras:0,num_pedidos:0};
     if(whatsapp)body.whatsapp=whatsapp;
     if(direccion)body.direccion=direccion;
     if(detalle)body.detalle=detalle;
-    var r=await fetch(SB+'/rest/v1/clientes_frecuentes',{method:'POST',headers:H,body:JSON.stringify(body)});
-    if(!r.ok)return{ok:false,motivo:'error'};
-    var d=await r.json();
+    var r;
+    try{r=await fetch(SB+'/rest/v1/clientes_frecuentes',{method:'POST',headers:H,body:JSON.stringify(body)});}
+    catch(e2){console.warn(e2);return{ok:false,motivo:'error_guardado',incierto:true};}
+    if(!r.ok){console.warn('Alta de cliente rechazada:',r.status);return{ok:false,motivo:'error_guardado',incierto:r.status>=500};}
+    var d;
+    try{d=await r.json();}catch(e3){return{ok:false,motivo:'error_guardado',incierto:true};}
     var nuevo=Array.isArray(d)?d[0]:d;
-    clisDB.push(nuevo);
+    if(!nuevo||!nuevo.id)return{ok:false,motivo:'error_guardado',incierto:true};
+    if(Array.isArray(clisDB))clisDB.push(nuevo);
     return{ok:true,cliente:nuevo};
-  }catch(e){console.warn(e);return{ok:false,motivo:'error'};}
+  }finally{_creandoClienteNuevo=false;}
 }
+function mensajeAltaCliente(res){
+  if(res.motivo==='nombre')return 'Escribe el nombre del cliente';
+  if(res.motivo==='en_curso')return 'Ya se está creando un cliente — espera un momento';
+  if(res.motivo==='error_busqueda')return 'No se pudo comprobar si el cliente ya existe — no se creó. Inténtalo de nuevo';
+  if(res.motivo==='duplicado')return 'Ya existe un cliente con '+(res.candidatos&&res.candidatos.length>1?'esos datos ('+res.candidatos.length+' fichas)':'esos datos')+': '+(res.cliente&&res.cliente.nombre||'');
+  if(res.incierto)return 'No se pudo confirmar si el cliente se guardó — búscalo antes de volver a crearlo';
+  return 'Error al guardar el cliente — no se creó';
+}
+/* ===== HOTFIX COTIZACIONES: FIN alta compartida de clientes ===== */
 
 function sendWA(){
   var v=lastVenta;if(!v)return;
@@ -4611,11 +4653,10 @@ async function guardarNuevoCliente(){
     renderClientesView(clisDB);
     var cc=document.getElementById('cliCount');if(cc)cc.textContent=clisDB.length+' clientes';
     cerrarNuevoCliente();
-    toast('&#10003; Cliente creado');
-  } else if(res.motivo==='duplicado'){
-    toast('Ya existe un cliente similar: '+(res.cliente&&res.cliente.nombre||''));
+    toast('✓ Cliente creado');
   } else {
-    toast('Error al crear cliente');
+    /* El formulario se conserva para corregir o reintentar. */
+    toast(mensajeAltaCliente(res));
   }
 }
 
@@ -9143,6 +9184,7 @@ async function cargarVentasPorFecha(desde,hasta){
       +'&select=*&order=created_at.desc',
       {headers:{'apikey':SK,'Authorization':'Bearer '+SK}});
     VENTAS_MES=r.ok?await r.json():[];
+    try{await marcarVentasConversionIncompleta(VENTAS_MES);}catch(eM){}
   }catch(e){VENTAS_MES=[];}
   renderVentasStats();
   renderVentasList();
@@ -9161,6 +9203,7 @@ async function cargarVentasSB(mes){
       +'&select=*&order=created_at.desc',
       {headers:{'apikey':SK,'Authorization':'Bearer '+SK}});
     VENTAS_MES=r.ok?await r.json():[];
+    try{await marcarVentasConversionIncompleta(VENTAS_MES);}catch(eM){}
   }catch(e){VENTAS_MES=[];}
 }
 
@@ -9227,6 +9270,7 @@ function renderVentasStats(){
     '<div class="ven-stat"><div class="ven-stat-lbl">Total del mes</div><div class="ven-stat-val" style="color:var(--green);font-size:18px;">'+fmt(total)+'</div><div class="ven-stat-sub">ingresos</div></div>'
    +'<div class="ven-stat"><div class="ven-stat-lbl">Ventas</div><div class="ven-stat-val">'+num+'</div><div class="ven-stat-sub">transacciones</div></div>'
    +'<div class="ven-stat"><div class="ven-stat-lbl">Ticket promedio</div><div class="ven-stat-val" style="font-size:18px;">'+fmt(ticket)+'</div><div class="ven-stat-sub">por venta</div></div>'
+   +(ventasReales.some(function(v){return v._convIncompleta;})?'<div class="ven-stat" style="border-color:var(--red-b);"><div class="ven-stat-lbl" style="color:var(--red);">⚠ Incompletas</div><div class="ven-stat-val" style="color:var(--red);">'+ventasReales.filter(function(v){return v._convIncompleta;}).length+'</div><div class="ven-stat-sub">incluidas en el total</div></div>':'')
    +'<div class="ven-stat"><div class="ven-stat-lbl">Metodo favorito</div><div class="ven-stat-val" style="font-size:15px;">'+favLabel+'</div><div class="ven-stat-sub">'+(metodos[favMetodo]||0)+' ventas</div></div>';
 }
 
@@ -9254,11 +9298,12 @@ function renderVentasList(){
     var dom=parseFloat(v.domicilio)||0;
     var domTxt=dom>0?' · Dom: '+fmt(dom):'';
     var numClean=String(v.numero_venta||'---').padStart(3,'0');
+    var convBadge=v._convIncompleta?'<span style="display:inline-block;background:var(--red-bg,#fef2f2);color:var(--red);font-size:9px;font-weight:800;padding:1px 6px;border-radius:6px;margin-left:6px;vertical-align:middle;">⚠ CONVERSIÓN INCOMPLETA</span>':'';
     var canjeBadge=esCanje?'<span style="display:inline-block;background:#FFF8E1;color:#B8860B;font-size:9px;font-weight:800;padding:1px 6px;border-radius:6px;margin-left:6px;vertical-align:middle;">🎁 CANJE</span>':'';
     return '<div class="ven-card"'+(esCanje?' style="background:#FFFDF5;"':'')+' onclick="openVentaDet(\''+v.id+'\',this)">'
       +'<div class="ven-num">'+num+'</div>'
       +'<div class="ven-info">'
-        +'<div class="ven-cli">'+cli+canjeBadge+'</div>'
+        +'<div class="ven-cli">'+cli+canjeBadge+convBadge+'</div>'
         +'<div class="ven-meta">'+fecha+' · '+icono+' '+metodoTxt+domTxt+'</div>'
       +'</div>'
       +'<div class="ven-right">'
@@ -9286,7 +9331,8 @@ async function openVentaDet(id){
   document.getElementById('venDetMeta').innerHTML=
     fecha+' &nbsp;·&nbsp; '+cli+' &nbsp;·&nbsp; '+icono+' '+v.metodo_pago
     +(estTxt?' &nbsp;·&nbsp; <strong>'+estTxt+'</strong>':'')
-    +(v.direccion_entrega?' &nbsp;·&nbsp; 📍 '+v.direccion_entrega+(v.detalle_entrega?' - '+v.detalle_entrega:''):'');
+    +(v.direccion_entrega?' &nbsp;·&nbsp; 📍 '+v.direccion_entrega+(v.detalle_entrega?' - '+v.detalle_entrega:''):'')
+    +(v._convIncompleta?'<div style="margin-top:6px;color:var(--red);font-weight:700;">⚠ Conversión de cotización INCOMPLETA: puede faltar el detalle, la cartera, el abono o la vinculación. Revísala en Cotizaciones → “Verificar” (no se repara automáticamente).</div>':'');
   /* Totales desde VENTAS_MES — siempre visibles, sin depender del fetch */
   var subtotal=parseFloat(v.subtotal)||parseFloat(v.total)||0;
   var dom=parseFloat(v.domicilio)||0;
@@ -11632,8 +11678,9 @@ async function verificarVencimientoPuntos(wa){
     </div>
     <div style="padding:16px 20px;">
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;">
-        <div><label style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;display:block;margin-bottom:3px;">Cliente</label><input id="cotCliente" type="text" placeholder="Nombre cliente" style="width:100%;border:1.5px solid var(--border);border-radius:8px;padding:8px 10px;font-size:13px;font-family:inherit;box-sizing:border-box;"/></div>
-        <div><label style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;display:block;margin-bottom:3px;">WhatsApp</label><input id="cotWA" type="text" placeholder="3001234567" style="width:100%;border:1.5px solid var(--border);border-radius:8px;padding:8px 10px;font-size:13px;font-family:inherit;box-sizing:border-box;"/></div>
+        <div style="position:relative;"><label style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;display:block;margin-bottom:3px;">Cliente</label><input id="cotCliente" type="text" placeholder="Nombre o WhatsApp" autocomplete="off" oninput="cotClienteEditado('nombre')" style="width:100%;border:1.5px solid var(--border);border-radius:8px;padding:8px 10px;font-size:13px;font-family:inherit;box-sizing:border-box;"/>
+          <div id="cotCliSugerencias" style="display:none;position:absolute;left:0;right:0;top:100%;z-index:5;background:#fff;border:1.5px solid var(--border);border-radius:8px;box-shadow:0 6px 18px rgba(0,0,0,.12);max-height:220px;overflow-y:auto;"></div></div>
+        <div><label style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;display:block;margin-bottom:3px;">WhatsApp</label><input id="cotWA" type="text" placeholder="3001234567" autocomplete="off" oninput="cotClienteEditado('wa')" style="width:100%;border:1.5px solid var(--border);border-radius:8px;padding:8px 10px;font-size:13px;font-family:inherit;box-sizing:border-box;"/></div>
         <div><label style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;display:block;margin-bottom:3px;">Vence en (días)</label><input id="cotDiasVence" type="number" min="1" value="3" style="width:100%;border:1.5px solid var(--border);border-radius:8px;padding:8px 10px;font-size:13px;font-family:inherit;box-sizing:border-box;"/></div>
         <div><label style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;display:block;margin-bottom:3px;">Estado</label>
           <select id="cotEstado" style="width:100%;border:1.5px solid var(--border);border-radius:8px;padding:8px 10px;font-size:13px;font-family:inherit;box-sizing:border-box;">
@@ -11643,7 +11690,24 @@ async function verificarVencimientoPuntos(wa){
           </select>
         </div>
       </div>
-      <div style="margin:-6px 0 14px;"><button type="button" id="btnCrearCliCot" onclick="crearClienteDesdeCotizacion()" style="padding:6px 12px;background:var(--gold-s);color:var(--gold);border:1.5px solid var(--gold-b);border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;">+ Crear cliente</button></div>
+      <div style="margin:-6px 0 14px;">
+        <div id="cotCliEstado" style="font-size:12px;margin-bottom:8px;"></div>
+        <button type="button" id="btnCrearCliCot" onclick="abrirFormClienteCot()" style="padding:6px 12px;background:var(--gold-s);color:var(--gold);border:1.5px solid var(--gold-b);border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;">+ Crear cliente</button>
+        <div id="cotCliNuevoForm" style="display:none;margin-top:8px;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px;">
+          <div style="font-size:11px;font-weight:800;color:var(--text2);text-transform:uppercase;margin-bottom:8px;">Nuevo cliente</div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:8px;">
+            <input id="cotNewNombre" type="text" placeholder="Nombre *" style="border:1.5px solid var(--border);border-radius:8px;padding:8px 10px;font-size:13px;font-family:inherit;box-sizing:border-box;width:100%;"/>
+            <input id="cotNewWa" type="text" placeholder="WhatsApp" style="border:1.5px solid var(--border);border-radius:8px;padding:8px 10px;font-size:13px;font-family:inherit;box-sizing:border-box;width:100%;"/>
+            <input id="cotNewDir" type="text" placeholder="Dirección" style="border:1.5px solid var(--border);border-radius:8px;padding:8px 10px;font-size:13px;font-family:inherit;box-sizing:border-box;width:100%;"/>
+            <input id="cotNewDet" type="text" placeholder="Detalle (apto, torre, referencia)" style="border:1.5px solid var(--border);border-radius:8px;padding:8px 10px;font-size:13px;font-family:inherit;box-sizing:border-box;width:100%;"/>
+          </div>
+          <div id="cotNewError" style="display:none;font-size:12px;color:var(--red);margin-top:8px;"></div>
+          <div style="display:flex;gap:8px;margin-top:8px;">
+            <button type="button" onclick="cerrarFormClienteCot()" style="flex:1;padding:8px;border:1.5px solid var(--border);border-radius:8px;background:#fff;font-size:12px;font-family:inherit;cursor:pointer;font-weight:700;color:var(--text2);">Cancelar</button>
+            <button type="button" id="btnGuardarCliCot" onclick="guardarClienteDesdeCotizacion()" style="flex:2;padding:8px;border:none;border-radius:8px;background:var(--gold);color:#fff;font-size:12px;font-family:inherit;cursor:pointer;font-weight:700;">Guardar cliente</button>
+          </div>
+        </div>
+      </div>
       <div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">Productos agregados:</div>
       <div id="cotItemsList" style="margin-bottom:10px;min-height:32px;"></div>
       <div style="background:var(--bg);border-radius:10px;padding:10px;margin-bottom:10px;border:1px solid var(--border);">
@@ -11656,6 +11720,24 @@ async function verificarVencimientoPuntos(wa){
       <div style="display:flex;gap:8px;flex-wrap:wrap;">
         <button onclick="guardarCotizacion()" style="flex:1;background:var(--gold);color:#fff;border:none;border-radius:var(--r);padding:11px;font-size:13px;font-family:inherit;cursor:pointer;font-weight:700;">💾 Guardar cotización</button>
         <button onclick="enviarCotizacionWA()" style="flex:1;background:var(--green);color:#fff;border:none;border-radius:var(--r);padding:11px;font-size:13px;font-family:inherit;cursor:pointer;">💬 Enviar WhatsApp</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL CONVERTIR COTIZACION EN VENTA (hotfix cotizaciones) -->
+<div id="modalConvCot" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9995;align-items:flex-start;justify-content:center;padding:16px;overflow-y:auto;">
+  <div style="background:#fff;border-radius:16px;width:100%;max-width:520px;margin:auto;">
+    <div style="padding:14px 18px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;background:#fff;border-radius:16px 16px 0 0;z-index:1;">
+      <div style="font-size:16px;font-weight:800;" id="convCotTitulo">Convertir en venta</div>
+      <button id="btnConvCotX" onclick="cerrarConversionCot()" style="background:none;border:none;font-size:22px;cursor:pointer;color:var(--text3);">&#215;</button>
+    </div>
+    <div style="padding:14px 18px;">
+      <div id="convCotBody"></div>
+      <div id="convCotErrores" style="display:none;font-size:12px;color:var(--red);background:var(--red-bg,#fef2f2);border-left:3px solid var(--red);border-radius:0 6px 6px 0;padding:8px 10px;margin-top:10px;"></div>
+      <div id="convCotAcciones" style="display:flex;gap:10px;margin-top:14px;">
+        <button id="btnConvCotCancelar" onclick="cerrarConversionCot()" style="flex:1;padding:12px;border:1.5px solid var(--border);border-radius:var(--r);background:#fff;font-size:13px;font-family:inherit;cursor:pointer;font-weight:700;color:var(--text2);">Cancelar</button>
+        <button id="btnConvCotConfirmar" onclick="confirmarConversionCot()" style="flex:2;padding:12px;background:var(--green);color:#fff;border:none;border-radius:var(--r);font-size:14px;font-family:inherit;cursor:pointer;font-weight:700;">&#10003; Confirmar venta</button>
       </div>
     </div>
   </div>
@@ -12677,6 +12759,7 @@ async function cargarCotizacionesSB(){
   try{
     var r=await fetch(SB+'/rest/v1/cotizaciones?id_licencia=eq.'+CID+'&select=*&order=numero_local.desc',{headers:{'apikey':SK,'Authorization':'Bearer '+SK}});
     COTIZACIONES = r.ok ? (await r.json()).map(mapCotizacionSB) : [];
+    if(r.ok)actualizarBannerConvIncompletas(COTIZACIONES.filter(function(c){return c.estado==='convertida'&&!c.venta_id;}).map(function(c){return{id:c._sbId,numero:c.numero};}));
   }catch(e){COTIZACIONES=[];}
 }
 
@@ -12691,6 +12774,7 @@ function abrirNuevaCotizacion(){
   document.getElementById('cotEstado').value='pendiente';
   var srch=document.getElementById('cotProdSearch');if(srch)srch.value='';
   var bcc=document.getElementById('btnCrearCliCot');if(bcc){bcc.disabled=false;bcc.textContent='+ Crear cliente';}
+  cotCliReset();
   renderCotItems();
   renderCotCatTabs();
   renderCotProdGrid();
@@ -12851,28 +12935,167 @@ function cotConfirmarDesc(i){
   renderCotItems();
 }
 
-async function crearClienteDesdeCotizacion(){
-  var nombre=document.getElementById('cotCliente').value.trim();
-  var wa=document.getElementById('cotWA').value.trim();
-  if(!nombre){toast('Escribe el nombre del cliente primero');return;}
-  var btn=document.getElementById('btnCrearCliCot');
-  if(btn){btn.disabled=true;btn.textContent='Creando...';}
-  var res=await crearClienteNuevo(nombre,wa,'','');
-  if(res.ok){
-    document.getElementById('cotCliente').value=res.cliente.nombre;
-    document.getElementById('cotWA').value=res.cliente.whatsapp||wa;
-    if(btn)btn.textContent='&#10003; Cliente creado';
-    toast('&#10003; Cliente creado y seleccionado');
-  } else if(res.motivo==='duplicado'){
-    document.getElementById('cotCliente').value=res.cliente.nombre;
-    document.getElementById('cotWA').value=res.cliente.whatsapp||wa;
-    if(btn){btn.disabled=false;btn.textContent='+ Crear cliente';}
-    toast('Ya existe: '+res.cliente.nombre+' — seleccionado');
-  } else {
-    if(btn){btn.disabled=false;btn.textContent='+ Crear cliente';}
-    toast(res.motivo==='nombre'?'Escribe el nombre':'Error al crear cliente');
-  }
+/* ===== HOTFIX COTIZACIONES: cliente de la cotizacion =====
+   La cotizacion sigue guardando solo cliente_nombre y cliente_whatsapp (no hay
+   columnas de cliente ni de direccion en cotizaciones). Al reabrir se resuelve la
+   ficha por WhatsApp exacto o por nombre unico y se muestra la direccion ACTUAL de
+   esa ficha. Ante varias coincidencias no se elige ninguna: se pide escoger. */
+var cotCliSel=null;      /* ficha de clientes_frecuentes vinculada en el formulario */
+var cotCliRes=null;      /* ultimo resultado de resolucion/busqueda */
+var cotCliCandidatos={}; /* id -> ficha, para elegir de una lista */
+var _cotCliSeq=0, _cotCliTimer=null;
+function escHtmlCot(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
+
+/* Resuelve la ficha de un cliente consultando la base (nunca la lista local). */
+async function resolverClienteCot(nombre,wa){
+  nombre=String(nombre||'').trim();wa=String(wa||'').trim();
+  if(!nombre&&!wa)return{estado:'sin_cliente'};
+  try{
+    if(wa){
+      var rw=await buscarClientesDuplicados('',wa);
+      if(!rw.ok)return{estado:'error'};
+      if(rw.filas.length===1)return{estado:'vinculado',cliente:rw.filas[0],por:'whatsapp'};
+      if(rw.filas.length>1)return{estado:'ambiguo',candidatos:rw.filas,motivo:'Hay '+rw.filas.length+' fichas con este WhatsApp'};
+    }
+    if(nombre&&nombre!=='Cliente'){
+      var rn=await buscarClientesDuplicados(nombre,'');
+      if(!rn.ok)return{estado:'error'};
+      if(rn.filas.length&&wa)return{estado:'ambiguo',candidatos:rn.filas,motivo:'El nombre coincide con una ficha, pero el WhatsApp de la cotización es distinto'};
+      if(rn.filas.length===1)return{estado:'vinculado',cliente:rn.filas[0],por:'nombre'};
+      if(rn.filas.length>1)return{estado:'ambiguo',candidatos:rn.filas,motivo:'Hay '+rn.filas.length+' fichas con este nombre'};
+    }
+    return{estado:'sin_registro'};
+  }catch(e){console.warn(e);return{estado:'error'};}
 }
+
+function htmlDireccionFichaCot(c){
+  var dir=(c&&c.direccion)?escHtmlCot(c.direccion):'<span style="color:var(--text3);">Sin dirección en la ficha</span>';
+  var det=(c&&c.detalle)?' · '+escHtmlCot(c.detalle):'';
+  return '<div style="margin-top:3px;">📍 '+dir+det+'</div>';
+}
+function htmlCandidatosCot(lista,fn){
+  return lista.map(function(c){
+    cotCliCandidatos[c.id]=c;
+    return '<button type="button" onclick="'+fn+'(\''+escHtmlCot(c.id)+'\')" style="display:block;width:100%;text-align:left;margin-top:5px;padding:7px 9px;border:1.5px solid var(--border);border-radius:8px;background:#fff;cursor:pointer;font-family:inherit;font-size:12px;">'
+      +'<strong>'+escHtmlCot(c.nombre)+'</strong>'+(c.whatsapp?' · 📱 '+escHtmlCot(c.whatsapp):'')
+      +'<div style="color:var(--text3);font-size:11px;">'+(c.direccion?escHtmlCot(c.direccion):'Sin dirección')+(c.detalle?' · '+escHtmlCot(c.detalle):'')+'</div></button>';
+  }).join('');
+}
+function renderCotCliEstado(){
+  var el=document.getElementById('cotCliEstado');if(!el)return;
+  var nota='<div style="font-size:10px;color:var(--text3);margin-top:4px;">Se usa la dirección actual de la ficha del cliente; la cotización no guarda una copia.</div>';
+  if(cotCliSel){
+    el.innerHTML='<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:8px 10px;">'
+      +'<div><strong>✓ '+escHtmlCot(cotCliSel.nombre)+'</strong>'+(cotCliSel.whatsapp?' · 📱 '+escHtmlCot(cotCliSel.whatsapp):'')+'</div>'
+      +htmlDireccionFichaCot(cotCliSel)+nota+'</div>';
+    return;
+  }
+  var r=cotCliRes;
+  if(!r||r.estado==='sin_cliente'){el.innerHTML='';return;}
+  if(r.estado==='buscando'){el.innerHTML='<div style="color:var(--text3);">Buscando la ficha del cliente…</div>';return;}
+  if(r.estado==='error'){el.innerHTML='<div style="background:var(--red-bg,#fef2f2);border:1px solid var(--red-b);border-radius:8px;padding:8px 10px;color:var(--red);">No se pudo consultar Clientes. <button type="button" onclick="cotResolverYMostrar()" style="margin-left:6px;font-size:11px;padding:2px 8px;border:1px solid var(--red-b);border-radius:6px;background:#fff;color:var(--red);cursor:pointer;font-family:inherit;">Reintentar</button></div>';return;}
+  if(r.estado==='ambiguo'){el.innerHTML='<div style="background:#fffbeb;border:1px solid #fcd34d;border-radius:8px;padding:8px 10px;"><strong>⚠ '+escHtmlCot(r.motivo)+'.</strong> Elige la ficha correcta (no se seleccionó ninguna):'+htmlCandidatosCot(r.candidatos,'cotElegirClienteId')+'</div>';return;}
+  if(r.estado==='sin_registro'){el.innerHTML='<div style="color:var(--text3);">Este cliente no está registrado en Clientes. Puedes crearlo con “+ Crear cliente”.</div>';return;}
+}
+function cotCliReset(){
+  cotCliSel=null;cotCliRes=null;cotCliCandidatos={};_cotCliSeq++;
+  var s=document.getElementById('cotCliSugerencias');if(s){s.style.display='none';s.innerHTML='';}
+  cerrarFormClienteCot();
+  renderCotCliEstado();
+}
+/* Al reabrir: resolver por WhatsApp exacto o nombre unico. */
+async function cotResolverYMostrar(){
+  var seq=++_cotCliSeq;
+  var n=(document.getElementById('cotCliente')||{}).value||'';
+  var w=(document.getElementById('cotWA')||{}).value||'';
+  cotCliSel=null;cotCliRes={estado:'buscando'};renderCotCliEstado();
+  var r=await resolverClienteCot(n,w);
+  if(seq!==_cotCliSeq)return;
+  cotCliRes=r;cotCliSel=(r.estado==='vinculado')?r.cliente:null;
+  renderCotCliEstado();
+}
+function cotElegirCliente(c){
+  if(!c)return;
+  _cotCliSeq++;
+  cotCliSel=c;cotCliRes={estado:'vinculado',cliente:c};
+  document.getElementById('cotCliente').value=c.nombre||'';
+  document.getElementById('cotWA').value=c.whatsapp||'';
+  var s=document.getElementById('cotCliSugerencias');if(s)s.style.display='none';
+  renderCotCliEstado();
+}
+function cotElegirClienteId(id){cotElegirCliente(cotCliCandidatos[id]);}
+/* Escribir en Cliente/WhatsApp desvincula la ficha y busca sugerencias. */
+function cotClienteEditado(campo){
+  cotCliSel=null;cotCliRes=null;renderCotCliEstado();
+  var q=((document.getElementById(campo==='wa'?'cotWA':'cotCliente')||{}).value||'').trim();
+  clearTimeout(_cotCliTimer);
+  var seq=++_cotCliSeq;
+  if(q.length<2){var s=document.getElementById('cotCliSugerencias');if(s)s.style.display='none';return;}
+  _cotCliTimer=setTimeout(function(){cotBuscarSugerencias(q,campo,seq);},300);
+}
+async function cotBuscarSugerencias(q,campo,seq){
+  var drop=document.getElementById('cotCliSugerencias');if(!drop)return;
+  var limpio=q.replace(/[*%,()"\\:]/g,' ').trim();
+  if(limpio.length<2){drop.style.display='none';return;}
+  var col=campo==='wa'?'whatsapp':'nombre';
+  var filas=null;
+  try{
+    var r=await fetch(SB+'/rest/v1/clientes_frecuentes?id_licencia=eq.'+encodeURIComponent(CID)+'&'+col+'=ilike.'+encodeURIComponent('*'+limpio.replace(/\s+/g,'*')+'*')+'&select=*&order=nombre.asc&limit=8',{headers:{'apikey':SK,'Authorization':'Bearer '+SK}});
+    if(r.ok)filas=await r.json();
+  }catch(e){filas=null;}
+  if(seq!==_cotCliSeq)return;
+  if(!Array.isArray(filas)){drop.innerHTML='<div style="padding:8px 10px;font-size:12px;color:var(--red);">No se pudo buscar clientes — inténtalo de nuevo</div>';drop.style.display='block';return;}
+  if(!filas.length){drop.style.display='none';return;}
+  drop.innerHTML='<div style="padding:4px 6px 6px;">'+htmlCandidatosCot(filas,'cotElegirClienteId')+'</div>';
+  drop.style.display='block';
+}
+document.addEventListener('click',function(e){
+  var d=document.getElementById('cotCliSugerencias');
+  if(d&&d.style.display!=='none'&&!e.target.closest('#cotCliSugerencias')&&e.target.id!=='cotCliente'&&e.target.id!=='cotWA')d.style.display='none';
+});
+
+function abrirFormClienteCot(){
+  var f=document.getElementById('cotCliNuevoForm');if(!f)return;
+  document.getElementById('cotNewNombre').value=(document.getElementById('cotCliente').value||'').trim();
+  document.getElementById('cotNewWa').value=(document.getElementById('cotWA').value||'').trim();
+  document.getElementById('cotNewDir').value='';
+  document.getElementById('cotNewDet').value='';
+  var er=document.getElementById('cotNewError');if(er){er.style.display='none';er.innerHTML='';}
+  f.style.display='block';
+  var b=document.getElementById('btnCrearCliCot');if(b)b.style.display='none';
+}
+function cerrarFormClienteCot(){
+  var f=document.getElementById('cotCliNuevoForm');if(f)f.style.display='none';
+  var b=document.getElementById('btnCrearCliCot');if(b){b.style.display='';b.disabled=false;}
+}
+/* Crea la ficha con las mismas validaciones del modulo Clientes (crearClienteNuevo).
+   Si falla, el formulario y lo escrito se conservan. */
+async function guardarClienteDesdeCotizacion(){
+  var btn=document.getElementById('btnGuardarCliCot');
+  if(btn&&btn.disabled)return;
+  var nombre=document.getElementById('cotNewNombre').value;
+  var wa=document.getElementById('cotNewWa').value;
+  var dir=document.getElementById('cotNewDir').value;
+  var det=document.getElementById('cotNewDet').value;
+  var er=document.getElementById('cotNewError');
+  if(btn){btn.disabled=true;btn.textContent='Guardando…';}
+  var res;
+  try{res=await crearClienteNuevo(nombre,wa,dir,det);}
+  finally{if(btn){btn.disabled=false;btn.textContent='Guardar cliente';}}
+  if(res.ok){
+    cotElegirCliente(res.cliente);
+    cerrarFormClienteCot();
+    toast('✓ Cliente creado y seleccionado');
+    return;
+  }
+  var html=escHtmlCot(mensajeAltaCliente(res));
+  if(res.motivo==='duplicado'&&res.candidatos&&res.candidatos.length){
+    html+='<div style="color:var(--text2);margin-top:4px;">Puedes usar la ficha existente:</div>'+htmlCandidatosCot(res.candidatos,'cotUsarFichaExistente');
+  }
+  if(er){er.innerHTML=html;er.style.display='block';}
+}
+function cotUsarFichaExistente(id){cotElegirCliente(cotCliCandidatos[id]);cerrarFormClienteCot();}
+/* ===== HOTFIX COTIZACIONES: FIN cliente de la cotizacion ===== */
 
 async function guardarCotizacion(){
   var cliente=document.getElementById('cotCliente').value.trim()||'Cliente';
@@ -12907,6 +13130,7 @@ async function guardarCotizacion(){
 function closeCotizacionModal(){
   document.getElementById('modalCotizacion').style.display='none';
   cotActualId=null; cotItems=[];
+  cotCliReset();
 }
 
 function editarCotizacion(id){
@@ -12918,6 +13142,8 @@ function editarCotizacion(id){
   document.getElementById('cotCliente').value=cot.cliente||'';
   document.getElementById('cotWA').value=cot.wa||'';
   var bcc2=document.getElementById('btnCrearCliCot');if(bcc2){bcc2.disabled=false;bcc2.textContent='+ Crear cliente';}
+  cotCliReset();
+  cotResolverYMostrar();
   var diasRest=cot.fecha_vencimiento?Math.max(1,Math.ceil((new Date(cot.fecha_vencimiento)-new Date())/86400000)):3;
   document.getElementById('cotDiasVence').value=diasRest;
   document.getElementById('cotEstado').value=cot.estado||'pendiente';
@@ -12941,275 +13167,469 @@ async function cambiarEstadoCot(id, estado){
   }catch(e){console.error(e);toast('Error al actualizar estado — no se guardó el cambio');}
 }
 
-/* Guarda de UX unicamente (evita doble clic en la MISMA pestaña). La proteccion
-   real contra duplicados vive en Supabase: el claim atomico + idx_ventas_cotizacion_unica. */
-var _cotEnProceso={};
-
-/* Libera un claim tomado por esta ejecucion, devolviendo la cotizacion a 'aprobada'.
-   Solo actua si sigue en el estado que dejamos (convertida + venta_id NULL): si otro
-   proceso ya avanzo, no la toca. Devuelve true solo si realmente libero una fila. */
-async function liberarClaimCot(sbId){
-  try{
-    var r=await fetch(SB+'/rest/v1/cotizaciones?id=eq.'+sbId+'&estado=eq.convertida&venta_id=is.null',
-      {method:'PATCH',headers:H,body:JSON.stringify({estado:'aprobada',updated_at:new Date().toISOString()})});
-    if(!r.ok){ console.error('No se pudo liberar el claim:',await r.text()); return false; }
-    var filas=await r.json();
-    return !!(filas&&filas.length);
-  }catch(e){ console.error('No se pudo liberar el claim:',e); return false; }
+/* ===== HOTFIX COTIZACIONES: CONVERSION EN VENTA — INICIO =====
+   La conversion la hace la funcion de base de datos convertir_cotizacion_atomica en UNA
+   transaccion: valida y bloquea la cotizacion, crea venta y detalle, descuenta el
+   inventario, crea cartera y abono (credito) y vincula la cotizacion. Si algo falla no
+   queda nada escrito. El navegador ya no descuenta inventario ni escribe por pasos.
+   - Clave de operacion estable (conv-<uuid>) por envio: un reintento con la misma clave
+     devuelve el resultado ya confirmado; la misma clave con otros datos se rechaza.
+   - Si no llega la respuesta, la operacion quedo completa o no se hizo: se reintenta con
+     la misma clave (nunca duplica).
+   - Las conversiones incompletas hechas por la version anterior (pasos separados) solo
+     se diagnostican en modo lectura; no se reparan automaticamente. */
+var CONV_COT_TIMEOUT_MS=20000;
+var CONV_COT_RPC='convertir_cotizacion_atomica';
+var CONV_COT_MENSAJES={CV010:'La cotización no existe para esta licencia.',CV011:'La cotización ya no está disponible para conversión.',
+  CV012:'La cotización cambió después de abrir el resumen. Ciérralo y vuelve a abrirlo.',CV013:'Ya existe una venta para esta cotización.',
+  CV020:'La clave de esta operación ya se usó con otros datos. No se registró nada.',CV050:'Otra operación está usando esta cotización o sus productos. No se registró nada; inténtalo de nuevo.'};
+function nuevaClaveConvCot(){
+  var u;
+  if(typeof crypto!=='undefined'&&crypto.randomUUID)u=crypto.randomUUID();
+  else if(typeof crypto!=='undefined'&&crypto.getRandomValues){
+    var b=new Uint8Array(16);crypto.getRandomValues(b);b[6]=(b[6]&0x0f)|0x40;b[8]=(b[8]&0x3f)|0x80;
+    var x='';for(var i=0;i<16;i++)x+=('0'+b[i].toString(16)).slice(-2);
+    u=x.slice(0,8)+'-'+x.slice(8,12)+'-'+x.slice(12,16)+'-'+x.slice(16,20)+'-'+x.slice(20);
+  } else throw new Error('sin_crypto');
+  return 'conv-'+String(u).toLowerCase();
 }
-
+/* Parametros de la funcion a partir de lo confirmado en el resumen. La base vuelve a
+   validar todo (precios, empaques, stock, cliente, pago y puntos). */
+function parametrosConvCot(s,pagoInput,cliente){
+  var pi=pagoInput||{},pago={tipo:pi.tipo,total_esperado:s.plan.total};
+  if(pi.tipo==='transferencia')pago.origen=pi.origen||null;
+  if(pi.tipo==='credito'){
+    var ab=String(pi.abono==null?'':pi.abono).trim();
+    pago.plazo=Number(String(pi.plazo==null?'':pi.plazo).trim());
+    pago.abono=ab===''?0:Number(ab);
+    if(pago.abono>0){pago.medio_abono=pi.medioAbono||null;if(pi.medioAbono==='transferencia')pago.origen_abono=pi.origenAbono||null;}
+  }
+  return{p_id_licencia:CID,p_cotizacion_id:s.sbId,p_cotizacion_updated_at:s.leido.updated_at,p_pago:pago,
+    p_cliente_id:cliente&&cliente.id||null,p_entrega:{direccion:String(s.dir||'').trim(),detalle:String(s.det||'').trim()}};
+}
+/* Llama a la funcion; ante falta de respuesta reintenta con la MISMA clave. */
+async function llamarConversionAtomicaCot(params,intentos){
+  intentos=intentos||3;
+  for(var i=0;i<intentos;i++){
+    var w=await escribirConvCot(SB+'/rest/v1/rpc/'+CONV_COT_RPC,'POST',params);
+    if(w.tipo==='ok'){
+      var r=w.filas[0];
+      if(r&&r.ok&&r.venta_id)return{estado:'completada',resultado:r,venta:{id:r.venta_id,numero_venta:r.numero_venta}};
+      return{estado:'incierta',msg:'La respuesta de la base no es la esperada.'};
+    }
+    if(w.tipo==='rechazo'){
+      var msg='';try{msg=(JSON.parse(w.texto)||{}).message||'';}catch(e){}
+      if(w.status===404||w.codigo==='PGRST202')return{estado:'rechazada',codigo:'SIN_FUNCION',msg:'La conversión segura no está instalada en la base de datos. No se registró nada.'};
+      return{estado:'rechazada',codigo:w.codigo||'',msg:CONV_COT_MENSAJES[w.codigo]||msg||'La base rechazó la conversión. No se registró nada.'};
+    }
+  }
+  return{estado:'incierta',msg:'No llegó la confirmación de la base. La conversión quedó completa o no se hizo nada (nunca a medias). Pulsa “Reintentar”: usa la misma operación y no duplica.'};
+}
+var CONV_COT_ORIGENES=['Ahorros Bancolombia','Llave Bancolombia','Nequi','Otro banco'];
+var _cotEnProceso={};
+var _convCot=null;
+function fetchConvCot(url,opts){
+  opts=opts||{};
+  if(typeof AbortController==='undefined')return fetch(url,opts);
+  var ac=new AbortController();
+  var t=setTimeout(function(){ac.abort();},CONV_COT_TIMEOUT_MS);
+  return fetch(url,Object.assign({},opts,{signal:ac.signal})).finally(function(){clearTimeout(t);});
+}
+/* Escritura con clasificacion honesta del resultado:
+   ok (con filas) | rechazo (4xx: la base no aplico nada) | incierto (sin respuesta,
+   5xx o respuesta ilegible: pudo aplicarse o no). */
+async function escribirConvCot(url,method,body){
+  var r;
+  try{r=await fetchConvCot(url,{method:method,headers:H,body:JSON.stringify(body)});}
+  catch(e){return{tipo:'incierto',detalle:String(e&&e.message||e)};}
+  if(r.status>=500)return{tipo:'incierto',detalle:'HTTP '+r.status};
+  if(!r.ok){
+    var tx='';try{tx=await r.text();}catch(e1){}
+    var cod='';try{cod=(JSON.parse(tx)||{}).code||'';}catch(e2){}
+    return{tipo:'rechazo',status:r.status,texto:tx,codigo:cod};
+  }
+  try{var f=await r.json();return{tipo:'ok',filas:Array.isArray(f)?f:(f?[f]:[])};}
+  catch(e3){return{tipo:'incierto',detalle:'respuesta ilegible'};}
+}
+async function leerConvCot(url){
+  try{
+    var r=await fetchConvCot(url,{headers:{'apikey':SK,'Authorization':'Bearer '+SK}});
+    if(!r.ok)return null;
+    var f=await r.json();
+    return Array.isArray(f)?f:null;
+  }catch(e){return null;}
+}
+/* ---------- Plan de lineas (puro, sin escrituras) ----------
+   tipo 'und' -> unidad suelta; 'emp' -> empaque completo con el uds_empaque VIGENTE.
+   Se bloquea: producto inexistente o sin vinculo, cantidad no entera >=1, precio
+   inconsistente, empaque cotizado que hoy no existe, tipo ausente en producto con
+   empaque >1 (ambiguo), tipo desconocido y stock insuficiente (por producto). */
+function construirPlanConversionCot(items,invPorId){
+  var errores=[],lineas=[],req={};
+  if(!Array.isArray(items)||!items.length)return{ok:false,errores:['La cotización no tiene productos'],lineas:[],total:0};
+  items.forEach(function(it,i){
+    var nombre=(it&&it.nombre)||('Producto '+(i+1));var pref='“'+nombre+'”: ';
+    if(!it||!it.prod_id){errores.push(pref+'no está vinculado a un producto del inventario');return;}
+    var p=invPorId[String(it.prod_id)];
+    if(!p){errores.push(pref+'el producto ya no existe en el inventario');return;}
+    var qty=Number(it.cantidad);
+    if(!Number.isInteger(qty)||qty<1){errores.push(pref+'cantidad no válida');return;}
+    var pu=Number(it.precio_unitario),pt=Number(it.precio_total);
+    if(!isFinite(pu)||pu<0||!isFinite(pt)||pt<0||Math.abs(pt-qty*pu)>1){errores.push(pref+'el precio cotizado es inconsistente');return;}
+    var uds=parseInt(p.uds_empaque,10);
+    if(!(uds>=1)){errores.push(pref+'el inventario no tiene un tamaño de empaque válido');return;}
+    var tipo=it.tipo,esUnidad;
+    if(tipo==='und')esUnidad=true;
+    else if(tipo==='emp'){if(uds<=1){errores.push(pref+'se cotizó como empaque, pero hoy el producto no tiene empaque');return;}esUnidad=false;}
+    else if(tipo===undefined||tipo===null||tipo===''){if(uds>1){errores.push(pref+'no indica si se cotizó por unidad o por empaque (x'+uds+')');return;}esUnidad=false;}
+    else{errores.push(pref+'tipo de venta desconocido');return;}
+    var unidades=esUnidad?qty:qty*uds;
+    req[String(it.prod_id)]=(req[String(it.prod_id)]||0)+unidades;
+    lineas.push({idx:i,prod_id:String(it.prod_id),nombre:nombre,categoria:p.categoria||'',cantidad:qty,precio_unitario:pu,precio_total:pt,es_unidad:esUnidad,uds_empaque:uds,unidades:unidades});
+  });
+  if(!errores.length){
+    Object.keys(req).forEach(function(pid){
+      var p=invPorId[pid],uds=parseInt(p.uds_empaque,10)||1;
+      var pool=(parseInt(p.stock,10)||0)*uds+(parseInt(p.uds_sueltas,10)||0);
+      if(pool<req[pid])errores.push('“'+(p.nombre||pid)+'”: stock insuficiente (hay '+pool+' und, se necesitan '+req[pid]+')');
+    });
+  }
+  var total=lineas.reduce(function(s,l){return s+l.precio_total;},0);
+  return{ok:!errores.length,errores:errores,lineas:errores.length?[]:lineas,total:total};
+}
+/* ---------- Validacion del pago (pura) ---------- */
+function validarPagoConvCot(e,total,cliente){
+  e=e||{};var err=[],r={};
+  if(!(total>0))err.push('El total de la venta debe ser mayor que cero');
+  var origenOk=function(o){return CONV_COT_ORIGENES.indexOf(o)>=0;};
+  if(e.tipo==='efectivo'){r={tipo:'efectivo',metodo:'efectivo',origen:null,estado:'completada'};}
+  else if(e.tipo==='transferencia'){
+    if(!origenOk(e.origen))err.push('Elige el origen de la transferencia');
+    r={tipo:'transferencia',metodo:'transferencia',origen:e.origen||null,estado:'completada'};
+  } else if(e.tipo==='credito'){
+    var abStr=String(e.abono==null?'':e.abono).trim();
+    var ab=abStr===''?0:Number(abStr);
+    var abOk=isFinite(ab)&&ab>=0;
+    if(!abOk)err.push('El abono inicial no es válido');
+    else if(ab>total)err.push('El abono inicial supera el total de la venta');
+    var medioOk=true;
+    if(abOk&&ab>0){
+      if(e.medioAbono!=='efectivo'&&e.medioAbono!=='transferencia'){err.push('Elige el medio del abono inicial');medioOk=false;}
+      else if(e.medioAbono==='transferencia'&&!origenOk(e.origenAbono)){err.push('Elige el origen de la transferencia del abono');medioOk=false;}
+    }
+    if(abOk&&ab>0&&ab===total&&medioOk&&total>0){
+      /* El pago cubre el total: es una venta de contado. */
+      r={tipo:e.medioAbono,metodo:e.medioAbono,origen:e.medioAbono==='transferencia'?e.origenAbono:null,estado:'completada',cubreTotal:true};
+    } else {
+      if(!cliente||!cliente.id)err.push('El crédito exige un cliente registrado e identificado');
+      var plazo=Number(String(e.plazo==null?'':e.plazo).trim());
+      if(!Number.isInteger(plazo)||plazo<1||plazo>365)err.push('El plazo del crédito debe ser de 1 a 365 días');
+      r={tipo:'credito',metodo:ab>0?e.medioAbono:'efectivo',origen:(ab>0&&e.medioAbono==='transferencia')?e.origenAbono:null,estado:'credito',abono:abOk?ab:0,saldo:abOk?total-ab:total,plazo:plazo};
+    }
+  } else err.push('Elige la forma de pago');
+  return{ok:!err.length,errores:err,pago:r};
+}
+/* ---------- Pasos con escritura (idempotentes) ---------- */
+function urlCotConvCot(sbId){return SB+'/rest/v1/cotizaciones?id=eq.'+encodeURIComponent(sbId);}
+async function leerCotConvCot(sbId){return leerConvCot(urlCotConvCot(sbId)+'&id_licencia=eq.'+encodeURIComponent(CID)+'&select=*');}
+async function prepararConversionCot(sbId){
+  var f=await leerCotConvCot(sbId);
+  if(!f)return{fase:'error',msg:'No se pudo leer la cotización. No se modificó nada.'};
+  if(f.length!==1)return{fase:'error',msg:'Esta cotización ya no existe.'};
+  var row=f[0];
+  if(row.estado!=='aprobada'||row.venta_id)return{fase:'error',msg:'Esta cotización ya no está disponible para conversión (estado: '+row.estado+').'};
+  var items=Array.isArray(row.items)?row.items:[];
+  var ids=[];items.forEach(function(it){if(it&&it.prod_id&&ids.indexOf(String(it.prod_id))<0)ids.push(String(it.prod_id));});
+  var inv={};
+  if(ids.length){
+    var lista='('+ids.map(function(x){return'"'+x.replace(/["\\]/g,'')+'"';}).join(',')+')';
+    var rows=await leerConvCot(SB+'/rest/v1/inventario?id=in.'+encodeURIComponent(lista)+'&select=id,nombre,categoria,stock,uds_sueltas,uds_empaque');
+    if(!rows)return{fase:'error',msg:'No se pudo leer el inventario. No se modificó nada.'};
+    rows.forEach(function(p){inv[String(p.id)]=p;});
+  }
+  var plan=construirPlanConversionCot(items,inv);
+  var cliRes=await resolverClienteCot(row.cliente_nombre,row.cliente_whatsapp);
+  var sel=cliRes.estado==='vinculado'?cliRes.cliente:null;
+  return{fase:'resumen',leido:row,plan:plan,cliRes:cliRes,cliSel:sel,
+    dir:sel&&sel.direccion||'',det:sel&&sel.detalle||'',
+    pagoInput:{tipo:'efectivo',origen:'',plazo:'30',abono:'',medioAbono:'',origenAbono:''},contadoConfirmado:false};
+}
 async function convertirCotVenta(id){
   var cot=COTIZACIONES.find(function(c){return c.id===id;});
   if(!cot){toast('Cotización no encontrada');return;}
   var sbId=cot._sbId;
-  if(!sbId){toast('Cotización sin identificador válido en Supabase');return;}
+  if(!sbId){toast('Cotización sin identificador válido');return;}
   if(_cotEnProceso[sbId]){toast('Esta cotización ya se está procesando');return;}
-  if(!confirm('¿Convertir esta cotización en venta?\nSe descontará el inventario y quedará registrada como venta completada.'))return;
-  _cotEnProceso[sbId]=true;
-  var GH={'apikey':SK,'Authorization':'Bearer '+SK};
-  var claimTomado=false;
-  var descontadosCot=[];
-  try{
-    /* PASO 1 — Leer el estado REAL desde Supabase. El array local nunca decide. */
-    var rLeer=await fetch(SB+'/rest/v1/cotizaciones?id=eq.'+sbId+'&id_licencia=eq.'+CID+'&select=*',{headers:GH});
-    if(!rLeer.ok){toast('No se pudo verificar la cotización — no se convirtió');return;}
-    var filasCot=await rLeer.json();
-    if(filasCot.length!==1){
-      toast('Esta cotización ya no existe — actualizando la lista');
-      await cargarCotizacionesSB();renderCotizacionesList();
-      return;
-    }
-    var real=filasCot[0];
-    if(real.estado!=='aprobada'||real.venta_id){
-      toast('Esta cotización ya no está disponible para conversión (estado: '+real.estado+')');
-      await cargarCotizacionesSB();renderCotizacionesList();
-      return;
-    }
-
-    /* PASO 2 — CLAIM ATOMICO. Supabase decide el ganador, no el navegador.
-       Solo la ejecucion que afecte 1 fila continua. */
-    var rClaim=await fetch(SB+'/rest/v1/cotizaciones?id=eq.'+sbId+'&estado=eq.aprobada&venta_id=is.null',
-      {method:'PATCH',headers:H,body:JSON.stringify({estado:'convertida',updated_at:new Date().toISOString()})});
-    if(!rClaim.ok){
-      console.error('Error al reclamar la cotización:',await rClaim.text());
-      toast('No se pudo iniciar la conversión — inténtalo de nuevo');
-      return;
-    }
-    var reclamadas=await rClaim.json();
-    if(!reclamadas||!reclamadas.length){
-      /* 0 filas: otro dispositivo/pestaña gano el claim. Abortar sin tocar nada. */
-      toast('Esta cotización ya fue convertida desde otro dispositivo');
-      await cargarCotizacionesSB();renderCotizacionesList();
-      return;
-    }
-    claimTomado=true;
-
-    /* Los items provienen de la fila REAL de Supabase, no del array local. */
-    var itemsReales=Array.isArray(real.items)?real.items:[];
-    var subtotal=itemsReales.reduce(function(s,it){return s+(it.precio_total||0);},0);
-    var PUNTOS_MIN2=typeof PUNTOS_MIN_COMPRA!=='undefined'?PUNTOS_MIN_COMPRA:50000;
-    var RATIO2=typeof PUNTOS_RATIO!=='undefined'?PUNTOS_RATIO:800;
-    var waReal=real.cliente_whatsapp||'';
-    var esMayCot=waReal&&Array.isArray(clisDB)&&clisDB.some(function(c){return c.whatsapp===waReal&&c.es_mayorista;});
-    var pts=(!esMayCot&&subtotal>=PUNTOS_MIN2&&waReal)?Math.floor(subtotal/RATIO2):0;
-
-    /* PASO 3 — Descontar inventario con el mecanismo atomico existente (CAS). */
-    var itemsConProducto=itemsReales.filter(function(it){return !!it.prod_id;});
-    for(var ci=0;ci<itemsConProducto.length;ci++){
-      var itCot=itemsConProducto[ci];
-      var itemStock={id:itCot.prod_id,nombre:itCot.nombre,qty:itCot.cantidad,esUnidad:false,uds_empaque:1};
-      var resCot=await descontarStockItemSB(itemStock);
-      if(!resCot.ok){
-        if(resCot.motivo==='inexistente'){
-          /* Producto ya no existe: mismo comportamiento historico, no bloquea. */
-          continue;
-        }
-        await revertirDescuentosSB(descontadosCot);
-        var liberado=await liberarClaimCot(sbId);
-        if(resCot.motivo==='insuficiente'){
-          toast('Stock insuficiente: '+itCot.nombre+' — la venta no se registró');
-        } else if(resCot.motivo==='conflicto'){
-          toast('Otro dispositivo modificó el stock de '+itCot.nombre+' — inténtalo de nuevo');
-        } else {
-          toast('No se pudo descontar el inventario — la venta no se registró');
-        }
-        if(!liberado) toast('⚠ La cotización quedó marcada como incompleta — usa "Verificar y recuperar"');
-        await cargarCotizacionesSB();renderCotizacionesList();renderInvTable();
-        return;
-      }
-      descontadosCot.push(itemStock);
-    }
-
-    /* PASO 4 — Crear la venta con cotizacion_id. idx_ventas_cotizacion_unica es la
-       segunda barrera: si ya existe una venta para esta cotizacion, Supabase la rechaza. */
-    var v=null;
-    var vr=await fetch(SB+'/rest/v1/ventas',{method:'POST',headers:H,body:JSON.stringify({
-      id_cliente:CID,cliente_nombre:real.cliente_nombre,total:subtotal,subtotal:subtotal,descuento:0,
-      metodo_pago:'efectivo',estado:'completada',puntos_ganados:pts,domicilio:0,cotizacion_id:sbId
-    })});
-    if(vr.ok){
-      var varr=await vr.json();
-      v=(varr&&varr.length)?varr[0]:null;
-      if(!v){
-        /* 200 sin fila devuelta: no se puede confirmar. No se crea otra venta. */
-        toast('⚠ No se pudo confirmar la venta — usa "Verificar y recuperar" en la cotización');
-        await cargarCotizacionesSB();renderCotizacionesList();renderInvTable();
-        return;
-      }
-    } else {
-      var errVenta=await vr.text();
-      if(errVenta.indexOf('idx_ventas_cotizacion_unica')>=0||errVenta.indexOf('23505')>=0){
-        /* Ya existia una venta para esta cotizacion (creada por otra ejecucion).
-           NO se crea otra. Se revierte NUESTRO descuento, porque el de la venta
-           existente ya fue aplicado por la ejecucion que la creo. */
-        await revertirDescuentosSB(descontadosCot);
-        descontadosCot=[];
-        var rEx=await fetch(SB+'/rest/v1/ventas?cotizacion_id=eq.'+sbId+'&id_cliente=eq.'+CID+'&select=*',{headers:GH});
-        var existentes=rEx.ok?await rEx.json():[];
-        if(existentes.length===1){
-          v=existentes[0];
-          toast('Esta cotización ya tenía una venta (#'+String(v.numero_venta||'').padStart(3,'0')+') — se vinculó, no se duplicó');
-        } else {
-          toast('⚠ Conflicto al crear la venta — usa "Verificar y recuperar" en la cotización');
-          await cargarCotizacionesSB();renderCotizacionesList();renderInvTable();
-          return;
-        }
-      } else {
-        console.error('Error al crear la venta:',errVenta);
-        await revertirDescuentosSB(descontadosCot);
-        var liberado2=await liberarClaimCot(sbId);
-        toast('Error al crear la venta — no se registró');
-        if(!liberado2) toast('⚠ La cotización quedó marcada como incompleta — usa "Verificar y recuperar"');
-        await cargarCotizacionesSB();renderCotizacionesList();renderInvTable();
-        return;
-      }
-    }
-
-    /* PASO 5 — Detalle de venta, verificando la respuesta. La venta NO se elimina
-       si esto falla: es un dato financiero real y queda recuperable. */
-    var detalleOk=true;
-    var rDet=await fetch(SB+'/rest/v1/detalle_ventas',{method:'POST',headers:H,body:JSON.stringify(itemsReales.map(function(it){
-      return {venta_id:v.id,prod_id:it.prod_id,producto_nombre:it.nombre,categoria:'',cantidad:it.cantidad,precio_unitario:it.precio_unitario,precio_total:it.precio_total,es_unidad:false,uds_empaque:1};
-    }))});
-    if(!rDet.ok){
-      console.error('Error al crear el detalle de la venta:',await rDet.text());
-      detalleOk=false;
-    } else {
-      var detCreado=await rDet.json();
-      if(itemsReales.length&&(!detCreado||!detCreado.length)) detalleOk=false;
-    }
-
-    /* PASO 6 — Vincular la cotizacion con la venta. */
-    var rLink=await fetch(SB+'/rest/v1/cotizaciones?id=eq.'+sbId,{method:'PATCH',headers:H,
-      body:JSON.stringify({venta_id:v.id,estado:'convertida',updated_at:new Date().toISOString()})});
-    var linkOk=false;
-    if(rLink.ok){
-      var linkFilas=await rLink.json();
-      linkOk=!!(linkFilas&&linkFilas.length);
-    } else {
-      console.error('Error al vincular la cotización:',await rLink.text());
-    }
-
-    await cargarCotizacionesSB();
-    renderCotizacionesList();
-    renderInvTable();
-    var numTxt='#'+String(v.numero_venta||'').padStart(3,'0');
-    if(linkOk&&detalleOk){
-      toast('✅ Cotización convertida en venta '+numTxt);
-    } else if(!detalleOk){
-      toast('⚠ Venta '+numTxt+' creada pero sin detalle completo — usa "Verificar y recuperar"');
-    } else {
-      toast('⚠ Venta '+numTxt+' creada, pero no se pudo vincular la cotización — usa "Verificar y recuperar"');
-    }
-  }catch(e){
-    console.error(e);
-    /* Fallo inesperado: si ya teniamos el claim y aun no hay venta, revertir y liberar. */
-    try{
-      if(claimTomado){
-        var rChk=await fetch(SB+'/rest/v1/ventas?cotizacion_id=eq.'+sbId+'&id_cliente=eq.'+CID+'&select=id',{headers:GH});
-        var yaHay=rChk.ok?await rChk.json():[];
-        if(!yaHay.length){
-          await revertirDescuentosSB(descontadosCot);
-          await liberarClaimCot(sbId);
-        }
-      }
-    }catch(e2){console.error('Rollback tras excepción falló:',e2);}
-    toast('Error al convertir cotización — revisa el estado de la cotización');
-    try{await cargarCotizacionesSB();renderCotizacionesList();}catch(e3){}
-  }finally{
-    delete _cotEnProceso[sbId];
-  }
+  _convCot={sbId:sbId,cotId:id,numero:cot.numero,fase:'cargando'};
+  document.getElementById('modalConvCot').style.display='flex';
+  renderConvCot();
+  var estado=_convCot;
+  var prep;
+  try{prep=await prepararConversionCot(sbId);}catch(e){console.error(e);prep={fase:'error',msg:'No se pudo preparar la conversión. No se modificó nada.'};}
+  if(_convCot!==estado)return;
+  Object.assign(_convCot,prep);
+  renderConvCot();
 }
-
-/* Recuperacion EXPLICITA de una conversion interrumpida (convertida + venta_id NULL).
-   Nunca se ejecuta sola: siempre la dispara el usuario desde la lista de cotizaciones.
-   Es determinista gracias a ventas.cotizacion_id. Nunca elimina una venta real. */
+function cerrarConversionCot(){
+  if(_convCot&&_convCot.fase==='guardando')return;
+  document.getElementById('modalConvCot').style.display='none';
+  _convCot=null;
+}
+function opcionesOrigenConvCot(sel){
+  return '<option value="">— Origen —</option>'+CONV_COT_ORIGENES.map(function(o){return'<option'+(o===sel?' selected':'')+'>'+escHtmlCot(o)+'</option>';}).join('');
+}
+var _estiloInpConv='width:100%;border:1.5px solid var(--border);border-radius:8px;padding:8px 10px;font-size:13px;font-family:inherit;box-sizing:border-box;';
+function renderConvCot(){
+  var s=_convCot;if(!s)return;
+  var body=document.getElementById('convCotBody'),err=document.getElementById('convCotErrores');
+  var bOk=document.getElementById('btnConvCotConfirmar'),bCan=document.getElementById('btnConvCotCancelar'),bX=document.getElementById('btnConvCotX');
+  document.getElementById('convCotTitulo').textContent='Convertir COT-'+String(s.numero||'').padStart(3,'0')+' en venta';
+  err.style.display='none';err.innerHTML='';
+  bOk.style.display='';bOk.disabled=false;bCan.disabled=false;bX.disabled=false;bCan.textContent='Cancelar';
+  bOk.textContent='✓ Confirmar venta';bOk.onclick=confirmarConversionCot;
+  if(s.fase==='cargando'){body.innerHTML='<div style="text-align:center;padding:24px;color:var(--text3);">Verificando cotización, cliente e inventario…<br><span style="font-size:11px;">(solo lectura)</span></div>';bOk.disabled=true;return;}
+  if(s.fase==='error'){body.innerHTML='<div style="padding:12px;color:var(--red);font-weight:700;">'+escHtmlCot(s.msg)+'</div>';bOk.style.display='none';bCan.textContent='Cerrar';return;}
+  if(s.fase==='guardando'){body.innerHTML='<div style="text-align:center;padding:24px;"><div style="font-weight:800;">Guardando la venta…</div><div style="font-size:12px;color:var(--text3);margin-top:6px;">No cierres ni recargues esta ventana.</div></div>';bOk.disabled=true;bCan.disabled=true;bX.disabled=true;return;}
+  if(s.fase==='resultado'){
+    var r=s.resultado||{},col=r.estado==='completada'||r.estado==='liberada'?'var(--green)':(r.manual?'var(--red)':'#B8860B');
+    var yaReg=r.codigo==='CV022'||r.codigo==='CV023'||r.codigo==='CV024';
+    var tit=yaReg?'Esta operación ya estaba registrada':({completada:'✅ Venta registrada',rechazada:'No se convirtió (no se registró nada)',error:'No se pudo completar'}[r.estado]||'⚠ Conversión incompleta');
+    var num=r.venta&&r.venta.numero_venta?' #'+String(r.venta.numero_venta).padStart(3,'0'):'';
+    body.innerHTML='<div style="padding:8px 4px;"><div style="font-size:15px;font-weight:800;color:'+col+';">'+tit+num+'</div>'
+      +(r.msg?'<div style="font-size:13px;margin-top:8px;">'+escHtmlCot(r.msg)+'</div>':'')
+      +'</div>';
+    bOk.style.display='none';bCan.textContent='Cerrar';return;
+  }
+  if(s.fase==='diagnostico'){
+    document.getElementById('convCotTitulo').textContent='Verificar COT-'+String(s.numero||'').padStart(3,'0');
+    body.innerHTML=htmlDiagConvCot(s.diag);
+    bOk.style.display='none';
+    bCan.textContent='Cerrar';return;
+  }
+  if(s.fase==='incierta'){
+    body.innerHTML='<div style="padding:8px 4px;"><div style="font-size:15px;font-weight:800;color:#B8860B;">Sin confirmación todavía</div><div style="font-size:13px;margin-top:8px;">'+escHtmlCot(s.resultado&&s.resultado.msg||'')+'</div></div>';
+    bOk.textContent='↻ Reintentar';bOk.onclick=reintentarConversionCot;bCan.textContent='Cerrar';return;
+  }
+  /* fase resumen */
+  var p=s.plan,cr=s.cliRes,h='';
+  /* Cliente */
+  h+='<div style="background:var(--bg);border-radius:10px;padding:10px 12px;margin-bottom:10px;font-size:12px;">';
+  h+='<div style="font-size:11px;font-weight:800;color:var(--text3);text-transform:uppercase;margin-bottom:4px;">Cliente</div>';
+  if(s.cliSel){h+='<div><strong>✓ '+escHtmlCot(s.cliSel.nombre)+'</strong>'+(s.cliSel.whatsapp?' · 📱 '+escHtmlCot(s.cliSel.whatsapp):'')+'</div>';}
+  else{
+    h+='<div><strong>'+escHtmlCot(s.leido.cliente_nombre||'Cliente')+'</strong>'+(s.leido.cliente_whatsapp?' · 📱 '+escHtmlCot(s.leido.cliente_whatsapp):'')+'</div>';
+    if(cr.estado==='ambiguo')h+='<div style="color:#B8860B;margin-top:4px;">⚠ '+escHtmlCot(cr.motivo)+'. Elige la ficha (no se eligió ninguna):</div>'+htmlCandidatosCot(cr.candidatos,'convCotElegirCliente');
+    else if(cr.estado==='error')h+='<div style="color:var(--red);margin-top:4px;">No se pudo consultar Clientes. Puedes vender de contado; el crédito exige un cliente identificado.</div>';
+    else h+='<div style="color:var(--text3);margin-top:4px;">Sin ficha en Clientes. Puedes vender de contado; para crédito, crea o vincula el cliente editando la cotización.</div>';
+  }
+  h+='</div>';
+  /* Direccion */
+  h+='<div style="margin-bottom:10px;"><div style="font-size:11px;font-weight:800;color:var(--text3);text-transform:uppercase;margin-bottom:4px;">Dirección de entrega</div>'
+    +'<input id="convDir" type="text" placeholder="Dirección" value="'+escHtmlCot(s.dir)+'" oninput="convCotCambio()" style="'+_estiloInpConv+'margin-bottom:6px;"/>'
+    +'<input id="convDet" type="text" placeholder="Detalle (apto, torre, referencia)" value="'+escHtmlCot(s.det)+'" oninput="convCotCambio()" style="'+_estiloInpConv+'"/>'
+    +'<div style="font-size:10px;color:var(--text3);margin-top:4px;">Se propone la dirección actual de la ficha del cliente. Lo que confirmes aquí se guarda en la venta; la ficha no cambia.</div></div>';
+  /* Productos */
+  h+='<div style="background:var(--bg);border-radius:10px;padding:10px 12px;margin-bottom:10px;"><div style="font-size:11px;font-weight:800;color:var(--text3);text-transform:uppercase;margin-bottom:6px;">Productos</div>';
+  if(p.ok){
+    p.lineas.forEach(function(l){
+      h+='<div style="display:flex;justify-content:space-between;gap:8px;font-size:12px;margin-bottom:4px;"><span>'+escHtmlCot(l.nombre)+' <span style="color:var(--text3);">×'+l.cantidad+' · '+(l.es_unidad?'unidad':'empaque x'+l.uds_empaque)+'</span></span><span style="font-weight:700;white-space:nowrap;">'+fmt(l.precio_total)+'</span></div>';
+    });
+  } else {
+    h+='<div style="color:var(--red);font-size:12px;font-weight:700;margin-bottom:4px;">No se puede convertir hasta corregir:</div><ul style="margin:0;padding-left:18px;font-size:12px;color:var(--red);">'+p.errores.map(function(x){return'<li>'+escHtmlCot(x)+'</li>';}).join('')+'</ul>';
+  }
+  h+='</div>';
+  h+='<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;background:#f0fdf4;border-radius:10px;margin-bottom:10px;"><span style="font-weight:700;">Total cotizado</span><span style="font-size:19px;font-weight:800;color:var(--green);">'+fmt(p.ok?p.total:(Array.isArray(s.leido.items)?s.leido.items:[]).reduce(function(a,it){return a+(Number(it&&it.precio_total)||0);},0))+'</span></div>';
+  if(p.ok){
+    var pi=s.pagoInput;
+    var btnTipo=function(t,txt){var on=pi.tipo===t;return'<button type="button" onclick="convCotTipoPago(\''+t+'\')" style="flex:1;padding:9px 4px;border:1.5px solid '+(on?'var(--gold)':'var(--border)')+';border-radius:8px;background:'+(on?'var(--gold-s)':'#fff')+';color:'+(on?'var(--gold)':'var(--text2)')+';font-weight:700;font-size:12px;cursor:pointer;font-family:inherit;">'+txt+'</button>';};
+    h+='<div style="font-size:11px;font-weight:800;color:var(--text3);text-transform:uppercase;margin-bottom:6px;">Pago</div>';
+    h+='<div style="display:flex;gap:6px;margin-bottom:8px;">'+btnTipo('efectivo','💵 Efectivo')+btnTipo('transferencia','🏦 Transferencia')+btnTipo('credito','💳 Crédito')+'</div>';
+    if(pi.tipo==='transferencia')h+='<select id="convOrigen" onchange="convCotCambio()" style="'+_estiloInpConv+'">'+opcionesOrigenConvCot(pi.origen)+'</select>';
+    if(pi.tipo==='credito'){
+      h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">'
+        +'<div><label style="font-size:11px;color:var(--text3);">Plazo (días)</label><input id="convPlazo" type="number" min="1" max="365" value="'+escHtmlCot(pi.plazo)+'" oninput="convCotCambio()" style="'+_estiloInpConv+'"/></div>'
+        +'<div><label style="font-size:11px;color:var(--text3);">Abono inicial</label><input id="convAbono" type="number" min="0" placeholder="0" value="'+escHtmlCot(pi.abono)+'" oninput="convCotCambio()" style="'+_estiloInpConv+'"/></div>'
+        +'</div>'
+        +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px;">'
+        +'<div><label style="font-size:11px;color:var(--text3);">Medio del abono</label><select id="convMedioAbono" onchange="convCotCambio()" style="'+_estiloInpConv+'"><option value="">—</option><option value="efectivo"'+(pi.medioAbono==='efectivo'?' selected':'')+'>Efectivo</option><option value="transferencia"'+(pi.medioAbono==='transferencia'?' selected':'')+'>Transferencia</option></select></div>'
+        +'<div><label style="font-size:11px;color:var(--text3);">Origen (si es transferencia)</label><select id="convOrigenAbono" onchange="convCotCambio()" style="'+_estiloInpConv+'">'+opcionesOrigenConvCot(pi.origenAbono)+'</select></div>'
+        +'</div>';
+    }
+    h+='<div id="convCotResumenPago" style="margin-top:10px;"></div>';
+  }
+  body.innerHTML=h;
+  if(!p.ok){bOk.style.display='none';return;}
+  convCotActualizarResumen();
+}
+function convCotElegirCliente(id){
+  var s=_convCot;if(!s||s.fase!=='resumen')return;
+  convCotLeerForm();
+  var c=cotCliCandidatos[id];if(!c)return;
+  s.cliSel=c;s.cliRes={estado:'vinculado',cliente:c};
+  if(!String(s.dir||'').trim())s.dir=c.direccion||'';
+  if(!String(s.det||'').trim())s.det=c.detalle||'';
+  s.contadoConfirmado=false;
+  renderConvCot();
+}
+function convCotLeerForm(){
+  var s=_convCot;if(!s||!s.pagoInput)return;
+  var g=function(id){var e=document.getElementById(id);return e?e.value:null;};
+  var d=g('convDir');if(d!==null)s.dir=d;
+  var t=g('convDet');if(t!==null)s.det=t;
+  var pi=s.pagoInput,v;
+  if((v=g('convOrigen'))!==null)pi.origen=v;
+  if((v=g('convPlazo'))!==null)pi.plazo=v;
+  if((v=g('convAbono'))!==null)pi.abono=v;
+  if((v=g('convMedioAbono'))!==null)pi.medioAbono=v;
+  if((v=g('convOrigenAbono'))!==null)pi.origenAbono=v;
+}
+function convCotOcultarErrores(){var e=document.getElementById('convCotErrores');if(e){e.style.display='none';e.innerHTML='';}}
+function convCotTipoPago(t){var s=_convCot;if(!s||s.fase!=='resumen')return;convCotLeerForm();convCotOcultarErrores();s.pagoInput.tipo=t;s.contadoConfirmado=false;renderConvCot();}
+function convCotCambio(){var s=_convCot;if(!s||s.fase!=='resumen')return;convCotLeerForm();convCotOcultarErrores();s.contadoConfirmado=false;convCotActualizarResumen();}
+function convCotActualizarResumen(){
+  var s=_convCot,el=document.getElementById('convCotResumenPago'),bOk=document.getElementById('btnConvCotConfirmar');
+  if(!s||!el)return;
+  var vp=validarPagoConvCot(s.pagoInput,s.plan.total,s.cliSel),p=vp.pago,h='';
+  if(vp.ok&&p.estado==='credito'){
+    h='<div style="background:#FFF8E1;border:1.5px solid #fcd34d;border-radius:8px;padding:8px 12px;font-size:12px;"><strong style="color:#B8860B;">💳 Crédito a '+p.plazo+' días</strong><div>Abono: <strong>'+fmt(p.abono)+'</strong>'+(p.abono>0?' ('+escHtmlCot(p.metodo)+(p.origen?' · '+escHtmlCot(p.origen):'')+')':'')+' · Saldo: <strong style="color:var(--red);">'+fmt(p.saldo)+'</strong></div></div>';
+  } else if(vp.ok&&p.cubreTotal){
+    h='<div style="background:#eff6ff;border:1.5px solid #93c5fd;border-radius:8px;padding:8px 12px;font-size:12px;"><strong>El abono cubre el total:</strong> se registrará como venta de <strong>CONTADO</strong> por '+fmt(s.plan.total)+' ('+escHtmlCot(p.metodo)+(p.origen?' · '+escHtmlCot(p.origen):'')+'), sin cartera.'+(s.contadoConfirmado?'<div style="margin-top:4px;font-weight:700;">Pulsa “Confirmar como contado” para guardar.</div>':'')+'</div>';
+  } else if(vp.ok){
+    h='<div style="font-size:12px;color:var(--text2);">Contado · '+escHtmlCot(p.metodo)+(p.origen?' · '+escHtmlCot(p.origen):'')+'</div>';
+  }
+  el.innerHTML=h;
+  if(bOk)bOk.textContent=(vp.ok&&p.cubreTotal&&s.contadoConfirmado)?'✓ Confirmar como contado':'✓ Confirmar venta';
+}
+/* ---------- Visibilidad de conversiones incompletas fuera de Cotizaciones ----------
+   Marca las ventas creadas por una conversion que aun no termino (venta con
+   cotizacion_id cuya cotizacion no esta vinculada a ella). */
+async function marcarVentasConversionIncompleta(lista){
+  if(!Array.isArray(lista))return;
+  var conCot=lista.filter(function(v){return v&&v.cotizacion_id;});
+  if(!conCot.length)return;
+  var ids=[];conCot.forEach(function(v){if(ids.indexOf(v.cotizacion_id)<0)ids.push(v.cotizacion_id);});
+  var filas=await leerConvCot(SB+'/rest/v1/cotizaciones?id=in.'+encodeURIComponent('('+ids.join(',')+')')+'&select=id,venta_id');
+  var porId={};(filas||[]).forEach(function(c){porId[c.id]=c;});
+  conCot.forEach(function(v){
+    var c=porId[v.cotizacion_id];
+    v._convIncompleta=filas?!(c&&c.venta_id===v.id):null; /* null = no se pudo comprobar */
+  });
+}
+var CONV_COT_INCOMPLETAS=[];
+function actualizarBannerConvIncompletas(lista){
+  if(Array.isArray(lista))CONV_COT_INCOMPLETAS=lista;
+  var el=typeof document!=='undefined'&&document.getElementById?document.getElementById('convIncompletaBanner'):null;
+  if(!el)return;
+  var n=CONV_COT_INCOMPLETAS.length;
+  if(!n){el.style.display='none';el.innerHTML='';return;}
+  el.innerHTML='⚠ <strong>'+n+' conversión'+(n>1?'es':'')+' de cotización incompleta'+(n>1?'s':'')+'</strong> ('
+    +CONV_COT_INCOMPLETAS.map(function(c){return'COT-'+String(c.numero||'').padStart(3,'0');}).join(', ')
+    +'). Ventas, Caja, Cartera e Inventario pueden no reflejarla completa. Ábrela en Cotizaciones → “Verificar”.';
+  el.style.display='block';
+}
+async function refrescarConvIncompletas(){
+  var f=await leerConvCot(SB+'/rest/v1/cotizaciones?id_licencia=eq.'+encodeURIComponent(CID)+'&estado=eq.convertida&venta_id=is.null&select=id,numero');
+  if(f)actualizarBannerConvIncompletas(f);
+}
+async function confirmarConversionCot(){
+  var s=_convCot;if(!s||s.fase!=='resumen'||!s.plan||!s.plan.ok)return;
+  if(_cotEnProceso[s.sbId]){toast('Esta cotización ya se está procesando');return;}
+  convCotLeerForm();
+  var err=document.getElementById('convCotErrores');
+  var vp=validarPagoConvCot(s.pagoInput,s.plan.total,s.cliSel);
+  if(!vp.ok){err.innerHTML=vp.errores.map(escHtmlCot).join('<br>');err.style.display='block';return;}
+  if(vp.pago.cubreTotal&&!s.contadoConfirmado){s.contadoConfirmado=true;convCotActualizarResumen();err.style.display='none';return;}
+  var cliente=s.cliSel?{id:s.cliSel.id}:null;
+  var params=parametrosConvCot(s,s.pagoInput,cliente);
+  /* Misma clave solo si se reenvian exactamente los mismos datos. */
+  var firma=JSON.stringify(params);
+  try{if(!s.envio||s.envio.firma!==firma)s.envio={firma:firma,clave:nuevaClaveConvCot()};}
+  catch(e){err.innerHTML='Este navegador no permite generar la clave de la operación. No se registró nada.';err.style.display='block';return;}
+  params.p_op_clave=s.envio.clave;
+  await enviarConversionCot(s,params);
+}
+async function enviarConversionCot(s,params){
+  _cotEnProceso[s.sbId]=true;
+  s.fase='guardando';renderConvCot();
+  var res;
+  try{res=await llamarConversionAtomicaCot(params);}
+  catch(e){console.error(e);res={estado:'incierta',msg:'Error inesperado sin confirmación. Pulsa “Reintentar”: usa la misma operación y no duplica.'};}
+  finally{delete _cotEnProceso[s.sbId];}
+  s.params=params;s.resultado=res;
+  s.fase=res.estado==='incierta'?'incierta':'resultado';
+  renderConvCot();
+  if(res.estado!=='incierta'){try{await cargarCotizacionesSB();renderCotizacionesList();renderInvTable();}catch(e2){}}
+  if(res.estado==='completada'&&res.resultado&&res.resultado.cartera_id){try{await cargarCarteraCompletaSB();}catch(e3){}}
+}
+function reintentarConversionCot(){
+  var s=_convCot;if(!s||s.fase!=='incierta'||!s.params||_cotEnProceso[s.sbId])return;
+  enviarConversionCot(s,s.params);
+}
+/* Conversiones incompletas de la VERSION ANTERIOR (pasos separados): solo lectura. */
+async function diagnosticarConversionAnteriorCot(sbId){
+  var f=await leerCotConvCot(sbId);
+  if(!f)return{estado:'error',msg:'No se pudo leer la cotización.'};
+  if(f.length!==1)return{estado:'error',msg:'La cotización ya no existe.'};
+  var row=f[0];
+  if(row.venta_id)return{estado:'completada',msg:'Esta cotización ya está vinculada a su venta.'};
+  if(row.estado!=='convertida')return{estado:'error',msg:'La cotización no tiene una conversión en curso.'};
+  var vs=await leerConvCot(SB+'/rest/v1/ventas?cotizacion_id=eq.'+encodeURIComponent(sbId)+'&select=id,numero_venta,total,estado,metodo_pago,created_at');
+  if(!vs)return{estado:'error',msg:'No se pudo consultar la venta asociada.'};
+  var d={ventas:vs,detalle:null,cartera:null,operaciones:null};
+  var inf=await escribirConvCot(SB+'/rest/v1/rpc/cotizacion_conversion_info','POST',{p_id_licencia:CID,p_cotizacion_id:sbId});
+  if(inf.tipo==='ok'&&inf.filas[0]&&Array.isArray(inf.filas[0].operaciones))d.operaciones=inf.filas[0].operaciones;
+  if(vs.length===1){
+    var det=await leerConvCot(SB+'/rest/v1/detalle_ventas?venta_id=eq.'+encodeURIComponent(vs[0].id)+'&select=id');
+    var car=await leerConvCot(SB+'/rest/v1/cartera?venta_id=eq.'+encodeURIComponent(vs[0].id)+'&select=id,saldo_pendiente');
+    d.detalle=det?det.length:null;d.cartera=car?car.length:null;
+  }
+  return{estado:'diagnostico',diag:d};
+}
 async function verificarYRecuperarConversionCotizacion(id){
   var cot=COTIZACIONES.find(function(c){return c.id===id;});
   if(!cot){toast('Cotización no encontrada');return;}
-  var sbId=cot._sbId;
-  if(!sbId){toast('Cotización sin identificador válido en Supabase');return;}
-  var GH={'apikey':SK,'Authorization':'Bearer '+SK};
-  try{
-    var rV=await fetch(SB+'/rest/v1/ventas?cotizacion_id=eq.'+sbId+'&id_cliente=eq.'+CID+'&select=*',{headers:GH});
-    if(!rV.ok){toast('No se pudo consultar la venta asociada — inténtalo de nuevo');return;}
-    var ventas=await rV.json();
-
-    if(ventas.length>1){
-      /* Imposible bajo idx_ventas_cotizacion_unica. Si ocurre, no se toca nada. */
-      toast('🔴 ANOMALÍA: hay '+ventas.length+' ventas para esta cotización. No se modificó nada — revisión manual requerida.');
-      return;
-    }
-
-    if(ventas.length===0){
-      /* La venta nunca llegó a crearse: es seguro liberar la cotización. */
-      if(!confirm('No se encontró ninguna venta para esta cotización.\n\nLa conversión quedó incompleta y puede liberarse para volver a intentarla.\n\n¿Liberar la cotización?'))return;
-      var liberado=await liberarClaimCot(sbId);
-      await cargarCotizacionesSB();renderCotizacionesList();
-      if(liberado) toast('✅ Cotización liberada — ya puedes convertirla de nuevo');
-      else toast('No se pudo liberar la cotización — es posible que su estado haya cambiado');
-      return;
-    }
-
-    /* Existe exactamente 1 venta: se repara, nunca se elimina ni se duplica. */
-    var v=ventas[0];
-    var numTxt='#'+String(v.numero_venta||'').padStart(3,'0');
-    if(!confirm('Se encontró la venta '+numTxt+' asociada a esta cotización.\n\nSe completará la vinculación y el detalle si falta.\nLa venta NO se elimina ni se duplica.\n\n¿Continuar?'))return;
-
-    /* Reparar detalle si esta vacio */
-    var detalleMsg='';
-    var rD=await fetch(SB+'/rest/v1/detalle_ventas?venta_id=eq.'+v.id+'&select=id',{headers:GH});
-    if(rD.ok){
-      var det=await rD.json();
-      if(!det.length){
-        var rCot=await fetch(SB+'/rest/v1/cotizaciones?id=eq.'+sbId+'&select=items',{headers:GH});
-        var itemsRec=rCot.ok?((await rCot.json())[0]||{}).items||[]:[];
-        if(itemsRec.length){
-          var rDetNew=await fetch(SB+'/rest/v1/detalle_ventas',{method:'POST',headers:H,body:JSON.stringify(itemsRec.map(function(it){
-            return {venta_id:v.id,prod_id:it.prod_id,producto_nombre:it.nombre,categoria:'',cantidad:it.cantidad,precio_unitario:it.precio_unitario,precio_total:it.precio_total,es_unidad:false,uds_empaque:1};
-          }))});
-          detalleMsg=rDetNew.ok?' · detalle restaurado':' · el detalle NO se pudo restaurar';
-        }
-      }
-    }
-
-    var rLink=await fetch(SB+'/rest/v1/cotizaciones?id=eq.'+sbId,{method:'PATCH',headers:H,
-      body:JSON.stringify({venta_id:v.id,estado:'convertida',updated_at:new Date().toISOString()})});
-    var linkOk=false;
-    if(rLink.ok){var lf=await rLink.json();linkOk=!!(lf&&lf.length);}
-    await cargarCotizacionesSB();renderCotizacionesList();
-    if(linkOk) toast('✅ Conversión recuperada — vinculada a la venta '+numTxt+detalleMsg);
-    else toast('No se pudo vincular la cotización con la venta '+numTxt+' — inténtalo de nuevo');
-  }catch(e){
-    console.error(e);
-    toast('Error al verificar la conversión — no se modificó nada');
-  }
+  _convCot={sbId:cot._sbId,cotId:id,numero:cot.numero,fase:'cargando'};
+  document.getElementById('modalConvCot').style.display='flex';
+  renderConvCot();
+  var estado=_convCot,res;
+  try{res=await diagnosticarConversionAnteriorCot(cot._sbId);}
+  catch(e){console.error(e);res={estado:'error',msg:'No se pudo verificar. No se modificó nada.'};}
+  if(_convCot!==estado)return;
+  if(res.estado==='diagnostico'){_convCot.fase='diagnostico';_convCot.diag=res.diag;}
+  else{_convCot.fase='resultado';_convCot.resultado=res;}
+  renderConvCot();
 }
+function htmlDiagConvCot(d){
+  var h='<div style="font-size:13px;line-height:1.6;">'
+    +'<div style="font-weight:800;color:var(--red);margin-bottom:6px;">'+(d.operaciones&&d.operaciones.length?'Esta cotización figura como convertida, pero no tiene venta vinculada.':'Conversión incompleta hecha con la versión anterior (pasos separados).')+'</div>';
+  if(d.operaciones&&d.operaciones.length){
+    var elim=d.operaciones.filter(function(o){return !o.venta_existe;}).length;
+    h+='<div><strong>Operaciones registradas:</strong> '+d.operaciones.length+(elim?' · <strong>'+elim+' con la venta eliminada</strong>':'')+'</div>'
+      +(elim?'<div>La venta de esa operación se eliminó (la eliminación restauró el inventario). La operación NO se recrea ni se descuenta de nuevo; no se vuelve a convertir desde aquí.</div>':'');
+  }
+  if(!d.ventas.length&&!(d.operaciones&&d.operaciones.length))h+='<div><strong>Venta:</strong> no hay venta registrada para esta cotización.</div>'
+    +'<div>La versión anterior descontaba el inventario <em>antes</em> de crear la venta: puede haber stock descontado sin venta. No se puede saber desde aquí.</div>';
+  else if(d.ventas.length){
+    var v=d.ventas[0];
+    h+='<div><strong>Venta:</strong> #'+escHtmlCot(String(v.numero_venta||'').padStart(3,'0'))+' · '+fmt(v.total||0)+' · '+escHtmlCot(v.estado||'')+' · '+escHtmlCot(v.metodo_pago||'')+(d.ventas.length>1?' · <strong style="color:var(--red);">hay '+d.ventas.length+' ventas</strong>':'')+'</div>'
+      +'<div><strong>Detalle:</strong> '+(d.detalle==null?'no se pudo leer':d.detalle+' línea(s)')+'</div>'
+      +'<div><strong>Cartera:</strong> '+(d.cartera==null?'no se pudo leer':(d.cartera?'registrada':'sin cartera'))+'</div>';
+  }
+  h+='<div style="margin-top:8px;color:var(--text2);">No se repara automáticamente. Requiere revisión manual según el procedimiento del informe del hotfix (conteo físico y conciliación de la venta).</div>';
+  return h+'</div>';
+}
+function textoProgresoConvCot(items){
+  return 'Figura como convertida pero no tiene venta vinculada (conversión de una versión anterior o venta eliminada). No se repara automáticamente.';
+}
+/* ===== HOTFIX COTIZACIONES: CONVERSION EN VENTA — FIN ===== */
 
 async function eliminarCotizacion(id){
-  if(!confirm('¿Eliminar esta cotización?'))return;
   var row=COTIZACIONES.find(function(c){return c.id===id;});
   if(!row)return;
+  /* HOTFIX COTIZACIONES: una cotizacion convertida (o con conversion incompleta) guarda el
+     registro de que inventario se desconto; borrarla lo perderia. */
+  if(row.estado==='convertida'){toast(row.venta_id?'No se puede eliminar una cotización ya convertida en venta':'No se puede eliminar: la conversión está incompleta. Usa “Verificar”');return;}
+  if(!confirm('¿Eliminar esta cotización?'))return;
   try{
     var resp=await fetch(SB+'/rest/v1/cotizaciones?id=eq.'+row._sbId,{method:'DELETE',headers:H});
     if(!resp.ok){toast('Error al eliminar cotización — no se eliminó');return;}
@@ -13274,7 +13694,7 @@ function renderCotizacionesList(){
         +(cot.wa?'<div style="font-size:11px;color:var(--text3);">📱 '+cot.wa+'</div>':'')
         +'<div style="margin-left:auto;font-size:11px;font-weight:700;padding:2px 8px;border-radius:10px;background:'+badgeBg+';color:'+badgeCol+'">'+badgeTxt+'</div>'
       +'</div>'
-      +(incompleta?'<div style="font-size:11px;color:var(--red);background:var(--red-bg,#fef2f2);border-left:3px solid var(--red);border-radius:0 6px 6px 0;padding:7px 10px;margin-bottom:8px;">La conversión se interrumpió. Verifica si la venta alcanzó a crearse antes de volver a intentarlo.</div>':'')
+      +(incompleta?'<div style="font-size:11px;color:var(--red);background:var(--red-bg,#fef2f2);border-left:3px solid var(--red);border-radius:0 6px 6px 0;padding:7px 10px;margin-bottom:8px;">'+escHtmlCot(textoProgresoConvCot(cot.items))+' Usa “Verificar” para ver el diagnóstico.</div>':'')
       +'<div style="font-size:12px;color:var(--text3);margin-bottom:8px;">'+cot.items.length+' productos · Creado: '+fc+' · Vence: '+fv+'</div>'
       +'<div style="font-size:16px;font-weight:800;color:var(--green);margin-bottom:10px;">'+fmt(cot.total)+'</div>'
       +'<div style="display:flex;gap:6px;flex-wrap:wrap;">'
@@ -13282,7 +13702,7 @@ function renderCotizacionesList(){
         +(cot.estado==='pendiente'?'<button onclick="cambiarEstadoCot('+cot.id+',\'aprobada\')" style="font-size:11px;padding:4px 10px;border:1px solid var(--green);border-radius:6px;background:var(--green-bg,#f0fdf4);color:var(--green);cursor:pointer;font-family:inherit;">✅ Aprobar</button>':'')
         +(cot.estado==='pendiente'?'<button onclick="cambiarEstadoCot('+cot.id+',\'rechazada\')" style="font-size:11px;padding:4px 10px;border:1px solid var(--red-b);border-radius:6px;background:var(--red-bg,#fef2f2);color:var(--red);cursor:pointer;font-family:inherit;">❌ Rechazar</button>':'')
         +(cot.estado==='aprobada'?'<button onclick="convertirCotVenta('+cot.id+')" style="font-size:11px;padding:4px 10px;border:1px solid var(--gold-b);border-radius:6px;background:var(--gold-s);color:var(--gold);cursor:pointer;font-family:inherit;font-weight:700;">🛒 Convertir en venta</button>':'')
-        +(incompleta?'<button onclick="verificarYRecuperarConversionCotizacion('+cot.id+')" style="font-size:11px;padding:4px 10px;border:1px solid var(--red-b);border-radius:6px;background:var(--red-bg,#fef2f2);color:var(--red);cursor:pointer;font-family:inherit;font-weight:700;">🔧 Verificar y recuperar</button>':'')
+        +(incompleta?'<button onclick="verificarYRecuperarConversionCotizacion('+cot.id+')" style="font-size:11px;padding:4px 10px;border:1px solid var(--red-b);border-radius:6px;background:var(--red-bg,#fef2f2);color:var(--red);cursor:pointer;font-family:inherit;font-weight:700;">🔧 Verificar</button>':'')
         +(cot.wa?'<button onclick="enviarCotWAById('+cot.id+')" style="font-size:11px;padding:4px 10px;border:1px solid var(--green);border-radius:6px;background:var(--green-bg,#f0fdf4);color:var(--green);cursor:pointer;font-family:inherit;">💬 WhatsApp</button>':'')
         +'<button onclick="eliminarCotizacion('+cot.id+')" style="font-size:11px;padding:4px 10px;border:1px solid var(--red-b);border-radius:6px;background:var(--red-bg,#fef2f2);color:var(--red);cursor:pointer;font-family:inherit;">🗑</button>'
       +'</div>'
