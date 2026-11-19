@@ -5,7 +5,7 @@
    - Una version nueva queda en ESPERA; solo pasa a activa cuando la pagina lo pide ("lacava-activar") tras una accion del usuario.
    - Este archivo NUNCA recarga ni navega ninguna pestana.
    - BUILD lo sella scripts/sellar-version.cjs (coincide con APP_BUILD de la pagina). No editar a mano. */
-var BUILD = '546c03efb73c';
+var BUILD = '622b33bb2ffb';
 var CACHE = 'lacava-b-' + BUILD;
 var SHELL = ['/', '/index.html', '/dashboard_lacava.html'];
 var OPCIONALES = [

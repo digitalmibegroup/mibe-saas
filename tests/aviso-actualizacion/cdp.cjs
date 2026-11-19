@@ -62,7 +62,7 @@ const LICENCIA = [{ id_cliente: 'lacava', activo: true, plan: 'Prueba local', ve
 
 class Pagina {
   constructor(con, ctx, op) {
-    this.con = con; this.ctx = ctx; this.op = op; this.navegaciones = 0; this.externas = []; this.supabase = []; this.retener = null; this.fallar = false; this.datos = {}; this.consola = [];
+    this.con = con; this.ctx = ctx; this.op = op; this.navegaciones = 0; this.externas = []; this.supabase = []; this.retener = null; this.fallar = false; this.datos = {}; this.manejador = null; this.consola = [];
   }
   async abrir() {
     const t = await this.con.enviar('Target.createTarget', { url: 'about:blank', browserContextId: this.ctx });
@@ -93,6 +93,7 @@ class Pagina {
       const metodo = p.request.method;
       this.supabase.push(metodo + ' ' + u.pathname);
       if (metodo === 'OPTIONS') return responder(204, '');
+      if (this.manejador) { const r = this.manejador(metodo, u, p.request.postData); if (r) return responder(r.codigo, JSON.stringify(r.cuerpo)); }   /* base simulada con estado (la define la prueba) */
       if (metodo !== 'GET' && this.retener) await this.retener;          /* guardado "en curso": la respuesta se retiene hasta liberarla */
       if (metodo !== 'GET' && this.fallar) return responder(500, '{"message":"error simulado"}');   /* guardado que falla */
       if (metodo === 'GET') { const k = Object.keys(this.datos).find(c => (u.pathname + u.search).indexOf(c) >= 0); return responder(200, JSON.stringify(k ? this.datos[k] : (u.pathname.endsWith('/licencias') ? LICENCIA : []))); }   /* datos de prueba por ruta */

@@ -61,8 +61,8 @@ try {
   if (-not $listo) { Fallar 3 'El PostgreSQL desechable no llego a estar listo.' }
   Marca 'PostgreSQL 17 desechable iniciado SIN RED' $true 'contenedor temporal, datos en memoria'
   $null = Dk @('exec', $cont, 'psql', '-U', 'postgres', '-h', '127.0.0.1', '-v', 'ON_ERROR_STOP=1', '-c', 'CREATE DATABASE restaurada')
-  # roles que el esquema public suele nombrar (politicas, permisos); no tienen privilegios ni datos
-  $null = Dk @('exec', $cont, 'psql', '-U', 'postgres', '-h', '127.0.0.1', '-d', 'restaurada', '-c', "DO `$`$ BEGIN CREATE ROLE anon NOLOGIN; EXCEPTION WHEN duplicate_object THEN NULL; END `$`$; DO `$`$ BEGIN CREATE ROLE authenticated NOLOGIN; EXCEPTION WHEN duplicate_object THEN NULL; END `$`$; DO `$`$ BEGIN CREATE ROLE service_role NOLOGIN; EXCEPTION WHEN duplicate_object THEN NULL; END `$`$;")
+  # roles que el esquema public suele nombrar (politicas, permisos); no tienen privilegios ni datos. cotconv_ejecutor: lo usan las politicas del hotfix de cotizaciones (los roles no viajan en pg_dump)
+  $null = Dk @('exec', $cont, 'psql', '-U', 'postgres', '-h', '127.0.0.1', '-d', 'restaurada', '-c', "DO `$`$ BEGIN CREATE ROLE anon NOLOGIN; EXCEPTION WHEN duplicate_object THEN NULL; END `$`$; DO `$`$ BEGIN CREATE ROLE authenticated NOLOGIN; EXCEPTION WHEN duplicate_object THEN NULL; END `$`$; DO `$`$ BEGIN CREATE ROLE service_role NOLOGIN; EXCEPTION WHEN duplicate_object THEN NULL; END `$`$; DO `$`$ BEGIN CREATE ROLE cotconv_ejecutor NOLOGIN; EXCEPTION WHEN duplicate_object THEN NULL; END `$`$;")
   $null = Dk @('exec', $cont, 'psql', '-U', 'postgres', '-h', '127.0.0.1', '-d', 'restaurada', '-c', 'DROP SCHEMA public CASCADE')   # el respaldo trae su propio esquema public
   $rs = Dk @('exec', $cont, 'pg_restore', '-U', 'postgres', '-h', '127.0.0.1', '-d', 'restaurada', '--no-owner', '--no-acl', ('/respaldo/' + $nombre))
   $errRestore = @($rs.salida | Where-Object { $_ -match 'error' }); $totalErrRestore = $errRestore.Count

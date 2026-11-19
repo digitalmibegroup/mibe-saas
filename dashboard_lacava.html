@@ -971,6 +971,7 @@ body.pos-sb-off .pos-sb-btn{background:var(--gold-s);border-color:var(--gold-b);
           <div class="inv-filter-btns">
             <div class="inv-fb" id="invFbLow" onclick="toggleInvFilter('low')">&#128993; Stock bajo</div>
             <div class="inv-fb" id="invFbOut" onclick="toggleInvFilter('out')">&#128308; Agotados</div>
+            <div class="inv-fb" id="invFbHidden" onclick="toggleInvFilter('hidden')">&#128065; Ocultos (<span id="invHiddenN">0</span>)</div>
           </div>
           <button class="inv-btn-add" onclick="openInvModal(null,'entrada')">+ Entrada mercancia</button>
           <button class="inv-btn-add" style="background:var(--blue);" onclick="abrirImportGS()">&#128202; Importar Sheets</button>
@@ -3158,7 +3159,7 @@ async function ejecutarImportGS(){
    Reglas: nunca se recarga solo; el boton "Actualizar" es la unica forma; se bloquea mientras hay una operacion en curso
    (completa, tambien entre peticiones); se advierte si hay datos sin guardar; otras pestanas no se recargan;
    no se avisa en la primera instalacion ni sin conexion. */
-var APP_BUILD='546c03efb73c';
+var APP_BUILD='622b33bb2ffb';
 (function(){
   if(!('serviceWorker' in navigator))return;
   var sw=navigator.serviceWorker;
@@ -5027,7 +5028,8 @@ function cerrarHistorialCliente(){document.getElementById('histCliModal').style.
 /* ==================== MODULO INVENTARIO ==================== */
 var invFiltro='todos',invCatA='Todas',invModalId=null,invTipo='entrada';
 
-function renderInventario(){
+async function renderInventario(){
+  await cargarExistenciasBodegasSB();   /* para saber que productos ocultos siguen sin existencias en ninguna ubicacion */
   renderInvStats();
   renderInvAlerts();
   renderInvTable();
@@ -5054,6 +5056,7 @@ function showInvTab(tab){
   document.getElementById('invTabBtnTraslados').classList.toggle('on', esTraslados);
   if(esBodegas) cargarYRenderBodega();
   if(esTraslados) cargarYRenderTraslados();
+  if(esPrincipal) cargarExistenciasBodegasSB().then(invRefrescarVista);   /* tras un traslado, un producto oculto con existencias en bodega vuelve a aparecer */
 }
 
 /* Read Path: SIEMPRE filtrado por id_licencia, SIEMPRE Supabase, nunca localStorage. */
@@ -6373,7 +6376,113 @@ function toggleInvFilter(f){
   invFiltro=(invFiltro===f)?'todos':f;
   document.getElementById('invFbLow').classList.toggle('on',invFiltro==='low');
   document.getElementById('invFbOut').classList.toggle('on',invFiltro==='out');
+  document.getElementById('invFbHidden').classList.toggle('on',invFiltro==='hidden');
   renderInvTable();
+}
+
+/* ==================== OCULTAR PRODUCTOS EN INVENTARIO (solo presentacion) ====================
+   Un producto se OCULTA de la lista habitual del modulo Inventario (y de sus contadores y alertas) cuando el usuario lo pide Y no tiene existencias
+   en NINGUNA ubicacion: inventario.stock = 0, inventario.uds_sueltas = 0 y ninguna fila de inventario_bodega con stock o uds_sueltas distintos de 0.
+   Es solo una marca (inventario.oculto): el producto, sus referencias (compras, ventas, cotizaciones, traslados, presentaciones, catalogo) y su
+   historial no se tocan, y los demas modulos (POS, Compras, Cotizaciones, Catalogo, Bodegas) siguen leyendo INVENTARIO completo.
+   Si un producto oculto recibe existencias (compra, traslado, ajuste de entrada, devolucion...), vuelve a aparecer solo y la marca se limpia. */
+var INV_BODEGA_CON_STOCK=null;   /* null = no se pudo leer: ante la duda no se oculta nada; si no, {prod_id:true} de los productos con existencias en bodega */
+async function cargarExistenciasBodegasSB(){
+  try{
+    var r=await fetch(SB+'/rest/v1/inventario_bodega?id_licencia=eq.'+CID+'&select=prod_id,stock,uds_sueltas',{headers:{'apikey':SK,'Authorization':'Bearer '+SK}});
+    if(!r.ok){INV_BODEGA_CON_STOCK=null;return false;}
+    var m={};
+    (await r.json()).forEach(function(f){if((parseInt(f.stock)||0)!==0||(parseInt(f.uds_sueltas)||0)!==0)m[f.prod_id]=true;});
+    INV_BODEGA_CON_STOCK=m;return true;
+  }catch(e){INV_BODEGA_CON_STOCK=null;return false;}
+}
+function invSinExistencias(p){return p.stock===0&&(p.uds_sueltas||0)===0&&INV_BODEGA_CON_STOCK!==null&&!INV_BODEGA_CON_STOCK[p.id];}
+function invEstaOculto(p){return p.oculto===true&&invSinExistencias(p);}
+function invVisibles(){return INVENTARIO.filter(function(p){return !invEstaOculto(p);});}
+function invOcultos(){return INVENTARIO.filter(invEstaOculto);}
+function invHeadersLectura(){return {'apikey':SK,'Authorization':'Bearer '+SK};}
+/* Un producto oculto que recibio existencias vuelve a aparecer (la regla de arriba ya lo muestra) y se limpia la marca para que no se oculte
+   solo si luego se agota. Mejor esfuerzo: si falla, sigue visible y se reintenta al recargar. */
+var INV_REINTENTO_LIMPIEZA_MS=5000;
+function invLimpiarMarca(p){
+  if(!p||p.oculto!==true||p._limpiando||Date.now()<(p._reintentoDesde||0))return;
+  p._limpiando=true;   /* una sola peticion a la vez por producto */
+  var libre=function(){p._limpiando=false;};   /* se libera SIEMPRE, con exito o con fallo */
+  var fallo=function(){p._reintentoDesde=Date.now()+INV_REINTENTO_LIMPIEZA_MS;};   /* tras un fallo se reintenta como pronto a los 5 s */
+  try{
+    fetch(SB+'/rest/v1/inventario?id=eq.'+encodeURIComponent(p.id)+'&id_licencia=eq.'+CID,{method:'PATCH',headers:H,body:JSON.stringify({oculto:false})})
+      .then(function(r){if(r.ok)p.oculto=false;else fallo();},fallo).then(libre,libre);
+  }catch(e){fallo();libre();}
+}
+function invLimpiarOcultosConExistencias(){
+  INVENTARIO.forEach(function(p){
+    if(p.oculto!==true)return;
+    if(!(p.stock!==0||(p.uds_sueltas||0)!==0||(INV_BODEGA_CON_STOCK&&INV_BODEGA_CON_STOCK[p.id])))return;
+    invLimpiarMarca(p);
+  });
+}
+/* Se llama desde ajustarStockAtomicoSB, el camino por el que entran existencias al inventario principal (entrada, ajuste, compra recibida, devoluciones):
+   la marca se limpia EN EL MOMENTO de recibir, sin esperar a que se abra Inventario. */
+function invLimpiarMarcaTrasEntrada(prodId,stock,sueltas){
+  try{
+    if(!stock&&!sueltas)return;
+    var p=INVENTARIO.find(function(x){return x.id===prodId;});
+    if(p&&p.oculto===true)invLimpiarMarca(p);
+  }catch(e){}
+}
+function invRefrescarVista(){renderInvTable();renderInvStats();renderInvAlerts();}
+async function ocultarProductoInv(id){
+  var p=INVENTARIO.find(function(x){return x.id===id;});
+  if(!p)return;
+  try{
+    /* Lectura REAL (no el array local): inventario principal y bodega. Ante cualquier duda no se oculta. */
+    var rP=await fetch(SB+'/rest/v1/inventario?id=eq.'+encodeURIComponent(id)+'&id_licencia=eq.'+CID+'&select=id,stock,uds_sueltas',{headers:invHeadersLectura()});
+    var rB=await fetch(SB+'/rest/v1/inventario_bodega?prod_id=eq.'+encodeURIComponent(id)+'&id_licencia=eq.'+CID+'&select=stock,uds_sueltas',{headers:invHeadersLectura()});
+    if(!rP.ok||!rB.ok){toast('No se pudo verificar las existencias — el producto no se ocultó.');return;}
+    var filas=await rP.json(),bod=await rB.json();
+    if(!filas.length){toast('Este producto ya no existe en el inventario — actualizando la lista');await cargarInventarioSB();invRefrescarVista();return;}
+    if((parseInt(filas[0].stock)||0)!==0||(parseInt(filas[0].uds_sueltas)||0)!==0){
+      p.stock=parseInt(filas[0].stock)||0;p.uds_sueltas=parseInt(filas[0].uds_sueltas)||0;invRefrescarVista();
+      toast('No se puede ocultar: el producto tiene existencias en el inventario principal.');return;
+    }
+    if(bod.some(function(b){return (parseInt(b.stock)||0)!==0||(parseInt(b.uds_sueltas)||0)!==0;})){
+      if(INV_BODEGA_CON_STOCK)INV_BODEGA_CON_STOCK[id]=true;invRefrescarVista();
+      toast('No se puede ocultar: el producto tiene existencias en la bodega.');return;
+    }
+    /* PATCH condicionado a stock=0 y uds_sueltas=0: si cambiaron entre la lectura y la escritura no se actualiza nada. */
+    var r=await fetch(SB+'/rest/v1/inventario?id=eq.'+encodeURIComponent(id)+'&id_licencia=eq.'+CID+'&stock=eq.0&uds_sueltas=eq.0',{method:'PATCH',headers:H,body:JSON.stringify({oculto:true})});
+    if(!r.ok){
+      var tx='';try{tx=await r.text();}catch(e1){}
+      toast(/oculto/.test(tx)?'Falta activar esta función en la base de datos (columna "oculto"). No se ocultó el producto.':'No se pudo ocultar — no se guardó el cambio.');
+      return;
+    }
+    var afectadas=await r.json();
+    if(!afectadas||!afectadas.length){toast('El inventario del producto cambió justo ahora — no se ocultó. Inténtalo de nuevo.');await cargarInventarioSB();invRefrescarVista();return;}
+    p.oculto=true;
+    /* Comprobacion posterior: si una entrada en la bodega llego entre la lectura y la escritura, la marca queda guardada pero la visibilidad efectiva
+       la corrige (el producto sigue visible) y la marca se limpia (invLimpiarOcultosConExistencias, al refrescar la vista). */
+    var rB2=await fetch(SB+'/rest/v1/inventario_bodega?prod_id=eq.'+encodeURIComponent(id)+'&id_licencia=eq.'+CID+'&select=stock,uds_sueltas',{headers:invHeadersLectura()});
+    var bod2=rB2.ok?await rB2.json():[];
+    if(bod2.some(function(b){return (parseInt(b.stock)||0)!==0||(parseInt(b.uds_sueltas)||0)!==0;})){
+      if(INV_BODEGA_CON_STOCK)INV_BODEGA_CON_STOCK[id]=true;
+      invRefrescarVista();
+      toast('El producto recibió existencias en la bodega justo ahora: sigue visible.');
+      return;
+    }
+    invRefrescarVista();
+    toast('Producto oculto. Puedes recuperarlo en «Ocultos».');
+  }catch(e){console.error('Error ocultando producto:',e);toast('No se pudo ocultar — no se guardó el cambio.');}
+}
+async function mostrarProductoInv(id){
+  var p=INVENTARIO.find(function(x){return x.id===id;});
+  if(!p)return;
+  try{
+    var r=await fetch(SB+'/rest/v1/inventario?id=eq.'+encodeURIComponent(id)+'&id_licencia=eq.'+CID,{method:'PATCH',headers:H,body:JSON.stringify({oculto:false})});
+    if(!r.ok){toast('No se pudo volver a mostrar — no se guardó el cambio.');return;}
+    p.oculto=false;
+    invRefrescarVista();
+    toast('Producto visible de nuevo en Inventario.');
+  }catch(e){console.error('Error mostrando producto:',e);toast('No se pudo volver a mostrar — no se guardó el cambio.');}
 }
 
 /* ==================== COSTO EQUIVALENTE (lectura desde producto_presentaciones) ====================
@@ -6480,10 +6589,12 @@ function cerrarDetalleCosto(){document.getElementById('modalCostoDetalle').style
    homologar con Bodega (costo) requeriria cambiar tambien la etiqueta — decision de negocio, no
    tomada en este hito. */
 function renderInvStats(){
-  var sinStock=INVENTARIO.filter(function(p){return p.stock===0;}).length;
-  var stockBajo=INVENTARIO.filter(function(p){return p.stock>0&&p.stock<=p.stock_min;}).length;
-  var val=INVENTARIO.reduce(function(s,p){return s+(p.stock*p.precio_venta);},0);
-  document.getElementById('invStatTotal').textContent=INVENTARIO.length;
+  var vis=invVisibles();   /* los productos ocultos no cuentan en los totales ni en las alertas habituales */
+  var sinStock=vis.filter(function(p){return p.stock===0;}).length;
+  var stockBajo=vis.filter(function(p){return p.stock>0&&p.stock<=p.stock_min;}).length;
+  var val=vis.reduce(function(s,p){return s+(p.stock*p.precio_venta);},0);
+  var nOc=document.getElementById('invHiddenN');if(nOc)nOc.textContent=invOcultos().length;
+  document.getElementById('invStatTotal').textContent=vis.length;
   document.getElementById('invStatLow').textContent=stockBajo;
   document.getElementById('invStatOut').textContent=sinStock;
   document.getElementById('invStatVal').textContent=fmt(val);
@@ -6491,8 +6602,9 @@ function renderInvStats(){
 
 function renderInvAlerts(){
   var zone=document.getElementById('invAlertZone');
-  var sinStock=INVENTARIO.filter(function(p){return p.stock===0;});
-  var stockBajo=INVENTARIO.filter(function(p){return p.stock>0&&p.stock<=p.stock_min;});
+  var vis=invVisibles();
+  var sinStock=vis.filter(function(p){return p.stock===0;});
+  var stockBajo=vis.filter(function(p){return p.stock>0&&p.stock<=p.stock_min;});
   var html='';
   if(sinStock.length){html+='<div class="inv-alert-bar" onclick="toggleInvFilter(\'out\')"><div class="inv-alert-dot"></div><div class="inv-alert-text">'+sinStock.length+' producto'+(sinStock.length>1?'s':'')+' agotado'+(sinStock.length>1?'s':'')+' - requiere reposicion urgente</div><div class="inv-alert-count">Ver</div></div>';}
   if(stockBajo.length){html+='<div class="inv-alert-bar yellow" onclick="toggleInvFilter(\'low\')"><div class="inv-alert-dot"></div><div class="inv-alert-text">'+stockBajo.length+' producto'+(stockBajo.length>1?'s':'')+' con stock bajo del minimo</div><div class="inv-alert-count">Ver</div></div>';}
@@ -6501,14 +6613,16 @@ function renderInvAlerts(){
 
 async function renderInvTable(){
   var q=document.getElementById('invSearch').value.toLowerCase();
-  var data=INVENTARIO.filter(function(p){
+  invLimpiarOcultosConExistencias();
+  var verOcultos=(invFiltro==='hidden');   /* vista "Ocultos": solo los ocultos; en las demas, la lista habitual sin ellos */
+  var data=(verOcultos?invOcultos():invVisibles()).filter(function(p){
     var matchCat=invCatA==='Todas'||p.categoria===invCatA;
     var matchQ=!q||p.nombre.toLowerCase().indexOf(q)>=0||p.categoria.toLowerCase().indexOf(q)>=0;
-    var matchF=invFiltro==='todos'||(invFiltro==='low'&&p.stock>0&&p.stock<=p.stock_min)||(invFiltro==='out'&&p.stock===0);
+    var matchF=invFiltro==='todos'||verOcultos||(invFiltro==='low'&&p.stock>0&&p.stock<=p.stock_min)||(invFiltro==='out'&&p.stock===0);
     return matchCat&&matchQ&&matchF;
   });
   var tbody=document.getElementById('invTableBody');
-  if(!data.length){tbody.innerHTML='<tr><td colspan="7" style="text-align:center;padding:40px;color:#9CA3AF;">Sin resultados</td></tr>';return;}
+  if(!data.length){tbody.innerHTML='<tr><td colspan="7" style="text-align:center;padding:40px;color:#9CA3AF;">'+(verOcultos?'No hay productos ocultos':'Sin resultados')+'</td></tr>';return;}
   await cargarPresentacionesCache();
   tbody.innerHTML=data.map(function(p){
     var estado=p.stock===0?'out':p.stock<=p.stock_min?'low':'ok';
@@ -6569,11 +6683,18 @@ async function renderInvTable(){
     row+='<span class="inv-sbadge '+estado+'" style="align-self:flex-start;">'+label+'</span>';
     row+='</div>';
     row+='</td>';
+    if(verOcultos){
+      row+='<td><div style="display:flex;align-items:center;justify-content:center;gap:4px;">';
+      row+='<div class="inv-act-btn" data-accion="mostrar" onclick="mostrarProductoInv(\''+pid+'\')" title="Volver a mostrar" style="width:auto;padding:0 10px;font-size:11px;font-weight:700;white-space:nowrap;">Volver a mostrar</div>';
+      row+='</div></td></tr>';
+      return row;
+    }
     row+='<td><div style="display:flex;align-items:center;justify-content:center;gap:4px;">';
     row+='<div class="inv-act-btn add" onclick="openInvModal(\''+pid+'\',\'entrada\')" title="Entrada">+</div>';
     row+='<div class="inv-act-btn" onclick="openInvModal(\''+pid+'\',\'salida\')" title="Salida">&minus;</div>';
     row+='<div class="inv-act-btn" onclick="openEditProd(\''+pid+'\')" title="Editar" style="font-size:11px;">&#9998;</div>';
     if(estado!=='ok') row+='<div class="inv-act-btn" onclick="crearCompraDesdeInventario(\''+pid+'\')" title="Crear compra" style="background:var(--gold-s);border-color:var(--gold-b);color:var(--gold);font-size:11px;">&#128230;</div>';
+    if(p.stock===0&&(p.uds_sueltas||0)===0) row+='<div class="inv-act-btn" data-accion="ocultar" onclick="ocultarProductoInv(\''+pid+'\')" title="Ocultar (sin existencias)" style="width:auto;padding:0 8px;font-size:11px;font-weight:700;white-space:nowrap;">Ocultar</div>';
     row+='<div class="inv-act-btn" onclick="eliminarProducto(\''+pid+'\')" title="Eliminar" style="background:var(--red-bg);border-color:var(--red-b);color:var(--red);font-size:12px;">&#128465;</div>';
     row+='</div></td>';
     row+='</tr>';
@@ -10114,7 +10235,8 @@ async function cargarInventarioSB(){
           empaque: p.empaque||'unidad',
           uds_empaque: parseInt(p.uds_empaque)||1,
           uds_sueltas: parseInt(p.uds_sueltas)||0,
-          imagen: p.imagen||null
+          imagen: p.imagen||null,
+          oculto: p.oculto===true   /* solo presentacion del modulo Inventario (ver "OCULTAR PRODUCTOS EN INVENTARIO") */
         };
       });
       /* Rebuild CATS_POS from loaded products */
@@ -10398,7 +10520,7 @@ async function ajustarStockAtomicoSB(prodId, calcular){
         {method:'PATCH',headers:H,body:JSON.stringify({stock:nuevo.stock,uds_sueltas:nuevo.uds_sueltas})});
       if(!rP.ok) return {ok:false,motivo:'red'};
       var afectadas=await rP.json();
-      if(afectadas.length===1) return {ok:true,stock:nuevo.stock,uds_sueltas:nuevo.uds_sueltas};
+      if(afectadas.length===1){invLimpiarMarcaTrasEntrada(prodId,nuevo.stock,nuevo.uds_sueltas);return {ok:true,stock:nuevo.stock,uds_sueltas:nuevo.uds_sueltas};}
       /* 0 filas afectadas => otro dispositivo cambio el stock. Reintentar. */
     }catch(e){ console.error('ajustarStockAtomicoSB:',e); return {ok:false,motivo:'red'}; }
   }
