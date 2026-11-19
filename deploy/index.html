@@ -3153,14 +3153,343 @@ async function ejecutarImportGS(){
   toast('&#10003; '+ok+' productos importados'+(err?' · '+err+' con error':''));
 }
 
-/* ---- PWA: registrar service worker ---- */
-if('serviceWorker' in navigator){
+/* ---- PWA: registrar service worker + AVISO DE ACTUALIZACION ----
+   APP_BUILD lo sella scripts/sellar-version.cjs y es igual al BUILD de sw.js (no editar a mano).
+   Reglas: nunca se recarga solo; el boton "Actualizar" es la unica forma; se bloquea mientras hay una operacion en curso
+   (completa, tambien entre peticiones); se advierte si hay datos sin guardar; otras pestanas no se recargan;
+   no se avisa en la primera instalacion ni sin conexion. */
+var APP_BUILD='546c03efb73c';
+(function(){
+  if(!('serviceWorker' in navigator))return;
+  var sw=navigator.serviceWorker;
+  var reg=null,pend=null,aplazado=false,solicitada=false,aplicando=false,recargando=false,confirmando=null,error='';
+  var tuvoControl=!!sw.controller;                 /* sin control previo = primera instalacion: no es una actualizacion */
+  var ultimaEscritura=0,ultimaRevision=0,temporizador=null,ui=null,tic=null,nombresEnvueltos=[],intentos=0;
+  var enCurso=new Set();                           /* operaciones en curso: {t0,cont} (funciones de guardado y peticiones de escritura) */
+  var bloqueoDesde=0;                              /* desde cuando esta bloqueado (solo para avisar de una demora; nunca libera) */
+  var tocados=new Set(),inicial=new WeakMap(),basesEdicion={};     /* campos que el usuario edito y su valor al empezar */
+  var CLAVE_APLAZADO='lcUpdAplazado',CLAVE_RECARGA='lcUpdRecarga';
+  var TEXTO='Hay una nueva versión disponible. Guarda lo que estás haciendo y pulsa Actualizar.';
+  var AVISO_DEMORA=120000;                         /* pasado este tiempo solo se avisa de la demora: el bloqueo continua hasta que la operacion termine */
+  var RE_OCUPADO=/[a-záéíóú]+(ando|endo|iendo)\s*(\.\.\.|…)/i;   /* "Guardando...", "Procesando..." */
+  var RE_FILTRO=/busc|filtr|search|desde|hasta|periodo|rango|orden/i;
+  var RE_AUXILIAR=/addprod|addtipo|prodsel/i;      /* selectores para elegir una linea que luego se agrega con un boton */
+
+  /* ---- 1) Operaciones en curso ----
+     a) peticiones que modifican datos (POST/PATCH/PUT/DELETE, incluidas las RPC);
+     b) funciones de guardado completas: toda funcion async de la pagina que escribe, o que llama a una que escribe, se sigue de principio a fin
+        (asi tambien entre peticiones y con pausas); no se modifica ninguna funcion de la aplicacion;
+     c) los indicadores que la aplicacion ya tiene: _cotEnProceso, _convCot.fase y los botones deshabilitados con "Guardando...". */
+  function iniciarOp(){
+    var t={t0:Date.now()};
+    enCurso.add(t);avisar();return t;
+  }
+  function terminarOp(t){
+    enCurso.delete(t);ultimaEscritura=Date.now();
+    avisar();setTimeout(pintar,1600);
+  }
+  var fetchOriginal=window.fetch;
+  if(typeof fetchOriginal==='function'){
+    window.fetch=function(entrada,opciones){
+      var metodo=String((opciones&&opciones.method)||(entrada&&entrada.method)||'GET').toUpperCase();
+      if(metodo==='GET'||metodo==='HEAD'||metodo==='OPTIONS')return fetchOriginal.apply(this,arguments);
+      var t=iniciarOp(),p;
+      try{p=fetchOriginal.apply(this,arguments);}catch(e){terminarOp(t);throw e;}
+      var fin=function(){terminarOp(t);};
+      p.then(fin,fin);
+      return p;
+    };
+  }
+  function envolverFn(orig){
+    var w=function(){
+      var t=iniciarOp(),r;
+      try{r=orig.apply(this,arguments);}catch(e){terminarOp(t);throw e;}
+      var fin=function(){terminarOp(t);};
+      Promise.resolve(r).then(fin,fin);
+      return r;
+    };
+    w.__lcOp=true;return w;
+  }
+  function envolver(){
+    var fuentes={},envueltas={},n,f;
+    for(n in window){
+      try{f=window[n];}catch(e){continue;}
+      if(typeof f!=='function'||f.__lcOp||!f.constructor||f.constructor.name!=='AsyncFunction')continue;
+      try{fuentes[n]=Function.prototype.toString.call(f);}catch(e){}
+    }
+    var reEscribe=/method\s*:\s*['"](POST|PATCH|DELETE|PUT)['"]|\/rpc\//;
+    Object.keys(fuentes).forEach(function(k){if(reEscribe.test(fuentes[k]))envueltas[k]=1;});
+    var cambio=true;
+    while(cambio){
+      cambio=false;
+      var nombres=Object.keys(envueltas);if(!nombres.length)break;
+      var reLlama=new RegExp('\\b(?:'+nombres.join('|')+')\\s*\\(');
+      Object.keys(fuentes).forEach(function(k){if(!envueltas[k]&&reLlama.test(fuentes[k])){envueltas[k]=1;cambio=true;}});
+    }
+    Object.keys(envueltas).forEach(function(k){try{window[k]=envolverFn(window[k]);}catch(e){}});
+    nombresEnvueltos=nombresEnvueltos.concat(Object.keys(envueltas));
+    return Object.keys(envueltas);
+  }
+  function botonOcupado(){
+    var b=document.querySelectorAll('button:disabled'),i;
+    for(i=0;i<b.length;i++){
+      if(b[i].closest('#lcUpd')||!RE_OCUPADO.test(b[i].textContent)||!b[i].getClientRects().length)continue;
+      return true;
+    }
+    return false;
+  }
+  function ocupado(){
+    var activa=enCurso.size>0||botonOcupado()
+      ||(typeof _cotEnProceso!=='undefined'&&!!_cotEnProceso&&Object.keys(_cotEnProceso).length>0)
+      ||(typeof _convCot!=='undefined'&&!!_convCot&&_convCot.fase==='guardando');
+    if(activa){if(!bloqueoDesde)bloqueoDesde=Date.now();return true;}   /* sin limite de tiempo: solo termina cuando la operacion termina */
+    if(Date.now()-ultimaEscritura<1500)return true;                      /* margen tras terminar */
+    bloqueoDesde=0;return false;
+  }
+  function avisar(){try{window.dispatchEvent(new Event('lacava-escrituras'));}catch(e){}pintar();}
+
+  /* ---- 2) Datos sin guardar ----
+     Campos de DATOS que el usuario edito y cuyo valor sigue distinto del que tenian al empezar: texto, selectores, fechas, casillas y opciones.
+     No cuentan los filtros ni las busquedas (ids/clases con filtro, buscar, desde, hasta, periodo...), los selectores de "agregar linea",
+     ni los campos de formularios ya cerrados. Cancelar o guardar con exito cierra/oculta el formulario (o lo deja en su valor inicial) y deja de contar. Nada se marca como guardado por haber
+     terminado una funcion: si falla o no se puede confirmar, el cambio sigue contando (es preferible una advertencia de mas a descartar datos sin avisar). */
+  function tipoCampo(el){
+    if(!el||el.nodeType!==1)return null;
+    var tag=el.tagName,t;
+    if(tag==='TEXTAREA')return 'texto';
+    if(tag==='SELECT')return el.multiple?null:'seleccion';
+    if(tag!=='INPUT')return null;
+    t=(el.type||'text').toLowerCase();
+    if(/^(text|number|tel|email|url)$/.test(t))return 'texto';
+    if(/^(date|datetime-local|time|month)$/.test(t))return 'fecha';
+    if(t==='checkbox'||t==='radio')return 'casilla';
+    return null;
+  }
+  function editable(el){
+    var t=tipoCampo(el);
+    if(!t||el.disabled||el.readOnly)return null;
+    if(el.closest&&el.closest('#loginScreen,#lcUpd,[class*="controls"],[class*="filtro"],[class*="filter"]'))return null;
+    if(RE_FILTRO.test((el.id||'')+' '+(el.name||'')+' '+(el.placeholder||''))||RE_AUXILIAR.test(el.id||''))return null;
+    if(t==='casilla'&&el.closest('#vPOS'))return null;   /* opciones de la venta: ya cubiertas por el carrito */
+    return t;
+  }
+  function valor(el){return (el.type==='checkbox'||el.type==='radio')?String(el.checked):String(el.value||'').trim();}
+  function grupo(el){   /* una opcion cambia a las demas de su grupo: se siguen todas juntas */
+    if(el.type!=='radio'||!el.name)return [el];
+    return Array.prototype.filter.call((el.form||document).querySelectorAll('input[type="radio"]'),function(x){return x.name===el.name;});
+  }
+  function alEnfocar(ev){var el=ev.target;observarEdiciones();if(!editable(el))return;grupo(el).forEach(function(x){if(!tocados.has(x))inicial.set(x,valor(x));});}
+  function alEditar(ev){
+    var el=ev.target;
+    if(!ev.isTrusted||!editable(el))return;
+    grupo(el).forEach(function(x){if(!inicial.has(x))inicial.set(x,valor(x));tocados.add(x);});
+  }
+  function visible(el){return el.isConnected&&el.getClientRects().length>0&&getComputedStyle(el).visibility!=='hidden';}
+  function podar(){observarEdiciones();tocados.forEach(function(el){if(!visible(el)||valor(el)===inicial.get(el))tocados.delete(el);});}
+  /* Ventas y cotizaciones abiertas para edicion: sus lineas (productos, cantidades, precios y descuentos) no son campos de formulario.
+     Se compara su firma actual con la del estado inicial, tomada la primera vez que se ve la ventana abierta (siempre antes de la primera accion
+     del usuario: se observa en focusin/pointerdown/keydown/click en fase de captura y cada segundo). Abrir sin editar, o volver a lo inicial, no cuenta.
+     Cerrar la ventana (guardar o cancelar) borra la referencia; un guardado fallido deja la ventana abierta y el cambio sigue contando. */
+  function edicionesAbiertas(){
+    var l=[];
+    try{
+      if(typeof cotActualId!=='undefined'&&typeof cotItems!=='undefined'&&visibleId('modalCotizacion')){
+        var nueva=(cotActualId==null||cotActualId==='');   /* cotizacion nueva: su estado inicial es sin lineas */
+        l.push({k:'cot:'+(nueva?'nueva':cotActualId),t:nueva?'cotización nueva con productos sin guardar':'cotización en edición con cambios',f:JSON.stringify(cotItems.map(function(i){return [i.prod_id||'',i.nombre||'',i.tipo||'',+i.cantidad||0,+i.precio_unitario||0,+i.descItem||0,+i.precio_total||0];}))});
+      }
+    }catch(e){}
+    try{
+      if(typeof editVentaId!=='undefined'&&editVentaId!=null&&typeof editVentaItemsArr!=='undefined'&&!editVentaCargaFallida&&visibleId('modalEditarVenta'))
+        l.push({k:'venta:'+editVentaId,t:'venta en edición con cambios',f:JSON.stringify(editVentaItemsArr.filter(function(i){return !(i._nuevo&&i._deleted);}).map(function(i){return i._deleted?[i.id||'',i.prod_id||'',i.producto_nombre||'','x']:[i.id||'',i.prod_id||'',i.producto_nombre||'',+i.cantidad||0,+i.precio_unitario||0];}))});
+    }catch(e){}
+    return l;
+  }
+  function observarEdiciones(){
+    var l=edicionesAbiertas(),vivas={};
+    l.forEach(function(e){vivas[e.k]=1;if(!(e.k in basesEdicion))basesEdicion[e.k]=e.f;});
+    Object.keys(basesEdicion).forEach(function(k){if(!vivas[k])delete basesEdicion[k];});
+    return l;
+  }
+  function edicionesConCambios(){
+    return observarEdiciones().filter(function(e){return basesEdicion[e.k]!==e.f;}).map(function(e){return e.t;});
+  }
+  function etiqueta(el){
+    var t='',p;
+    try{if(el.id){p=document.querySelector('label[for="'+el.id+'"]');if(p)t=p.textContent;}}catch(e){}
+    if(!t&&el.closest&&el.closest('label'))t=el.closest('label').textContent;
+    if(!t){p=el.previousElementSibling;if(p&&/^(DIV|LABEL|SPAN)$/.test(p.tagName)&&p.textContent.trim().length<40)t=p.textContent;}
+    t=(t||el.getAttribute('aria-label')||el.placeholder||el.title||el.name||(el.id||'').replace(/([a-z])([A-Z])/g,'$1 $2')||'campo').replace(/\s+/g,' ').replace(/\*/g,'').trim();
+    return t.length>36?t.slice(0,35)+'…':t;
+  }
+  function visibleId(id){var e=document.getElementById(id);return !!e&&e.getClientRects().length>0;}
+  function listasSinGuardar(){
+    var l=[],n;
+    function filas(a,conProd){return (a&&a.length)?(conProd?a.filter(function(x){return x&&x.prodId;}).length:a.length):0;}
+    try{n=(typeof cart!=='undefined')?filas(cart):0;if(n)l.push('venta en curso con '+n+(n===1?' producto':' productos'));}catch(e){}
+    try{n=(typeof itemsCompra!=='undefined')?filas(itemsCompra):0;if(n)l.push('compra en curso con '+n+(n===1?' producto':' productos'));}catch(e){}
+    try{n=(typeof INV_INICIAL_ITEMS!=='undefined'&&visibleId('modalInvInicialBodega'))?filas(INV_INICIAL_ITEMS,true):0;if(n)l.push('inventario inicial con '+n+(n===1?' producto':' productos'));}catch(e){}
+    try{n=(typeof TRASLADO_ITEMS!=='undefined'&&visibleId('modalTraslado'))?filas(TRASLADO_ITEMS,true):0;if(n)l.push('traslado con '+n+(n===1?' producto':' productos'));}catch(e){}
+    return l;
+  }
+  function sinGuardar(){
+    podar();
+    var lista=[];
+    tocados.forEach(function(el){
+      if(el.type==='radio'&&!el.checked)return;      /* de un grupo de opciones se informa la elegida */
+      var e=etiqueta(el);if(lista.indexOf(e)<0)lista.push(e);
+    });
+    return listasSinGuardar().concat(edicionesConCambios(),lista);
+  }
+  ['focusin','pointerdown','keydown'].forEach(function(e){document.addEventListener(e,alEnfocar,true);});
+  ['input','change'].forEach(function(e){document.addEventListener(e,alEditar,true);});
+  document.addEventListener('click',function(){observarEdiciones();setTimeout(podar,400);},true);
+  setInterval(podar,1000);
+
+  /* ---- 3) Version del service worker (por canal de mensajes, con tiempo limite) ---- */
+  function pedirBuild(w){
+    return new Promise(function(ok){
+      if(!w){ok(null);return;}
+      var fin=false,canal=new MessageChannel();
+      var t=setTimeout(function(){if(!fin){fin=true;ok(null);}},3000);
+      canal.port1.onmessage=function(ev){if(fin)return;fin=true;clearTimeout(t);ok((ev.data&&ev.data.build)||null);};
+      try{w.postMessage({tipo:'lacava-version'},[canal.port2]);}catch(e){clearTimeout(t);fin=true;ok(null);}
+    });
+  }
+
+  /* ---- 4) Estado y deteccion ---- */
+  function marcar(origen,build){
+    if(pend&&pend.build===build&&pend.origen===origen)return;
+    pend={origen:origen,build:build};
+    try{aplazado=(sessionStorage.getItem(CLAVE_APLAZADO)===String(build));}catch(e){aplazado=false;}
+    error='';confirmando=null;pintar();
+    if(!tic)tic=setInterval(pintar,700);             /* refleja a tiempo los indicadores de la aplicacion que no pasan por fetch */
+  }
+  function revisarEspera(r){
+    if(!r||!r.waiting||!sw.controller)return;
+    pedirBuild(r.waiting).then(function(b){if(b&&b!==APP_BUILD)marcar('espera',b);});   /* sin respuesta (service worker antiguo): no se avisa */
+  }
+  function revisar(){
+    if(!reg||navigator.onLine===false)return;
+    ultimaRevision=Date.now();
+    reg.update().then(function(){revisarEspera(reg);}).catch(function(){});
+  }
+  sw.addEventListener('controllerchange',function(){
+    if(!tuvoControl){tuvoControl=true;return;}      /* primera instalacion: no se avisa ni se recarga */
+    if(solicitada){recargar();return;}               /* el usuario pidio actualizar en ESTA pestana */
+    pedirBuild(sw.controller).then(function(b){if(b&&b!==APP_BUILD)marcar('otra',b);});   /* otra pestana actualizo: solo se avisa */
+  });
+
+  /* ---- 5) Accion del usuario ---- */
+  function actualizar(forzar){
+    error='';
+    if(ocupado()){pintar();return;}
+    if(!forzar){var l=sinGuardar();if(l.length){confirmando=l;pintar();return;}}
+    confirmando=null;aplicando=true;solicitada=true;pintar();
+    if(reg&&reg.waiting){
+      intentos=1;
+      reg.waiting.postMessage({tipo:'lacava-activar'});
+      vigilarActivacion();
+    }else{recargar();}
+  }
+  /* El service worker nuevo normalmente se activa en milisegundos. Si no responde se vuelve a pedir (hasta 3 veces) y solo despues se avisa;
+     mientras haya una operacion en marcha se espera, porque el navegador puede retrasar la activacion hasta que termine. */
+  function vigilarActivacion(){
+    clearTimeout(temporizador);
+    temporizador=setTimeout(function(){
+      if(recargando)return;
+      if(ocupado()){vigilarActivacion();return;}
+      if(reg&&reg.waiting&&intentos<3){intentos++;reg.waiting.postMessage({tipo:'lacava-activar'});vigilarActivacion();return;}
+      solicitada=false;aplicando=false;
+      error='No se pudo aplicar la actualización. Cierra todas las ventanas de La Cava y ábrela de nuevo.';pintar();
+    },4000);
+  }
+  function recargar(){
+    if(recargando)return;
+    var libres=0;
+    var esperar=function(){
+      if(ocupado()){libres=0;setTimeout(esperar,300);return;}   /* nunca en mitad de una operacion */
+      if(++libres<2){setTimeout(esperar,300);return;}           /* y solo tras dos comprobaciones seguidas sin operaciones */
+      recargando=true;clearTimeout(temporizador);
+      try{sessionStorage.setItem(CLAVE_RECARGA,String(Date.now()));sessionStorage.removeItem(CLAVE_APLAZADO);}catch(e){}
+      location.reload();
+    };
+    esperar();
+  }
+  function masTarde(){
+    aplazado=true;confirmando=null;error='';
+    try{sessionStorage.setItem(CLAVE_APLAZADO,String(pend&&pend.build));}catch(e){}
+    pintar();
+  }
+
+  /* ---- 6) Interfaz (aviso persistente + indicador discreto) ---- */
+  function crear(){
+    if(ui)return ui;
+    var css=document.createElement('style');
+    css.textContent=
+      '@media(max-width:600px){#lcUpd{left:10px!important;right:10px;width:auto!important;}}'+
+      '#lcUpd{position:fixed;left:14px;bottom:max(14px,env(safe-area-inset-bottom));width:min(400px,calc(100vw - 28px));box-sizing:border-box;z-index:10050;display:none;background:#2b2110;color:#fff8e7;border:1px solid #B8860B;border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.4);padding:12px 14px;font:600 13px/1.45 "Plus Jakarta Sans",system-ui,sans-serif;}'+
+      '#lcUpd .lcu-m{margin-top:6px;font-weight:500;color:#ffd98a;}#lcUpd .lcu-m:empty{display:none;}'+
+      '#lcUpd .lcu-b{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;}'+
+      '#lcUpd button{font:700 13px "Plus Jakarta Sans",system-ui,sans-serif;border-radius:8px;padding:9px 16px;cursor:pointer;border:1px solid #B8860B;min-height:40px;}'+
+      '#lcUpdVelo{position:fixed;inset:0;z-index:10045;display:none;cursor:progress;background:rgba(255,255,255,.35);}'+   /* mientras se aplica la actualizacion no se pueden iniciar operaciones nuevas */
+      '#lcUpd .lcu-ok{background:#B8860B;color:#1a1305;}#lcUpd .lcu-ok:disabled{opacity:.55;cursor:not-allowed;}#lcUpd .lcu-no{background:transparent;color:#fff8e7;}'+
+      '#lcUpdPunto{position:fixed;left:10px;bottom:max(10px,env(safe-area-inset-bottom));z-index:10040;display:none;align-items:center;gap:6px;background:#2b2110;color:#fff8e7;border:1px solid #B8860B;border-radius:999px;padding:5px 11px;font:600 11px "Plus Jakarta Sans",system-ui,sans-serif;cursor:pointer;opacity:.92;}'+
+      '#lcUpdPunto i{width:8px;height:8px;border-radius:50%;background:#ffb300;display:inline-block;}';
+    document.head.appendChild(css);
+    var c=document.createElement('div');c.id='lcUpd';c.setAttribute('role','alert');
+    var t=document.createElement('div');t.className='lcu-t';
+    var m=document.createElement('div');m.className='lcu-m';m.setAttribute('aria-live','polite');
+    var b=document.createElement('div');b.className='lcu-b';
+    var ok=document.createElement('button');ok.type='button';ok.className='lcu-ok';
+    var no=document.createElement('button');no.type='button';no.className='lcu-no';
+    ok.addEventListener('click',function(){actualizar(!!confirmando);});
+    no.addEventListener('click',function(){if(confirmando){confirmando=null;pintar();}else masTarde();});
+    b.appendChild(ok);b.appendChild(no);c.appendChild(t);c.appendChild(m);c.appendChild(b);
+    var p=document.createElement('button');p.type='button';p.id='lcUpdPunto';p.setAttribute('aria-label','Actualización disponible: mostrar aviso');
+    var d=document.createElement('i');var s=document.createElement('span');s.textContent='Actualización disponible';p.appendChild(d);p.appendChild(s);
+    p.addEventListener('click',function(){aplazado=false;try{sessionStorage.removeItem(CLAVE_APLAZADO);}catch(e){}pintar();});
+    var v=document.createElement('div');v.id='lcUpdVelo';
+    document.body.appendChild(v);document.body.appendChild(c);document.body.appendChild(p);
+    ui={c:c,t:t,m:m,ok:ok,no:no,p:p,v:v};
+    return ui;
+  }
+  function pintar(){
+    if(!pend||!document.body){if(ui){ui.c.style.display='none';ui.p.style.display='none';ui.v.style.display='none';}return;}
+    var u=crear();
+    u.v.style.display=(aplicando&&navigator.onLine!==false)?'block':'none';
+    if(navigator.onLine===false){u.c.style.display='none';u.p.style.display='none';return;}   /* sin conexion no se muestra */
+    if(aplazado&&!confirmando&&!aplicando){u.c.style.display='none';u.p.style.display='flex';return;}
+    u.p.style.display='none';u.c.style.display='block';
+    var bloqueado=ocupado();
+    u.t.textContent=confirmando?'Hay datos sin guardar en esta pantalla. Si actualizas ahora se perderán.':TEXTO;
+    u.m.textContent=aplicando?'Actualizando…':bloqueado?((Date.now()-bloqueoDesde>AVISO_DEMORA)?'El guardado está tardando más de lo normal y sigue en curso. Espera a que termine para actualizar.':'Hay un guardado en curso. Espera a que termine para actualizar.')
+      :confirmando?'Sin guardar: '+confirmando.join(', ')+'.'
+      :error?error:(pend.origen==='otra'?'Ya se actualizó en otra ventana; esta sigue con la versión anterior.':'');
+    u.ok.textContent=confirmando?'Actualizar y descartar':'Actualizar';
+    u.no.textContent=confirmando?'Volver':'Más tarde';
+    u.ok.disabled=bloqueado||aplicando;u.no.disabled=aplicando;
+  }
+  window.addEventListener('online',function(){pintar();revisar();});
+  window.addEventListener('offline',pintar);
+  document.addEventListener('visibilitychange',function(){if(document.visibilityState==='visible'&&Date.now()-ultimaRevision>120000)revisar();});
+  setInterval(function(){if(document.visibilityState==='visible')revisar();},600000);
+  window.__lcUpd={
+    estado:function(){return{build:APP_BUILD,pendiente:pend,aplazado:aplazado,operaciones:enCurso.size,escrituras:enCurso.size,ocupado:ocupado(),sinGuardar:sinGuardar(),controlador:!!sw.controller};},
+    revisar:revisar,envolver:envolver,envueltas:function(){return nombresEnvueltos.slice();}
+  };
+
   window.addEventListener('load',function(){
-    navigator.serviceWorker.register('sw.js').then(function(reg){
-      console.log('[SW] Registrado:',reg.scope);
+    envolver();                                      /* todas las funciones de la pagina ya existen */
+    sw.register('sw.js').then(function(r){
+      reg=r;console.log('[SW] Registrado:',r.scope,'build',APP_BUILD);
+      r.addEventListener('updatefound',function(){
+        var n=r.installing;if(!n)return;
+        n.addEventListener('statechange',function(){if(n.state==='installed')revisarEspera(r);});
+      });
+      revisarEspera(r);
     }).catch(function(e){console.warn('[SW] Error:',e);});
   });
-}
+})();
 
 /* ---- KEEP-ALIVE: evita que Supabase pause el proyecto ---- */
 function keepAlive(){
